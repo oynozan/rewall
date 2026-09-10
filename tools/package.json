@@ -13,7 +13,8 @@
         "format:check": "prettier --check .",
         "identity": "node --env-file=.env --experimental-strip-types identity.ts",
         "secret": "node --env-file=.env --experimental-strip-types secret.ts",
-        "delegate": "node --env-file=.env --experimental-strip-types delegate.ts"
+        "delegate": "node --env-file=.env --experimental-strip-types delegate.ts",
+        "rotate": "node --env-file=.env --experimental-strip-types rotate.ts"
     },
     "dependencies": {
         "@rewall/sdk": "link:../sdk",
