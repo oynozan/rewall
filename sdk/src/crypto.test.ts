@@ -14,6 +14,9 @@ import {
     NONCE_BYTES,
     DEK_BYTES,
     SEALED_DEK_BYTES,
+    COMMITMENT_BYTES,
+    TAG_BYTES,
+    KeyCommitmentError,
 } from "./crypto.ts";
 
 const PLAINTEXT = new TextEncoder().encode("sk-proj-not-a-real-key-0123456789");
@@ -33,9 +36,31 @@ test("AES-256-GCM round trips", async () => {
     assert.deepEqual(await decrypt(await encrypt(PLAINTEXT, dek), dek), PLAINTEXT);
 });
 
-test("blob layout is nonce plus ciphertext plus a 16 byte tag", async () => {
+test("blob layout is nonce, key commitment, ciphertext and a 16 byte tag", async () => {
     const blob = await encrypt(PLAINTEXT, randomDek());
-    assert.equal(blob.length, NONCE_BYTES + PLAINTEXT.length + 16);
+    assert.equal(blob.length, NONCE_BYTES + COMMITMENT_BYTES + PLAINTEXT.length + TAG_BYTES);
+});
+
+test("a blob encrypted under one key is refused by another, AES-GCM alone would not do this", async () => {
+    const blob = await encrypt(PLAINTEXT, randomDek());
+    await assert.rejects(() => decrypt(blob, randomDek()), KeyCommitmentError);
+});
+
+test("a tampered commitment is rejected before any decryption is attempted", async () => {
+    const dek = randomDek();
+    const blob = await encrypt(PLAINTEXT, dek);
+    blob[NONCE_BYTES] ^= 0x01;
+    await assert.rejects(() => decrypt(blob, dek), KeyCommitmentError);
+});
+
+test("the commitment changes with the nonce, so it cannot be lifted between blobs", async () => {
+    const dek = randomDek();
+    const a = await encrypt(PLAINTEXT, dek);
+    const b = await encrypt(PLAINTEXT, dek);
+    assert.notDeepEqual(
+        a.subarray(NONCE_BYTES, NONCE_BYTES + COMMITMENT_BYTES),
+        b.subarray(NONCE_BYTES, NONCE_BYTES + COMMITMENT_BYTES),
+    );
 });
 
 test("each encryption uses a fresh nonce", async () => {
@@ -145,6 +170,15 @@ test("sodium.to_base64 would disagree, which is why it is banned", async () => {
     await sodium.ready;
     const bytes = new Uint8Array([0xfb, 0xff, 0xbe]);
     assert.notEqual(sodium.to_base64(bytes), toBase64(bytes));
+});
+
+test("base64 decoding is strict, so a record value has exactly one encoding", () => {
+    const valid = toBase64(new Uint8Array([1, 2, 3]));
+
+    for (const malformed of [` ${valid}`, `${valid} `, "AQID\n", "AQI", "AQL_", "AQL-", "AQID=", "!!!!"]) {
+        assert.throws(() => fromBase64(malformed), /canonical/, `accepted ${JSON.stringify(malformed)}`);
+    }
+    assert.deepEqual(fromBase64(valid), new Uint8Array([1, 2, 3]));
 });
 
 test("base64 round trips random bytes", () => {

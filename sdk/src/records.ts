@@ -1,7 +1,8 @@
 import { parseAbi, encodeFunctionData, decodeFunctionResult, namehash, toHex, type Address, type Hex } from "viem";
 import { packetToBytes } from "viem/ens";
 
-export const SCHEMA_VERSION = "1";
+// Bumped to 2 when the blob gained a key commitment header, so a v1 blob is refused rather than misparsed
+export const SCHEMA_VERSION = "2";
 export const ENCRYPTION = "aes-256-gcm";
 
 export const RECORD = {
@@ -14,9 +15,13 @@ export const RECORD = {
     pubkey: "rewall.pubkey",
     index: "rewall.index",
     // A fingerprint is a hash, so the names have to be recorded or a rotation cannot re-wrap for anyone
+    owner: "rewall.owner",
     grantees: "rewall.grantees",
     subtrees: "rewall.subtrees",
     recovery: "rewall.recovery",
+    // Every fingerprint that currently has a wrap. Text records cannot be enumerated, so without this a
+    // rotation cannot find the wraps it must clear and a stale one survives around a live key.
+    holders: "rewall.holders",
     subtreePubkey: "rewall.subtree.pubkey",
     subtreeKey: "rewall.subtree.key",
     subtreeVersion: "rewall.subtree.v",
@@ -67,6 +72,7 @@ export function buildSecretRecords(input: {
     wraps: { fingerprint: string; wrapped: string }[];
     createdAt: number;
     allow?: string[];
+    owner?: string;
     grantees?: string[];
     subtrees?: string[];
     recovery?: string[];
@@ -95,9 +101,11 @@ export function buildSecretRecords(input: {
     if (input.allow?.length) records.push({ key: RECORD.allow, value: input.allow.join(",") });
 
     // Always written, including empty, so a rotation that drops the last grantee clears the old list
+    records.push({ key: RECORD.owner, value: input.owner ?? "" });
     records.push({ key: RECORD.recovery, value: joinNames(input.recovery ?? []) });
     records.push({ key: RECORD.grantees, value: joinNames(input.grantees ?? []) });
     records.push({ key: RECORD.subtrees, value: joinNames(input.subtrees ?? []) });
+    records.push({ key: RECORD.holders, value: joinNames(input.wraps.map((w) => w.fingerprint)) });
 
     for (const w of input.wraps) records.push({ key: RECORD.wrap(w.fingerprint), value: w.wrapped });
 

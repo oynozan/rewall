@@ -17,6 +17,25 @@ export type GuardianSet = {
     shares: GuardianShare[];
 };
 
+export class ForgedShareError extends Error {
+    constructor(reason: string) {
+        super(`refusing a guardian share, ${reason}`);
+        this.name = "ForgedShareError";
+    }
+}
+
+export class RecoveryFailedError extends Error {
+    readonly tried: number;
+    constructor(tried: number) {
+        super(`no combination of ${tried} pieces reconstructs the published recovery key`);
+        this.name = "RecoveryFailedError";
+        this.tried = tried;
+    }
+}
+
+const SHARE_BYTES = 33;
+const MAX_GUARDIANS = 12;
+
 /* Setup */
 
 // The recovery private key is destroyed here on purpose. Secrets are wrapped to its public half, and
@@ -25,19 +44,28 @@ export async function createGuardianSet(guardians: Grantee[], threshold: number)
     await sodium.ready;
 
     if (guardians.length < 2) throw new Error("a guardian set needs at least 2 guardians");
+    if (guardians.length > MAX_GUARDIANS) throw new Error(`at most ${MAX_GUARDIANS} guardians`);
     if (threshold < 2) throw new Error("a threshold below 2 defeats the point, one guardian could recover alone");
     if (threshold > guardians.length) {
         throw new Error(`threshold ${threshold} cannot exceed the ${guardians.length} guardians`);
     }
 
-    const names = new Set(guardians.map((g) => g.fingerprint));
-    if (names.size !== guardians.length) throw new Error("the same guardian appears twice");
+    const seen = new Set(guardians.map((g) => g.fingerprint));
+    if (seen.size !== guardians.length) throw new Error("the same guardian appears twice");
+
+    // Validated before any key material exists, because a throw mid-split would strand live shares
+    for (const g of guardians) {
+        if (g.publicKey.length !== 32) {
+            throw new Error(`${g.name ?? g.fingerprint} published a ${g.publicKey.length} byte key, expected 32`);
+        }
+    }
 
     const recoverySecret = sodium.randombytes_buf(32);
+    let pieces: Uint8Array[] = [];
 
     try {
         const recoveryPublicKey = sodium.crypto_scalarmult_base(recoverySecret);
-        const pieces = await split(recoverySecret, guardians.length, threshold);
+        pieces = await split(recoverySecret, guardians.length, threshold);
 
         const shares = await Promise.all(
             guardians.map(async (g, i) => ({
@@ -47,16 +75,10 @@ export async function createGuardianSet(guardians: Grantee[], threshold: number)
             })),
         );
 
-        for (const piece of pieces) sodium.memzero(piece);
-
-        return {
-            recoveryPublicKey,
-            recoveryFingerprint: fingerprintOf(recoveryPublicKey),
-            threshold,
-            shares,
-        };
+        return { recoveryPublicKey, recoveryFingerprint: fingerprintOf(recoveryPublicKey), threshold, shares };
     } finally {
-        await wipe(recoverySecret);
+        // Both wiped on every path, including a throw part way through sealing
+        await wipe(recoverySecret, ...pieces);
     }
 }
 
@@ -66,6 +88,10 @@ export async function createGuardianSet(guardians: Grantee[], threshold: number)
 export async function reshare(sealed: string, guardian: Identity, newOwnerPublicKey: Uint8Array): Promise<string> {
     await sodium.ready;
 
+    if (newOwnerPublicKey.length !== 32) {
+        throw new Error(`expected a 32 byte recipient key, got ${newOwnerPublicKey.length}`);
+    }
+
     const piece = await unseal(fromBase64(sealed), guardian.publicKey, guardian.secretKey);
     try {
         return toBase64(await seal(piece, newOwnerPublicKey));
@@ -74,23 +100,63 @@ export async function reshare(sealed: string, guardian: Identity, newOwnerPublic
     }
 }
 
-// Run by the new owner once enough guardians have re-shared. Below the threshold this returns a key that
-// simply does not work, because Shamir reconstruction is unauthenticated and fails silently.
-export async function recoverWithShares(resealed: string[], newOwner: Identity): Promise<Identity> {
+function combinations(n: number, k: number): number[][] {
+    const out: number[][] = [];
+    const pick = (start: number, chosen: number[]) => {
+        if (chosen.length === k) return void out.push([...chosen]);
+        for (let i = start; i < n; i++) pick(i + 1, [...chosen, i]);
+    };
+    pick(0, []);
+    return out;
+}
+
+// Verified against the published recovery public key rather than trusted. Shamir reconstruction is
+// unauthenticated, so a single forged piece would otherwise dictate the result for everyone.
+export async function recoverWithShares(
+    resealed: string[],
+    newOwner: Identity,
+    expect: { publicKey: Uint8Array; threshold: number },
+): Promise<Identity> {
     await sodium.ready;
 
-    if (resealed.length < 2) throw new Error("recovery needs at least 2 re-shared pieces");
+    const { publicKey: expected, threshold } = expect;
+    if (expected.length !== 32) throw new Error(`expected a 32 byte recovery key, got ${expected.length}`);
+    if (threshold < 2) throw new Error("a threshold below 2 is not a threshold");
+    if (resealed.length < threshold) {
+        throw new Error(`recovery needs ${threshold} pieces, only ${resealed.length} were supplied`);
+    }
+    if (resealed.length > MAX_GUARDIANS) throw new Error(`at most ${MAX_GUARDIANS} pieces`);
 
     const pieces = await Promise.all(
         resealed.map((s) => unseal(fromBase64(s), newOwner.publicKey, newOwner.secretKey)),
     );
 
     try {
-        const secretKey = await combine(pieces);
-        if (secretKey.length !== 32) throw new Error(`reconstructed a ${secretKey.length} byte key, expected 32`);
+        for (const piece of pieces) {
+            if (piece.length !== SHARE_BYTES) {
+                throw new ForgedShareError(`it is ${piece.length} bytes, expected ${SHARE_BYTES}`);
+            }
+            // x is the trailing byte. Zero makes every honest share vanish from the interpolation and
+            // hands the whole result to whoever supplied it, so it can never be legitimate.
+            if (piece[SHARE_BYTES - 1] === 0) throw new ForgedShareError("its x coordinate is zero");
+        }
 
-        const publicKey = sodium.crypto_scalarmult_base(secretKey);
-        return { secretKey, publicKey, fingerprint: fingerprintOf(publicKey) };
+        const xs = new Set(pieces.map((p) => p[SHARE_BYTES - 1]!));
+        if (xs.size !== pieces.length) throw new ForgedShareError("two pieces share an x coordinate");
+
+        // Exactly threshold at a time, so a poisoned piece is isolated rather than poisoning the whole set
+        for (const combo of combinations(pieces.length, threshold)) {
+            const candidate = await combine(combo.map((i) => pieces[i]!));
+            if (candidate.length !== 32) continue;
+
+            const publicKey = sodium.crypto_scalarmult_base(candidate);
+            if (sodium.memcmp(publicKey, expected)) {
+                return { secretKey: candidate, publicKey, fingerprint: fingerprintOf(publicKey) };
+            }
+            sodium.memzero(candidate);
+        }
+
+        throw new RecoveryFailedError(pieces.length);
     } finally {
         for (const piece of pieces) sodium.memzero(piece);
     }

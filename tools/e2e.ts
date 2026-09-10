@@ -134,6 +134,14 @@ await parentClient.subtree.distribute([memberClient.name]);
 if (text(await memberClient.get(secretName)) !== ROTATED) fail("member did not regain access after redistribution");
 pass("member regains access after the parent redistributes");
 
+// The removed member. A bare re-grant would leave the old subtree wrap alive on an unchanged data key,
+// which is exactly how a removed member kept reading before the re-grant path was made to rotate.
+const removed = clientFor(SUBTREE_MEMBERS[1]!.index, `${SUBTREE_MEMBERS[1]!.label}.${grantee.label}.eth`);
+await removed
+    .get(secretName)
+    .then(() => fail(`${removed.name} was removed from the subtree but still reads`))
+    .catch(() => pass(`removed member ${removed.name} stays locked out after the re-grant`));
+
 /* Restore the starting state so the script can run again */
 
 await ownerClient.grant(secretName, `${grantee.label}.eth`);

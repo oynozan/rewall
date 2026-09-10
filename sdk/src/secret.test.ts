@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { privateKeyToAccount } from "viem/accounts";
 import { deriveIdentity, IDENTITY_MESSAGE, type Identity } from "./identity.ts";
-import { RECORD } from "./records.ts";
+import { RECORD, SCHEMA_VERSION } from "./records.ts";
 import {
     planSecret,
     planGrant,
@@ -83,7 +83,7 @@ test("a missing blob is distinguishable from a missing wrap", async () => {
 
 test("the record set carries version, type, encryption and created", async () => {
     const records = toMap(await planSecret(baseInput));
-    assert.equal(records[RECORD.version], "1");
+    assert.equal(records[RECORD.version], SCHEMA_VERSION);
     assert.equal(records[RECORD.type], "apikey");
     assert.equal(records[RECORD.encryption], "aes-256-gcm");
     assert.equal(records[RECORD.created], String(CREATED));

@@ -3,7 +3,7 @@
 
 import { createWalletClient, http } from "viem";
 import { sepolia } from "viem/chains";
-import { Rewall, openSecret, readTexts, RECORD, NoWrapError } from "@rewall/sdk";
+import { Rewall, openSecret, readTexts, seal, toBase64, RECORD, NoWrapError } from "@rewall/sdk";
 import {
     NAMESPACE_LABEL,
     UNIVERSAL_RESOLVER,
@@ -89,20 +89,30 @@ const shareFrom = async (guardianIndex: number, guardianName: string) =>
     clientFor(guardianIndex, guardianName).guardians.reshare(ownerName, replacementIdentity.publicKey);
 
 const tooFew = await Promise.all(GUARDIANS.slice(0, GUARDIAN_THRESHOLD - 1).map((g) => shareFrom(g.index, g.name)));
-const wrongKey = await replacement.guardians.recover(tooFew);
 
-if (wrongKey.fingerprint === recovery.fingerprint) fail(`${tooFew.length} guardians reconstructed the real key`);
-pass(`${tooFew.length} guardians reconstruct a key that is not the recovery key`);
+await replacement.guardians
+    .recover(tooFew)
+    .then(() => fail(`${tooFew.length} guardians recovered the key`))
+    .catch(() => pass(`${tooFew.length} guardians are refused outright, not handed a silently wrong key`));
 
 const records = await readTexts(publicClient, UNIVERSAL_RESOLVER, secretName, [
     RECORD.blob,
     RECORD.wrap(recovery.fingerprint),
-    RECORD.wrap(wrongKey.fingerprint),
 ]);
 
-await openSecret(records, wrongKey, secretName)
-    .then(() => fail("a below threshold key opened the secret"))
-    .catch(() => pass("a below threshold key cannot open the secret"));
+/* A forged share cannot steer the result */
+
+const forged = new Uint8Array(33).fill(0x41);
+forged[32] = 0;
+const poisoned = [
+    ...(await Promise.all(GUARDIANS.slice(0, GUARDIAN_THRESHOLD).map((g) => shareFrom(g.index, g.name)))),
+    toBase64(await seal(forged, replacementIdentity.publicKey)),
+];
+
+await replacement.guardians
+    .recover(poisoned)
+    .then(() => fail("a forged share was accepted"))
+    .catch((e) => pass(`a forged share with x coordinate zero is refused with ${e.name}`));
 
 /* At the threshold */
 

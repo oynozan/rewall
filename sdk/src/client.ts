@@ -9,6 +9,7 @@ import {
     resolverFor,
     splitNames,
     joinNames,
+    SCHEMA_VERSION,
     addToIndex,
     GUARDIAN_RECOVERY_PREFIX,
     guardianRecoveryEntry,
@@ -155,7 +156,8 @@ export class Rewall {
             const records = await this.read(secretName, wanted);
 
             const version = records[RECORD.version];
-            if (version && version !== "1") throw new Error(`${secretName} uses schema version ${version}, expected 1`);
+            if (version && version !== SCHEMA_VERSION)
+                throw new Error(`${secretName} uses schema version ${version}, expected ${SCHEMA_VERSION}`);
 
             return await openSecret(records, keys, secretName);
         } finally {
@@ -171,17 +173,28 @@ export class Rewall {
     }
 
     async grant(secretName: string, granteeName: string, options?: { subtree?: boolean }): Promise<Hash> {
-        const grantee = options?.subtree ? await this.subtreeKeyOf(granteeName) : await this.publicKeyOf(granteeName);
         const current = await this.readForRotate(secretName);
+        const listKey = options?.subtree ? RECORD.subtrees : RECORD.grantees;
 
-        // A grant only adds a wrap, so the ciphertext and everyone else's wraps are untouched
-        const listKey = grantee.subtree ? RECORD.subtrees : RECORD.grantees;
-        const updated = addToIndex(current[listKey], granteeName);
+        // Re-granting a name whose key changed has to rotate. A bare add would leave the old key's wrap
+        // on an unchanged data key, so whoever held that key keeps reading. That is the exact path taken
+        // to remove a subtree member, and to re-grant someone after a key compromise.
+        if (splitNames(current[listKey]).includes(granteeName)) {
+            return this.rotateTo(secretName, current, {
+                grantees: splitNames(current[RECORD.grantees]),
+                subtrees: splitNames(current[RECORD.subtrees]),
+            });
+        }
 
+        const grantee = options?.subtree ? await this.subtreeKeyOf(granteeName) : await this.publicKeyOf(granteeName);
         const keys = await this.heldKeys();
         const wrapped = await planGrant(current, keys, grantee);
 
-        return this.write(secretName, [...wrapped, { key: listKey, value: updated }]);
+        return this.write(secretName, [
+            ...wrapped,
+            { key: listKey, value: addToIndex(current[listKey], granteeName) },
+            { key: RECORD.holders, value: addToIndex(current[RECORD.holders], grantee.fingerprint) },
+        ]);
     }
 
     // The subtree flag matters because one name can hold both an individual grant and a subtree grant,
@@ -196,6 +209,15 @@ export class Rewall {
         if (before.length === after.length) {
             const kind = options?.subtree ? "subtree grantee" : "grantee";
             throw new Error(`${granteeName} is not a ${kind} of ${secretName}`);
+        }
+
+        // A recovery entry resolves to the same rewall.pubkey an individual grant does, so dropping the
+        // grant alone leaves that name reading. Reporting success there is worse than failing, because
+        // the caller believes they are safe. A subtree entry uses a different key and is unaffected.
+        if (!options?.subtree && splitNames(current[RECORD.recovery]).includes(granteeName)) {
+            throw new Error(
+                `${granteeName} is also a recovery entry on ${secretName} and would keep reading, revoke that first`,
+            );
         }
 
         return this.rotateTo(secretName, current, {
@@ -304,7 +326,17 @@ export class Rewall {
         },
 
         // Run by the new owner once enough guardians have re-shared
-        recover: async (resealed: string[]): Promise<Identity> => recoverWithShares(resealed, await this.identity()),
+        recover: async (resealed: string[], ownerName?: string): Promise<Identity> => {
+            const target = ownerName ?? this.name;
+            const published = await this.read(target, [RECORD.recoveryPubkey, RECORD.recoveryThreshold]);
+            const encoded = published[RECORD.recoveryPubkey];
+            if (!encoded) throw new Error(`${target} has published no ${RECORD.recoveryPubkey}`);
+
+            return recoverWithShares(resealed, await this.identity(), {
+                publicKey: fromBase64(encoded),
+                threshold: Number(published[RECORD.recoveryThreshold] || 0),
+            });
+        },
     };
 
     /* Internals */
@@ -327,9 +359,11 @@ export class Rewall {
             RECORD.version,
             RECORD.type,
             RECORD.allow,
+            RECORD.owner,
             RECORD.grantees,
             RECORD.subtrees,
             RECORD.recovery,
+            RECORD.holders,
             ...keys.map((k) => RECORD.wrap(k.fingerprint)),
         ]);
     }
@@ -339,47 +373,44 @@ export class Rewall {
         current: Record<string, string>,
         next: { grantees: string[]; subtrees: string[]; plaintext?: Uint8Array },
     ): Promise<Hash> {
+        // The same gate get() applies. Without it an older client silently overwrites a newer record set.
+        const version = current[RECORD.version];
+        if (version && version !== SCHEMA_VERSION) {
+            throw new Error(
+                `${secretName} uses schema version ${version}, refusing to rotate what this client cannot read`,
+            );
+        }
+
         const keys = await this.heldKeys();
         const plaintext = next.plaintext ?? (await openSecret(current, keys, secretName));
 
-        const owner = await this.selfAsGrantee();
+        // The recorded owner, not whoever is calling, or a rotation by a delegate would drop the owner
+        const ownerName = current[RECORD.owner] || this.name;
+        const owner = ownerName === this.name ? await this.selfAsGrantee() : await this.publicKeyOf(ownerName);
+
+        // Strict. A name that no longer resolves must stop the rotation, not vanish from the keep set.
         const recovery = await Promise.all(splitNames(current[RECORD.recovery]).map((n) => this.resolveRecovery(n)));
         const grantees = [
             ...(await Promise.all(next.grantees.map((n) => this.publicKeyOf(n)))),
             ...(await Promise.all(next.subtrees.map((n) => this.subtreeKeyOf(n)))),
         ];
 
-        // Resolved from the recorded name lists, not from the records in hand, because a caller only ever
-        // reads the wraps for keys it holds and so cannot see whose wrap needs clearing
-        const previous = await this.fingerprintsOf(
-            splitNames(current[RECORD.grantees]),
-            splitNames(current[RECORD.subtrees]),
-            splitNames(current[RECORD.recovery]),
-        );
+        // Read off rewall.holders rather than re-derived from names. A name whose key changed since the
+        // last write resolves to a new fingerprint, so re-deriving would leave the old wrap live on chain.
+        const previous = [...splitNames(current[RECORD.holders]), ...wrapFingerprints(current)];
 
         const { records } = await planRotate({
-            type: current[RECORD.type] ?? "generic",
+            type: current[RECORD.type] || "generic",
             plaintext,
             owner,
             recovery,
             grantees,
-            previousFingerprints: [owner.fingerprint, ...previous, ...wrapFingerprints(current)],
+            previousFingerprints: previous,
             createdAt: Math.floor(Date.now() / 1000),
             allow: splitNames(current[RECORD.allow]),
         });
 
         return this.write(secretName, records);
-    }
-
-    // A name whose key has since changed resolves to its current fingerprint, so a stale wrap can survive
-    // a rotation. Harmless, because the data key it holds is already dead, but it does leave a dead record.
-    private async fingerprintsOf(grantees: string[], subtrees: string[], recovery: string[]): Promise<string[]> {
-        const settled = await Promise.allSettled([
-            ...grantees.map((n) => this.publicKeyOf(n)),
-            ...recovery.map((n) => this.resolveRecovery(n)),
-            ...subtrees.map((n) => this.subtreeKeyOf(n)),
-        ]);
-        return settled.filter((r) => r.status === "fulfilled").map((r) => r.value.fingerprint);
     }
 
     private async indexAdd(secretName: string): Promise<void> {

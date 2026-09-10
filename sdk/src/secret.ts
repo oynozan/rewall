@@ -74,6 +74,7 @@ export async function planSecret(input: {
             wraps,
             createdAt: input.createdAt,
             allow: input.allow,
+            owner: input.owner.name,
             recovery: named(input.recovery),
             grantees: named(grantees.filter((g) => !g.subtree)),
             subtrees: named(grantees.filter((g) => g.subtree)),
@@ -93,9 +94,17 @@ export async function recoverDek(
 ): Promise<Uint8Array> {
     const candidates = Array.isArray(holder) ? holder : [holder];
 
+    // Every candidate is tried, not just the first with a record. One corrupt wrap must not lock a holder
+    // out of a second key that would have opened the secret.
     for (const candidate of candidates) {
         const wrapped = records[RECORD.wrap(candidate.fingerprint)];
-        if (wrapped) return unseal(fromBase64(wrapped), candidate.publicKey, candidate.secretKey);
+        if (!wrapped) continue;
+
+        try {
+            return await unseal(fromBase64(wrapped), candidate.publicKey, candidate.secretKey);
+        } catch {
+            // A wrap that will not open is the same as no wrap for this candidate, keep looking
+        }
     }
 
     throw new NoWrapError(
@@ -158,6 +167,7 @@ export async function planRotate(input: {
     return { records, cleared };
 }
 
+// Only sees wraps the caller actually read. Use RECORD.holders to learn about wraps you did not fetch.
 export function wrapFingerprints(records: Record<string, string>): string[] {
     return Object.entries(records)
         .filter(([key, value]) => key.startsWith("rewall.key.") && value !== "")
