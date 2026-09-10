@@ -1,7 +1,7 @@
 import { createPublicClient, decodeFunctionResult, encodeFunctionData, http, namehash } from "viem";
 import { normalize } from "viem/ens";
 import { sepolia } from "viem/chains";
-import { dnsEncode, RECORD, resolverAbi, universalResolverAbi } from "@rewall/sdk";
+import { dnsEncode, RECORD, resolverAbi, universalResolverAbi, SCHEMA_VERSION } from "@rewall/sdk";
 
 export const TEST_OWNER = "rewall-test-1.eth";
 export const UNIVERSAL_RESOLVER = "0x4a1817d13e9cf196f471725176355c1234b63c70";
@@ -21,10 +21,13 @@ export type Secret = {
     created: number | null;
     allow: string[];
     version: string;
+    owner: string;
+    grantees: string[];
+    site: string;
 };
 export type Vault = { owner: string; namespace: string; identityPublished: boolean; secrets: Secret[] };
 
-const client = createPublicClient({
+export const vaultClient = createPublicClient({
     chain: sepolia,
     transport: http("https://ethereum-sepolia-rpc.publicnode.com", { timeout: 15000, retryCount: 1 }),
 });
@@ -40,7 +43,7 @@ async function readRecords(name: string, keys: string[]) {
     const calls = keys.map((key) =>
         encodeFunctionData({ abi: resolverAbi, functionName: "text", args: [namehash(name), key] }),
     );
-    const [data] = await client.readContract({
+    const [data] = await vaultClient.readContract({
         address: UNIVERSAL_RESOLVER,
         abi: universalResolverAbi,
         functionName: "resolve",
@@ -63,8 +66,11 @@ export async function readSecret(input: string): Promise<Secret> {
         RECORD.encryption,
         RECORD.created,
         RECORD.allow,
+        RECORD.owner,
+        RECORD.grantees,
+        RECORD.site,
     ]);
-    if (records[RECORD.version] !== "1") throw new Error("No supported Rewall secret was found at this name.");
+    if (!["1", SCHEMA_VERSION].includes(records[RECORD.version])) throw new Error("No supported Rewall secret was found at this name.");
     const created = Number(records[RECORD.created]);
     return {
         name,
@@ -74,6 +80,9 @@ export async function readSecret(input: string): Promise<Secret> {
         created: Number.isFinite(created) && created > 0 && created < 8640000000000 ? created : null,
         allow: records[RECORD.allow]?.split(",").filter(Boolean) ?? [],
         version: records[RECORD.version],
+        owner: records[RECORD.owner] || name.split(".rewall.")[1] || "",
+        grantees: (records[RECORD.grantees] || "").split(",").filter(Boolean),
+        site: records[RECORD.site] || "",
     };
 }
 

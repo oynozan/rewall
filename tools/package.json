@@ -17,7 +17,8 @@
         "rotate": "node --env-file=.env --experimental-strip-types rotate.ts",
         "subtree": "node --env-file=.env --experimental-strip-types subtree.ts",
         "e2e": "node --env-file=.env --experimental-strip-types e2e.ts",
-        "guardians": "node --env-file=.env --experimental-strip-types guardians.ts"
+        "guardians": "node --env-file=.env --experimental-strip-types guardians.ts",
+        "escalation": "node --env-file=.env --experimental-strip-types escalation.ts"
     },
     "dependencies": {
         "@rewall/sdk": "link:../sdk",

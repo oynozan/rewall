@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Glyph } from "./ui";
+import { useEffect, useRef } from "react";
 
 const BAYER = [
     0, 32, 8, 40, 2, 34, 10, 42, 48, 16, 56, 24, 50, 18, 58, 26, 12, 44, 4, 36, 14, 46, 6, 38, 60, 28, 52, 20, 62, 30,
@@ -11,7 +10,6 @@ const BAYER = [
 
 export function DitherBanner() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [paused, setPaused] = useState(false);
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -40,9 +38,9 @@ export function DitherBanner() {
                     const intensity = Math.max(0, Math.min(0.87, (field + 0.65) * 0.32));
                     const on = intensity > (BAYER[(y % 8) * 8 + (x % 8)] + 0.5) / 64;
                     const offset = (y * width + x) * 4;
-                    pixels.data[offset] = on ? 214 : 23;
-                    pixels.data[offset + 1] = on ? 214 : 23;
-                    pixels.data[offset + 2] = on ? 208 : 23;
+                    pixels.data[offset] = on ? 214 : 22;
+                    pixels.data[offset + 1] = on ? 214 : 22;
+                    pixels.data[offset + 2] = on ? 214 : 22;
                     pixels.data[offset + 3] = 255;
                 }
             }
@@ -59,7 +57,7 @@ export function DitherBanner() {
         const sync = () => {
             cancelAnimationFrame(frame);
             draw(phase);
-            if (!paused && !media.matches && visible && !document.hidden) frame = requestAnimationFrame(tick);
+            if (!media.matches && visible && !document.hidden) frame = requestAnimationFrame(tick);
         };
         const resize = new ResizeObserver(() => {
             canvas.width = Math.max(1, Math.round(canvas.clientWidth / 2));
@@ -81,19 +79,11 @@ export function DitherBanner() {
             media.removeEventListener("change", sync);
             document.removeEventListener("visibilitychange", sync);
         };
-    }, [paused]);
+    }, []);
 
     return (
         <section className="welcome-banner" aria-label="Welcome to Rewall">
             <canvas ref={canvasRef} aria-hidden="true" />
-            <button
-                className="banner-pause"
-                onClick={() => setPaused(!paused)}
-                aria-label={paused ? "Play banner animation" : "Pause banner animation"}
-                aria-pressed={paused}
-            >
-                <Glyph name={paused ? "play" : "pause"} size={14} />
-            </button>
             <div className="welcome-copy">
                 <h1>Welcome to Rewall.</h1>
             </div>

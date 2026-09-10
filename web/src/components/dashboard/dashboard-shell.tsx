@@ -4,8 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import type { EIP1193Provider } from "viem";
+import { createWalletClient, custom, type Address, type EIP1193Provider } from "viem";
+import { sepolia } from "viem/chains";
+import { Rewall, wipe } from "@rewall/sdk";
+import { PrivateDataProvider } from "./private-data";
 import {
+    vaultClient,
+    UNIVERSAL_RESOLVER,
     ownerName,
     readSecret,
     readVault,
@@ -29,6 +34,7 @@ type Workspace = {
     setPanel: (panel: Panel) => void;
     loadVault: (name: string) => Promise<boolean>;
     refresh: () => void;
+    decryptSecret: (name: string) => Promise<Uint8Array>;
 };
 const WorkspaceContext = createContext<Workspace | null>(null);
 
@@ -43,7 +49,7 @@ const step = (index: number) => ({ "--i": index }) as React.CSSProperties;
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
-    const isHome = pathname === "/dashboard";
+    const pageTitle = pathname.includes("/2fa") ? "2FA" : pathname.includes("/transfers") ? "Transfers" : pathname.includes("/secrets") ? "Secrets" : "Home";
     const [vault, setVault] = useState<Vault | null>(null);
     const [busy, setBusy] = useState(true);
     const [error, setError] = useState("");
@@ -105,6 +111,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
+    async function decryptSecret(name: string) {
+        const injected = provider.current;
+        if (!injected || !account || !vault) { setPanel("wallet"); throw new Error("Connect your wallet first."); }
+        const wallet = createWalletClient({ account: account as Address, chain: sepolia, transport: custom(injected) });
+        const reader = new Rewall({ publicClient: vaultClient, walletClient: wallet, account: { signMessage: ({ message }: { message: string }) => wallet.signMessage({ message }) }, name: vault.owner, universalResolver: UNIVERSAL_RESOLVER });
+        const identity = await reader.identity();
+        try { return await reader.get(name); }
+        finally { await wipe(identity.secretKey); }
+    }
+
     const workspace: Workspace = {
         vault,
         busy,
@@ -114,8 +130,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         setPanel,
         loadVault,
         refresh: () => void loadVault(vault?.owner || TEST_OWNER),
+        decryptSecret,
     };
-    const count = (type: string) => (vault ? vault.secrets.filter((secret) => secret.type === type).length : "—");
     const navigate = () => setMobileOpen(false);
 
     return (
@@ -159,79 +175,21 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                     </button>
                     <nav>
                         <div className="nav-group">
-                            <span className="nav-caption" style={step(2)}>
-                                Workspace
-                            </span>
-                            <Link
-                                href="/dashboard"
-                                style={step(3)}
-                                className={`nav-item ${isHome ? "selected" : ""}`}
-                                aria-current={isHome ? "page" : undefined}
-                                onClick={navigate}
-                            >
-                                <Icon name="home" />
-                                Home
-                            </Link>
-                            <Link
-                                href="/dashboard/secrets"
-                                style={step(4)}
-                                className={`nav-item ${!isHome ? "selected" : ""}`}
-                                aria-current={!isHome ? "page" : undefined}
-                                onClick={navigate}
-                            >
-                                <Icon name="key" />
-                                All secrets<span className="nav-count mono">{vault?.secrets.length ?? "—"}</span>
-                            </Link>
-                        </div>
-                        <div className="nav-group">
-                            <span className="nav-caption" style={step(5)}>
-                                Collections
-                            </span>
-                            {(
-                                [
-                                    { type: "apikey", label: "API keys", icon: "key" },
-                                    { type: "generic", label: "Secure notes", icon: "documents" },
-                                    { type: "totp", label: "Authenticator", icon: "authenticator" },
-                                ] as { type: string; label: string; icon: IconName }[]
-                            ).map((item, index) => (
-                                <Link
-                                    key={item.type}
-                                    className="nav-item"
-                                    style={step(6 + index)}
-                                    href={`/dashboard/secrets?type=${item.type}`}
-                                    onClick={navigate}
-                                >
-                                    <Icon name={item.icon} />
-                                    {item.label}
-                                    <span className="nav-count plain mono">{count(item.type)}</span>
+                            {([
+                                { href: "/dashboard", label: "Home", icon: "home" },
+                                { href: "/dashboard/secrets", label: "Secrets", icon: "key" },
+                                { href: "/dashboard/2fa", label: "2FA", icon: "authenticator" },
+                                { href: "/dashboard/transfers", label: "Transfers", icon: "wallet" },
+                            ] as { href: string; label: string; icon: IconName }[]).map((item, index) => (
+                                <Link key={item.href} href={item.href} style={step(index + 2)} className={`nav-item ${pageTitle === item.label ? "selected" : ""}`} aria-current={pageTitle === item.label ? "page" : undefined} onClick={navigate}>
+                                    <Icon name={item.icon} />{item.label}
                                 </Link>
                             ))}
                         </div>
                         <div className="nav-group">
-                            <span className="nav-caption" style={step(9)}>
-                                Resources
-                            </span>
-                            <button
-                                className="nav-item"
-                                style={step(10)}
-                                onClick={() => {
-                                    setPanel("help");
-                                    navigate();
-                                }}
-                            >
-                                <Icon name="shield" />
-                                How Rewall works
-                            </button>
-                            <a
-                                className="nav-item"
-                                style={step(11)}
-                                href="https://github.com/oynozan/rewall"
-                                target="_blank"
-                                rel="noreferrer"
-                            >
-                                <Icon name="github" />
-                                Source code
-                            </a>
+                            <span className="nav-caption" style={step(6)}>Resources</span>
+                            <a className="nav-item" style={step(7)} href="https://github.com/oynozan/rewall" target="_blank" rel="noreferrer"><Icon name="github" />Source Code</a>
+                            <a className="nav-item" style={step(8)} href="https://github.com/oynozan/rewall/blob/main/SPEC.md" target="_blank" rel="noreferrer"><Icon name="documents" />Docs</a>
                         </div>
                     </nav>
                     <button className="sidebar-account" style={step(12)} onClick={() => setPanel("wallet")}>
@@ -256,10 +214,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                         >
                             <Icon name="hamburger_menu" size={17} />
                         </button>
-                        <span>{isHome ? "Home" : "Secrets"}</span>
+                        <span>{pageTitle}</span>
                     </header>
                     <main id="workspace-content" tabIndex={-1}>
-                        {children}
+                        <PrivateDataProvider key={`${account}:${vault?.owner || ""}`}>{children}</PrivateDataProvider>
                     </main>
                 </div>
                 <WorkspacePanel providerRef={provider} onAccount={setAccount} />

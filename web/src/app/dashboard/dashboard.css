@@ -359,7 +359,7 @@
     max-width: 80%;
     padding: 21px 28px 2px 0;
     background: var(--background);
-    border-top-right-radius: var(--radius);
+    border-top-right-radius: 32px;
 }
 .welcome-copy h1 {
     font-family: var(--font-lexend-deca), sans-serif;

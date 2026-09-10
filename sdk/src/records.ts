@@ -22,6 +22,9 @@ export const RECORD = {
     // Every fingerprint that currently has a wrap. Text records cannot be enumerated, so without this a
     // rotation cannot find the wraps it must clear and a stale one survives around a live key.
     holders: "rewall.holders",
+    // Signed by the address holding the name, which is the one thing a write delegate cannot rewrite
+    authCounter: "rewall.auth.n",
+    authSig: "rewall.auth.sig",
     subtreePubkey: "rewall.subtree.pubkey",
     subtreeKey: "rewall.subtree.key",
     subtreeVersion: "rewall.subtree.v",

@@ -5,3 +5,4 @@ export * from "./secret.ts";
 export * from "./subtree.ts";
 export * from "./client.ts";
 export * from "./guardians.ts";
+export * from "./authorization.ts";

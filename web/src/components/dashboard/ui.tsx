@@ -22,6 +22,7 @@ const GLYPHS = {
     pause: "M19 13V35M29 13V35",
     play: "M18 12L36 24L18 36Z",
     refresh: "M33.9 33.9A14 14 0 1 1 33.9 14.1M34.2 7.6L33.9 14.1L27.4 14.4",
+    copy: "M17 17H35V36H17ZM11 30H9V10H28V12",
 } as const;
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {

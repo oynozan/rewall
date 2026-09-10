@@ -1,4 +1,4 @@
-import { namehash, type Address, type Hash } from "viem";
+import { namehash, keccak256, toBytes, parseAbi, type Address, type Hash } from "viem";
 import { deriveIdentity, fingerprintOf, IDENTITY_MESSAGE, type Identity } from "./identity.ts";
 import { toBase64, fromBase64, wipe } from "./crypto.ts";
 import {
@@ -14,11 +14,19 @@ import {
     GUARDIAN_RECOVERY_PREFIX,
     guardianRecoveryEntry,
     removeFromIndex,
+    dnsEncode,
     type SecretRecords,
 } from "./records.ts";
 import { planSecret, planGrant, planRotate, openSecret, wrapFingerprints, type Grantee } from "./secret.ts";
 import { deriveSubtreeKey, sealSubtreeKey, openSubtreeKey } from "./subtree.ts";
 import { createGuardianSet, reshare, recoverWithShares } from "./guardians.ts";
+import {
+    authorizationPayload,
+    authorizationSigner,
+    isAuthorizedBy,
+    UnauthorizedListError,
+    type Authorization,
+} from "./authorization.ts";
 
 export type RewallOptions = {
     publicClient: any;
@@ -37,6 +45,13 @@ export type CreateOptions = {
 };
 
 const NAMESPACE_LABEL = "rewall";
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+const registryLookupAbi = parseAbi([
+    "function findParentRegistry(bytes name) view returns (address)",
+    "function getTokenId(uint256 anyId) view returns (uint256)",
+    "function ownerOf(uint256 tokenId) view returns (address)",
+]);
 
 export class Rewall {
     readonly name: string;
@@ -143,7 +158,17 @@ export class Rewall {
             allow: options.allow,
         });
 
-        const hash = await this.write(secretName, records);
+        const named = (list: Grantee[]) => list.map((g) => g.name).filter((n): n is string => Boolean(n));
+        const authorization = await this.signAuthorization({
+            secretName,
+            counter: 1,
+            owner: this.name,
+            grantees: named(grantees.filter((g) => !g.subtree)),
+            subtrees: named(grantees.filter((g) => g.subtree)),
+            recovery: named(recovery),
+        });
+
+        const hash = await this.write(secretName, [...records, ...authorization]);
         await this.indexAdd(secretName);
         return hash;
     }
@@ -174,6 +199,7 @@ export class Rewall {
 
     async grant(secretName: string, granteeName: string, options?: { subtree?: boolean }): Promise<Hash> {
         const current = await this.readForRotate(secretName);
+        await this.assertAuthorized(secretName, current);
         const listKey = options?.subtree ? RECORD.subtrees : RECORD.grantees;
 
         // Re-granting a name whose key changed has to rotate. A bare add would leave the old key's wrap
@@ -190,10 +216,20 @@ export class Rewall {
         const keys = await this.heldKeys();
         const wrapped = await planGrant(current, keys, grantee);
 
+        const nextList = splitNames(addToIndex(current[listKey], granteeName));
+        const auth = this.authorizationOf(secretName, current);
+        const signed = await this.signAuthorization({
+            ...auth,
+            counter: auth.counter + 1,
+            grantees: options?.subtree ? auth.grantees : nextList,
+            subtrees: options?.subtree ? nextList : auth.subtrees,
+        });
+
         return this.write(secretName, [
             ...wrapped,
-            { key: listKey, value: addToIndex(current[listKey], granteeName) },
+            { key: listKey, value: joinNames(nextList) },
             { key: RECORD.holders, value: addToIndex(current[RECORD.holders], grantee.fingerprint) },
+            ...signed,
         ]);
     }
 
@@ -233,6 +269,32 @@ export class Rewall {
             subtrees: splitNames(current[RECORD.subtrees]),
             plaintext,
         });
+    }
+
+    // Re-signs the lists as they stand, or a corrected set. Only the owner's signature verifies, so this
+    // is the repair path after a delegate edits the records, and it deliberately does not verify first.
+    async reauthorize(
+        secretName: string,
+        lists?: { grantees?: string[]; subtrees?: string[]; recovery?: string[] },
+    ): Promise<Hash> {
+        const current = await this.readForRotate(secretName);
+        const auth = this.authorizationOf(secretName, current);
+
+        const next: Authorization = {
+            secretName,
+            counter: auth.counter + 1,
+            owner: current[RECORD.owner] || this.name,
+            grantees: lists?.grantees ?? auth.grantees,
+            subtrees: lists?.subtrees ?? auth.subtrees,
+            recovery: lists?.recovery ?? auth.recovery,
+        };
+
+        return this.write(secretName, [
+            { key: RECORD.grantees, value: joinNames(next.grantees) },
+            { key: RECORD.subtrees, value: joinNames(next.subtrees) },
+            { key: RECORD.recovery, value: joinNames(next.recovery) },
+            ...(await this.signAuthorization(next)),
+        ]);
     }
 
     async list(namespaceName?: string): Promise<string[]> {
@@ -364,6 +426,8 @@ export class Rewall {
             RECORD.subtrees,
             RECORD.recovery,
             RECORD.holders,
+            RECORD.authCounter,
+            RECORD.authSig,
             ...keys.map((k) => RECORD.wrap(k.fingerprint)),
         ]);
     }
@@ -373,6 +437,9 @@ export class Rewall {
         current: Record<string, string>,
         next: { grantees: string[]; subtrees: string[]; plaintext?: Uint8Array },
     ): Promise<Hash> {
+        // Refuses a list the owner never signed, which is what stops a write delegate steering a rotation
+        await this.assertAuthorized(secretName, current);
+
         // The same gate get() applies. Without it an older client silently overwrites a newer record set.
         const version = current[RECORD.version];
         if (version && version !== SCHEMA_VERSION) {
@@ -410,7 +477,17 @@ export class Rewall {
             allow: splitNames(current[RECORD.allow]),
         });
 
-        return this.write(secretName, records);
+        const auth = this.authorizationOf(secretName, current);
+        const signed = await this.signAuthorization({
+            secretName,
+            counter: auth.counter + 1,
+            owner: ownerName,
+            grantees: next.grantees,
+            subtrees: next.subtrees,
+            recovery: auth.recovery,
+        });
+
+        return this.write(secretName, [...records, ...signed]);
     }
 
     private async indexAdd(secretName: string): Promise<void> {
@@ -428,6 +505,67 @@ export class Rewall {
         const updated = removeFromIndex(current[RECORD.index], label);
         if (updated === current[RECORD.index]) return null;
         return this.write(parent, [{ key: RECORD.index, value: updated }]);
+    }
+
+    /* Authorization, so a rotation cannot be steered by whoever can write the records */
+
+    // The address holding the name in its registry. A write delegate can rewrite every record on a
+    // secret, but not who owns it, which is what makes this a usable trust anchor.
+    private async ownerAddressOf(secretName: string): Promise<Address> {
+        const registry = await this.publicClient.readContract({
+            address: this.universalResolver,
+            abi: registryLookupAbi,
+            functionName: "findParentRegistry",
+            args: [dnsEncode(secretName)],
+        });
+        if (!registry || registry === ZERO_ADDRESS) throw new Error(`no registry holds ${secretName}`);
+
+        const label = secretName.split(".")[0]!;
+        const tokenId = await this.publicClient.readContract({
+            address: registry,
+            abi: registryLookupAbi,
+            functionName: "getTokenId",
+            args: [BigInt(keccak256(toBytes(label)))],
+        });
+        return this.publicClient.readContract({
+            address: registry,
+            abi: registryLookupAbi,
+            functionName: "ownerOf",
+            args: [tokenId],
+        }) as Promise<Address>;
+    }
+
+    private authorizationOf(secretName: string, records: Record<string, string>): Authorization {
+        return {
+            secretName,
+            counter: Number(records[RECORD.authCounter] || 0),
+            owner: records[RECORD.owner] || "",
+            grantees: splitNames(records[RECORD.grantees]),
+            subtrees: splitNames(records[RECORD.subtrees]),
+            recovery: splitNames(records[RECORD.recovery]),
+        };
+    }
+
+    private async assertAuthorized(secretName: string, records: Record<string, string>): Promise<void> {
+        const signature = records[RECORD.authSig];
+        if (!signature) {
+            throw new Error(`${secretName} carries no ${RECORD.authSig}, refusing to act on an unsigned grantee list`);
+        }
+
+        const auth = this.authorizationOf(secretName, records);
+        const owner = await this.ownerAddressOf(secretName);
+
+        if (!(await isAuthorizedBy(auth, signature, owner))) {
+            throw new UnauthorizedListError(secretName, await authorizationSigner(auth, signature), owner);
+        }
+    }
+
+    private async signAuthorization(auth: Authorization): Promise<SecretRecords> {
+        const signature = await this.account.signMessage({ message: authorizationPayload(auth) });
+        return [
+            { key: RECORD.authCounter, value: String(auth.counter) },
+            { key: RECORD.authSig, value: signature },
+        ];
     }
 
     private read(name: string, keys: string[]): Promise<Record<string, string>> {

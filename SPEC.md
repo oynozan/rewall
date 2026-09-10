@@ -56,6 +56,8 @@ rewall.grantees   comma-separated ENS names granted directly
 rewall.subtrees   comma-separated ENS names whose subtree was granted
 rewall.recovery   comma-separated recovery entries, each a name or "guardians:<owner name>"
 rewall.holders    comma-separated fingerprints that currently have a wrap
+rewall.auth.n     authorization counter, incremented on every list change
+rewall.auth.sig   owner's signature over the lists, checked before any rotation
 rewall.site       hostname pattern, totp type only
 rewall.allow      comma-separated allowed hosts, enforced by the MCP tool process
 rewall.created    unix timestamp
@@ -87,13 +89,16 @@ rewall.shielded          shielded address for private transfers (optional)
 - **Write permission** is ENSv2 Enhanced Access Control inside the owner's resolver, scoped to the secret's name rather than to the resolver as a whole. The owner holds the admin role on the root resource. Delegating write on one secret means granting a role on that secret's name, with `authorizeNameRoles(bytes toName, uint256 roleBitmap, address account, bool grant)` for the whole name, or `authorizeTextRoles(bytes toName, string key, address account, bool grant)` for a single key. Delegations are scoped to `rewall.*` keys. Both take a DNS-encoded name.
 - **Read permission** is purely cryptographic. A name can read a secret if and only if a `rewall.key.<fp>` exists for its fingerprint, or for a subtree key it holds. No role grants read access, and no role can be revoked to remove it.
 
-### What write permission actually gets you
+### Why the grantee list is signed
 
-Read access cannot be taken directly, but it can be obtained by waiting. `rewall.grantees`, `rewall.subtrees` and `rewall.recovery` are ordinary text records, and a rotation rebuilds the wrap set from them. Anyone who can write those records can add a name they control, and the owner's next rotation seals the data key to it. The same holds one level out: read access follows a grantee's `rewall.pubkey`, so write permission on a grantee's own name steals that grantee's access at the next rotation.
+Read access cannot be taken directly, but without a signature it could be obtained by waiting. `rewall.grantees`, `rewall.subtrees` and `rewall.recovery` are ordinary text records, and a rotation rebuilds the wrap set from them. A write delegate could add a name they control and let the owner's next rotation seal the data key to it.
 
-So the honest boundary is: **delegating write on a secret's `rewall.*` records is delegating eventual read.** Only delegate to a party you would grant the secret to anyway. A delegate can also replace `rewall.blob` outright, since nothing binds a ciphertext to the name it sits on, so a write role is enough to substitute a credential.
+So the lists are signed. The owner signs a canonical payload over the secret name, a counter, the owner name and all three lists, and stores it as `rewall.auth.sig` with the counter in `rewall.auth.n`. Before any rotation a client recovers the signer and compares it to the address that holds the name in its registry, found with `UniversalResolverV2.findParentRegistry`. That address is the one thing about a secret a write delegate cannot rewrite. A tampered list fails to verify and the rotation refuses.
 
-Closing this properly needs the authorization lists signed by the owner's key and verified before any rotation, which is not implemented. Until then, treat `authorizeTextRoles` on `rewall.allow` (what the delegation demo grants) as the only safe delegation, and note it is the MCP egress allowlist, so a delegate can widen where a secret is permitted to travel.
+Two limits worth stating plainly:
+
+- A delegate can still roll the records back to an **older list the owner did sign**, because nothing on chain orders the counters. That can reinstate a grantee who was revoked. It cannot introduce a party the owner never authorized.
+- Nothing binds a ciphertext to the name it sits on, so a delegate with write on `rewall.blob` can substitute a credential. The reader decrypts successfully and gets the wrong value. Only delegate write to a party you would trust with the secret's contents.
 
 ---
 
