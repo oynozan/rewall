@@ -45,9 +45,36 @@ rewall-test-3.eth   recovery   index 3
 - Resolvers are per account (UUPS proxy via VerifiableFactory). Never hardcode a resolver address, find it with `UniversalResolverV2.findResolver(name)`.
 - Token IDs are mutable. Index and address names by labelhash, follow `TokenRegenerated`.
 - Batch read: `UniversalResolverV2.resolve(dnsEncodedName, multicall(bytes[]))`. Batch write: `PermissionedResolver.multicall(bytes[])`.
-- Roles are uint256 bitmaps, use bigint. Registry: `ROLE_REGISTRAR 1n<<0n`, `ROLE_UNREGISTER 1n<<12n`, `ROLE_RENEW 1n<<16n`, `ROLE_SET_SUBREGISTRY 1n<<20n`, `ROLE_SET_RESOLVER 1n<<24n`. Resolver: `ROLE_SET_ADDR 1n<<0n`, `ROLE_SET_TEXT 1n<<4n`, `ROLE_CLEAR 1n<<32n`. Admin variant is `role << 128n`. `ROOT_RESOURCE` is 0.
-- Subname creation: parent owner deploys a UserRegistry via `VerifiableFactory.deployProxy(impl, salt, initData)`, then `setSubregistry(labelhash, registry)` on the parent registry, then `register(label, owner, subregistry, resolver, roleBitmap, expiry)` on it. Expiry is an absolute unix timestamp.
-- Record-level text grants: `PermissionedResolver.authorizeTextRoles(dnsName, key, account, grant)`.
+- One `PermissionedResolver` per account, deployed once through `VerifiableFactory` and reused for every name that account owns. Never one per secret. Records are keyed by `namehash(fullName)`, so one resolver holds every secret without collision.
+- Subname creation: deploy a UserRegistry via `VerifiableFactory.deployProxy(impl, salt, initData)`, then `setSubregistry(labelhash, registry)` on the parent registry, then `register(label, owner, subregistry, resolver, roleBitmap, expiry)` on it. Expiry is an absolute unix timestamp.
+
+Signatures below were read from source at the pinned commit and confirmed present in deployed bytecode.
+
+```
+PermissionedResolver.initialize(address admin, uint256 roleBitmap, bytes[] setters)
+PermissionedResolver.authorizeNameRoles(bytes toName, uint256 roleBitmap, address account, bool grant)
+PermissionedResolver.authorizeTextRoles(bytes toName, string key, address account, bool grant)
+PermissionedResolver.setText(bytes32 node, string key, string value)
+PermissionedResolver.multicall(bytes[] data)
+PermissionedResolver.multicallWithNodeCheck(bytes32 node, bytes[] data)
+UserRegistry.initialize(address rootAccount, uint256 roleBitmap)
+```
+
+`setters` on the resolver initializer is `bytes[]`, not `address[]`. Both authorize functions take a DNS-encoded name and run it through `NameCoder.namehash`.
+
+Roles are uint256 bitmaps, use bigint. Admin variant is `role << 128n`, `ROOT_RESOURCE` is 0.
+
+```
+Registry   REGISTRAR 1<<0   REGISTER_RESERVED 1<<4   SET_PARENT 1<<8   UNREGISTER 1<<12
+           RENEW 1<<16      SET_SUBREGISTRY 1<<20    SET_RESOLVER 1<<24
+           CAN_TRANSFER_ADMIN (1<<28)<<128           WAS_RESERVED 1<<32
+           SET_URI 1<<36    CAN_NAME 1<<120          UPGRADE 1<<124
+
+Resolver   SET_ADDR 1<<0    SET_TEXT 1<<4            SET_CONTENTHASH 1<<8
+           SET_PUBKEY 1<<12 SET_ABI 1<<16            SET_INTERFACE 1<<20
+           SET_NAME 1<<24   SET_ALIAS 1<<28          CLEAR 1<<32
+           SET_DATA 1<<36   CAN_NAME 1<<120          UPGRADE 1<<124
+```
 
 Sepolia ENSv2 addresses. All verified against `/learn/deployments` and confirmed to hold live bytecode.
 

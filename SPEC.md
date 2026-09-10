@@ -15,7 +15,7 @@ Clients:
 
 Every participant (human, agent, org) is an ENS name with an X25519 public key published in its records under `rewall.pubkey`.
 
-The private key is not stored. It is derived on demand:
+The private key is never written to disk in plaintext. It is derived on demand:
 
 1. The wallet signs the fixed message `Rewall identity v1` (EIP-191 personal_sign).
 2. The 65-byte signature is reduced to canonical form. The recovery byte `v` is discarded and `s` is normalized to the low half of the curve order, leaving 64 bytes of `r || s`.
@@ -28,13 +28,19 @@ Step 2 exists so that clients disagreeing about the recovery byte, or wallets re
 
 MetaMask is the supported wallet. Its `personal_sign` is deterministic, so the same account always yields the same key. Other EOA wallets are expected to behave identically but are unverified. Smart-contract and MPC wallets are not deterministic and must use a generated key stored by the client instead, which forfeits the property that the key is never stored.
 
+The SDK, CLI and MCP server hold the derived key in memory for the life of the process and re-derive it on the next run. The browser extension is the one exception and stores it, encrypted under a passphrase, because a page action cannot prompt for a wallet signature on every use. Section 8 covers that trade.
+
 Key fingerprint: the first 8 bytes of `keccak256(pubkey)`, rendered as 16 lowercase hex characters. Used as the suffix in wrap record names. Case is significant, because ENS text record keys are compared as raw bytes and `rewall.key.DEADBEEF` is a different record from `rewall.key.deadbeef`.
 
 ---
 
 ## 2. Storage layout
 
-One secret is one ENSv2 subname under the owner's namespace, for example `openai.rewall.alice.eth`, deployed on ENSv2 Sepolia with its own permissioned resolver to store an OpenAI API key.
+One secret is one ENSv2 subname under the owner's namespace, for example `openai.rewall.alice.eth`, deployed on ENSv2 Sepolia to store an OpenAI API key.
+
+Every account has exactly one `PermissionedResolver`, deployed once through the `VerifiableFactory` and reused for every name that account owns. A secret subname points at its owner's resolver. There is no resolver per secret. Records inside a resolver are keyed by the namehash of the full name, so one resolver holds every secret without them colliding.
+
+Clients always look up a name's configured resolver at write time. Never hardcode a resolver address and never cache one, because an owner can repoint a name at a different resolver at any time.
 
 Records on the secret subname:
 
@@ -42,8 +48,8 @@ Records on the secret subname:
 rewall.v          schema version, "1"
 rewall.type       "generic" | "apikey" | "privkey" | "totp" | "receipt"
 rewall.enc        "aes-256-gcm"
-rewall.blob       base64 ciphertext (nonce || ciphertext || tag) if under 1 KB
-rewall.cid        IPFS CID of the ciphertext if 1 KB or larger (blob is then empty)
+rewall.blob       base64 ciphertext (nonce || ciphertext || tag)
+rewall.cid        reserved for offchain ciphertext, unimplemented
 rewall.key.<fp>   wrapped data key for grantee with fingerprint fp, base64
 rewall.site       hostname pattern, totp type only
 rewall.allow      comma-separated allowed hosts, enforced by the MCP tool process
@@ -62,8 +68,8 @@ rewall.shielded          shielded address for private transfers (optional)
 
 ### Permissions
 
-- **Write permission** is ENSv2 Enhanced Access Control on the subname's resolver. The owner holds the admin role. Any name given the record-setter role can rotate the secret and edit grants.
-- **Read permission** is purely cryptographic. A name can read a secret if and only if a `rewall.key.<fp>` exists for its fingerprint, or for a subtree key it holds.
+- **Write permission** is ENSv2 Enhanced Access Control inside the owner's resolver, scoped to the secret's name rather than to the resolver as a whole. The owner holds the admin role on the root resource. Delegating write on one secret means granting a role on that secret's name, with `authorizeNameRoles(bytes toName, uint256 roleBitmap, address account, bool grant)` for the whole name, or `authorizeTextRoles(bytes toName, string key, address account, bool grant)` for a single key. Delegations are scoped to `rewall.*` keys. Both take a DNS-encoded name.
+- **Read permission** is purely cryptographic. A name can read a secret if and only if a `rewall.key.<fp>` exists for its fingerprint, or for a subtree key it holds. No role grants read access, and no role can be revoked to remove it.
 
 ---
 
@@ -72,7 +78,7 @@ rewall.shielded          shielded address for private transfers (optional)
 ### Create
 
 1. Generate a random 32-byte data key `DEK`.
-2. Encrypt plaintext with AES-256-GCM under `DEK` with a random 12-byte nonce. Store as `rewall.blob` if under 1 KB, otherwise upload to IPFS and store `rewall.cid`.
+2. Encrypt plaintext with AES-256-GCM under `DEK` with a random 12-byte nonce. Store as `rewall.blob`. There is no size threshold and no offchain path. The only ceiling is roughly 22 KB of record value per transaction, set by the EIP-7825 gas clamp, which no credential approaches.
 3. For each grantee (always including the owner and at least one recovery key), wrap `DEK` to the grantee's X25519 public key using libsodium `crypto_box_seal` (ephemeral X25519 + XSalsa20-Poly1305). Store as `rewall.key.<fp>`.
 4. Write all records in one multicall.
 
@@ -80,7 +86,7 @@ rewall.shielded          shielded address for private transfers (optional)
 
 1. Resolve the subname via the ENSv2 universal resolver and read all records in one call.
 2. Find `rewall.key.<fp>` for the caller's fingerprint, or for any subtree key the caller holds.
-3. Unseal to recover `DEK`. Fetch ciphertext (inline, or from IPFS cached by CID forever). Decrypt. Plaintext stays in memory only.
+3. Unseal to recover `DEK`. Decrypt `rewall.blob`. Plaintext stays in memory only.
 
 ### Grant
 
@@ -153,10 +159,12 @@ await rewall.subtree.init("alice.eth");                 // parent publishes subt
 await rewall.subtree.distribute("alice.eth");           // seals subtree key to each subname
 await rewall.subtree.rotate("alice.eth");
 
-await rewall.list("alice.eth");                          // secrets under a namespace
+await rewall.list("alice.eth");                          // reads the rewall.index record
 ```
 
-CLI mirrors the SDK. `rewall run -- <cmd>` injects secrets into a child process environment only.
+`list` does not enumerate the chain. ENSv2 exposes no way to list a registry's children, its tokens are not enumerable, and no subgraph exists for it. Instead every create and revoke rewrites a `rewall.index` text record on the namespace name, holding a comma-separated list of secret labels, in the same multicall the operation already sends. `list` reads that one record. The index is a convenience, not the source of truth, and a secret stays readable whether or not it is listed.
+
+CLI mirrors the SDK. `rewall run -- <cmd>` passes secrets to a child process through its environment. That keeps them off disk, out of shell history, and gone when the child exits. It is not confidentiality against the local machine: on Linux any process with the same user id can read `/proc/<pid>/environ`, and on Windows the child inherits a descriptor derived from the creator's token. Anyone who can run code as this user can already read the secret.
 
 ---
 
@@ -175,7 +183,7 @@ The model never receives plaintext. The tool process enforces `rewall.allow` (ho
 ## 8. OTP extension
 
 - TOTP seeds are secrets of type `totp`, stored as the standard `otpauth://` URI, with `rewall.site` set to the hostname.
-- The extension holds the user's identity key after one wallet connection, encrypted under a passphrase in extension storage, unlocked per session.
+- The extension holds the user's identity key after one wallet connection, encrypted under a passphrase in extension storage, unlocked per session. This is the documented exception to section 1. Filling a code is a page action that cannot prompt for a wallet signature every time, so the extension trades the never-stored property for usability. Anyone who reads extension storage and knows the passphrase gets the identity key and every secret it can unseal.
 - Plan A: on click, read the active tab hostname, find the matching secret, compute the code, fill the field with `autocomplete="one-time-code"` or a six-digit input.
 - Plan B (build first): popup listing every decryptable TOTP secret with live codes and countdowns, one click to fill or copy.
 
@@ -196,5 +204,5 @@ Rail: Chainlink's private transfer service on Sepolia (deposit to vault, signed 
 - No Rewall-operated server or gateway. Anything that decrypts runs on the participant's own machine.
 - Target ENSv2 on Sepolia. Read via the universal resolver. Use ENSv2 registry and permissioned resolver contracts, not ENSv1.
 - Secrets are never written to disk in plaintext by any client.
-- Ciphertext is content-addressed and immutable; cache by CID forever. ENS record reads are cached with a short TTL.
-- All wrap and encryption primitives come from libsodium (or a well-known port); no custom crypto.
+- Ciphertext lives inline in `rewall.blob`. There is no offchain storage and no content addressing. ENS record reads are cached with a short TTL, resolver addresses are never cached.
+- Encryption uses platform WebCrypto for AES-256-GCM and libsodium for the sealed-box wraps and X25519. No hand-rolled primitives, and no algorithm not named in this document.

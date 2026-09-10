@@ -1,0 +1,13 @@
+{
+  "rewall-test-1": {
+    "resolver": "0x1A0578825afDf388F5107117F81A57375cf7060f",
+    "registry": "0x973Cb3beF5350c2dc197BD9878a48786F82e7EC8",
+    "namespaceRegistry": "0xC2aF679BAC5d8314543aA1672e3730634Ab059cD"
+  },
+  "rewall-test-2": {
+    "resolver": "0x49dCD834318F1B546cd4cfffa5466362caD8eBC5"
+  },
+  "rewall-test-3": {
+    "resolver": "0x0f2CE311d2f0eD7AFc521568AcD4f82AEee828A8"
+  }
+}

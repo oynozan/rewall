@@ -6,6 +6,8 @@
   "scripts": {
     "wallets": "node --env-file=.env --experimental-strip-types wallets.ts",
     "bootstrap": "node --env-file=.env --experimental-strip-types bootstrap.ts",
+    "deploy": "node --env-file=.env --experimental-strip-types deploy.ts",
+    "verify": "node --env-file=.env --experimental-strip-types verify.ts",
     "status": "node --env-file=.env --experimental-strip-types status.ts"
   },
   "dependencies": {
