@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.template
 *.key
 *.pem
 *.p12
@@ -52,3 +53,6 @@ desktop.ini
 
 # Local agent config
 .claude/settings.local.json
+
+# Throwaway experiments against live testnet services
+sandbox/

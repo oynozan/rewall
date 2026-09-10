@@ -1,4 +1,4 @@
-// Proves the wallet contract the dashboard depends on, run with pnpm run check:wallet
+// Proves the wallet contract the dashboard depends on, against real Sepolia
 
 import assert from "node:assert/strict";
 import { createPublicClient, createWalletClient, custom, http } from "viem";
