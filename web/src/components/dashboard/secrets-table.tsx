@@ -1,0 +1,324 @@
+"use client";
+
+import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { TYPE_LABELS, TEST_OWNER, type SecretType } from "@/src/lib/vault";
+import { FadeDots, FadeIn } from "./amicro";
+import { useWorkspace } from "./dashboard-shell";
+import { Icon } from "./ui";
+
+export function SecretsPage() {
+    const params = useSearchParams();
+    const type = params.get("type") || "all";
+    const { setPanel } = useWorkspace();
+    return (
+        <FadeIn className="secrets-page">
+            <div className="page-heading">
+                <div>
+                    <span className="eyebrow mono">YOUR PRIVATE SPACE</span>
+                    <h1>
+                        {TYPE_LABELS[type as SecretType]
+                            ? `${TYPE_LABELS[type as SecretType]} collection`
+                            : "All secrets"}
+                    </h1>
+                    <p>The keys, notes, and credentials you keep close.</p>
+                </div>
+                <button className="button primary" onClick={() => setPanel("find")}>
+                    <span aria-hidden="true">+</span>Find a secret
+                </button>
+            </div>
+            <div className="page-tabs">
+                <span className="active">Vault</span>
+                <span className="muted">Public details. Private values.</span>
+                <button className="text-button" onClick={() => setPanel("vault")}>
+                    Open another vault<span aria-hidden="true">↗</span>
+                </button>
+            </div>
+            <SecretsTable key={type} initialType={type} />
+            <div className="secrets-bottom-note">
+                <Icon name="lock" size={17} />
+                <p>Only names and public details appear here. Secret values stay encrypted.</p>
+                <button className="text-button" onClick={() => setPanel("help")}>
+                    How it works<span aria-hidden="true">↗</span>
+                </button>
+            </div>
+        </FadeIn>
+    );
+}
+
+export function SecretsTable({ compact = false, initialType = "all" }: { compact?: boolean; initialType?: string }) {
+    const { vault, busy, error, refresh, setPanel } = useWorkspace();
+    const [query, setQuery] = useState("");
+    const [type, setType] = useState(initialType);
+    const [sort, setSort] = useState("newest");
+    const [selected, setSelected] = useState<string[]>([]);
+    const [status, setStatus] = useState("");
+    const secrets = (vault?.secrets ?? [])
+        .filter(
+            (secret) =>
+                (type === "all" || secret.type === type) &&
+                secret.name.toLowerCase().includes(query.toLowerCase().trim()),
+        )
+        .sort((a, b) => (sort === "name" ? a.name.localeCompare(b.name) : (b.created || 0) - (a.created || 0)));
+    const shown = compact ? secrets.slice(0, 5) : secrets;
+    const allSelected = shown.length > 0 && shown.every((secret) => selected.includes(secret.name));
+    const toggleAll = () =>
+        setSelected(
+            allSelected
+                ? selected.filter((name) => !shown.some((secret) => secret.name === name))
+                : [...new Set([...selected, ...shown.map((secret) => secret.name)])],
+        );
+    const selectedVisible = shown.filter((secret) => selected.includes(secret.name));
+    const scopeLabel = vault?.owner === TEST_OWNER ? "Sepolia test vault" : vault?.owner || "No vault open";
+
+    async function copySelected() {
+        try {
+            await navigator.clipboard.writeText(selectedVisible.map((secret) => secret.name).join("\n"));
+            setStatus("Names copied");
+        } catch {
+            setStatus("Clipboard unavailable");
+        }
+    }
+
+    return (
+        <div className={`secrets-browser ${compact ? "compact" : ""}`}>
+            <div className="table-toolbar">
+                <label className="search-field">
+                    <Icon name="folder_search" size={18} />
+                    <span className="sr-only">Search secrets</span>
+                    <input
+                        placeholder="Search secrets…"
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                    />
+                    {query && (
+                        <button className="search-clear" onClick={() => setQuery("")} aria-label="Clear search">
+                            ×
+                        </button>
+                    )}
+                    <kbd>/</kbd>
+                </label>
+                <label className="filter-control">
+                    <span className="muted">Type</span>
+                    <select aria-label="Filter by type" value={type} onChange={(event) => setType(event.target.value)}>
+                        <option value="all">All types</option>
+                        {Object.entries(TYPE_LABELS).map(([key, value]) => (
+                            <option key={key} value={key}>
+                                {value}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                {!compact && (
+                    <label className="filter-control">
+                        <span className="muted">Sort</span>
+                        <select
+                            aria-label="Sort secrets"
+                            value={sort}
+                            onChange={(event) => setSort(event.target.value)}
+                        >
+                            <option value="newest">Newest first</option>
+                            <option value="name">Name A–Z</option>
+                        </select>
+                    </label>
+                )}
+                <button
+                    className="icon-button refresh-button"
+                    onClick={refresh}
+                    disabled={busy}
+                    aria-label="Refresh vault"
+                    title="Refresh vault"
+                >
+                    ↻
+                </button>
+            </div>
+            <div className="vault-context">
+                <span>
+                    <span className="status-dot" />
+                    {scopeLabel}
+                    <span className="scope-divider">/</span>
+                    <span className="muted">Read-only</span>
+                </span>
+                {!compact && vault && <span className="mono namespace-label">{vault.namespace}</span>}
+                <button className="text-button" onClick={() => setPanel("vault")} aria-label="Change vault">
+                    Change<span aria-hidden="true">⌄</span>
+                </button>
+            </div>
+            {selectedVisible.length > 0 && (
+                <div className="selection-bar">
+                    <span>{selectedVisible.length} selected</span>
+                    <button className="text-button" onClick={copySelected}>
+                        Copy names
+                    </button>
+                    <button
+                        className="text-button"
+                        onClick={() => {
+                            setSelected([]);
+                            setStatus("");
+                        }}
+                    >
+                        Clear
+                    </button>
+                    <span role="status">{status}</span>
+                </div>
+            )}
+            <div className="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th className="checkbox-cell">
+                                <input
+                                    type="checkbox"
+                                    aria-label="Select all visible secrets"
+                                    checked={allSelected}
+                                    disabled={shown.length === 0 || busy}
+                                    onChange={toggleAll}
+                                />
+                            </th>
+                            <th scope="col">
+                                <button
+                                    className="table-sort"
+                                    onClick={() => setSort(sort === "name" ? "newest" : "name")}
+                                >
+                                    Secret name<span aria-hidden="true">{sort === "name" ? "↑" : "↓"}</span>
+                                </button>
+                            </th>
+                            <th scope="col">Type</th>
+                            <th scope="col">Protection</th>
+                            <th scope="col">Created</th>
+                            <th>
+                                <span className="sr-only">Open details</span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {!busy &&
+                            !error &&
+                            shown.map((secret) => (
+                                <tr key={secret.name} className={selected.includes(secret.name) ? "is-selected" : ""}>
+                                    <td className="checkbox-cell">
+                                        <input
+                                            type="checkbox"
+                                            aria-label={`Select ${secret.label}`}
+                                            checked={selected.includes(secret.name)}
+                                            onChange={(event) =>
+                                                setSelected(
+                                                    event.target.checked
+                                                        ? [...selected, secret.name]
+                                                        : selected.filter((name) => name !== secret.name),
+                                                )
+                                            }
+                                        />
+                                    </td>
+                                    <td>
+                                        <button className="secret-name" onClick={() => setPanel(secret)}>
+                                            <span className="secret-icon">
+                                                <Icon
+                                                    name={
+                                                        secret.type === "totp"
+                                                            ? "authenticator"
+                                                            : secret.type === "generic"
+                                                              ? "documents"
+                                                              : "key"
+                                                    }
+                                                    size={21}
+                                                />
+                                            </span>
+                                            <span>
+                                                <strong>{secret.label}</strong>
+                                                <small>{secret.name}</small>
+                                            </span>
+                                        </button>
+                                    </td>
+                                    <td>
+                                        <span className="badge">
+                                            {TYPE_LABELS[secret.type as SecretType] || secret.type}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span className="protection-label">
+                                            <Icon name="lock" size={15} />
+                                            {secret.encryption === "aes-256-gcm" ? "Encrypted" : "Unverified"}
+                                        </span>
+                                    </td>
+                                    <td className="date-cell">
+                                        {secret.created
+                                            ? new Date(secret.created * 1000).toLocaleDateString("en-GB", {
+                                                  month: "short",
+                                                  day: "numeric",
+                                                  timeZone: "UTC",
+                                              })
+                                            : "—"}
+                                    </td>
+                                    <td className="row-action">
+                                        <button
+                                            className="icon-button"
+                                            aria-label={`View ${secret.label} details`}
+                                            onClick={() => setPanel(secret)}
+                                        >
+                                            ↗
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                    </tbody>
+                </table>
+            </div>
+            {busy ? (
+                <div className="table-state" aria-live="polite">
+                    <FadeDots />
+                    <p>Opening your private space…</p>
+                    <small>Reading public details from ENSv2.</small>
+                </div>
+            ) : error ? (
+                <div className="table-state">
+                    <Icon name="folder_search" size={32} />
+                    <h3>A moment out of reach</h3>
+                    <p role="alert">{error}</p>
+                    <button className="button small" onClick={refresh}>
+                        Try again
+                    </button>
+                </div>
+            ) : shown.length === 0 ? (
+                <div className="table-state">
+                    <Icon name={query || type !== "all" ? "folder_search" : "key"} size={35} />
+                    <h3>
+                        {query || type !== "all" ? "Nothing here matches just yet." : "Room for the important things."}
+                    </h3>
+                    <p>
+                        {query || type !== "all"
+                            ? "Try another name or take a look at all types."
+                            : "Open an existing vault to find its secrets by name."}
+                    </p>
+                    <button
+                        className="button small"
+                        onClick={() => {
+                            if (query || type !== "all") {
+                                setQuery("");
+                                setType("all");
+                            } else setPanel("vault");
+                        }}
+                    >
+                        {query || type !== "all" ? "Clear filters" : "Open a vault"}
+                    </button>
+                </div>
+            ) : (
+                <div className="table-breathing-room">
+                    <Icon name="lock" size={15} />
+                    <span>What’s inside stays between you and your keys.</span>
+                </div>
+            )}
+            <div className="table-footer">
+                <span>
+                    <strong className="mono">{busy || error ? "—" : secrets.length}</strong>{" "}
+                    {secrets.length === 1 ? "secret" : "secrets"}
+                    {query || type !== "all" ? " matching" : " in this vault"}
+                </span>
+                <span className="table-footer-end">
+                    {busy ? "Reading ENSv2…" : error ? "Connection unavailable" : "Values are never shown"}
+                    <Icon name="lock" size={13} />
+                </span>
+            </div>
+        </div>
+    );
+}
