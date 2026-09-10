@@ -4,9 +4,15 @@ export function parseOtp(bytes: Uint8Array): TOTP {
     let parsed: ReturnType<typeof URI.parse> | undefined;
     try {
         parsed = URI.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-        if (!(parsed instanceof TOTP) || ![6, 8].includes(parsed.digits) ||
-            !Number.isInteger(parsed.period) || parsed.period < 1 || parsed.period > 300 ||
-            !["SHA1", "SHA256", "SHA512"].includes(parsed.algorithm) || !parsed.secret.bytes.length) {
+        if (
+            !(parsed instanceof TOTP) ||
+            ![6, 8].includes(parsed.digits) ||
+            !Number.isInteger(parsed.period) ||
+            parsed.period < 1 ||
+            parsed.period > 300 ||
+            !["SHA1", "SHA256", "SHA512"].includes(parsed.algorithm) ||
+            !parsed.secret.bytes.length
+        ) {
             throw new Error("Unsupported authenticator configuration.");
         }
         return parsed;

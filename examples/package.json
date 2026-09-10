@@ -1,0 +1,25 @@
+{
+    "name": "@rewall/examples",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@9.12.2",
+    "scripts": {
+        "setup": "node --env-file=.env --experimental-strip-types setup.ts",
+        "01": "node --env-file=.env --experimental-strip-types 01-store-and-read/index.ts",
+        "02": "node --env-file=.env --experimental-strip-types 02-share-with-a-teammate/index.ts",
+        "03": "node --env-file=.env --experimental-strip-types 03-take-access-away/index.ts",
+        "04": "node --env-file=.env --experimental-strip-types 04-share-with-a-team/index.ts",
+        "05": "node --env-file=.env --experimental-strip-types 05-recover-a-lost-wallet/index.ts",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "dependencies": {
+        "@rewall/sdk": "link:../sdk",
+        "viem": "^2.56.3"
+    },
+    "devDependencies": {
+        "@types/node": "^22.20.2",
+        "prettier": "^3.9.6",
+        "typescript": "^7.0.2"
+    }
+}

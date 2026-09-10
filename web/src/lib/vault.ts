@@ -70,7 +70,8 @@ export async function readSecret(input: string): Promise<Secret> {
         RECORD.grantees,
         RECORD.site,
     ]);
-    if (!["1", SCHEMA_VERSION].includes(records[RECORD.version])) throw new Error("No supported Rewall secret was found at this name.");
+    if (!["1", SCHEMA_VERSION].includes(records[RECORD.version]))
+        throw new Error("No supported Rewall secret was found at this name.");
     const created = Number(records[RECORD.created]);
     return {
         name,

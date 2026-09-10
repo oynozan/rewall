@@ -20,13 +20,14 @@ export function PrivateDataProvider({ children }: { children: React.ReactNode })
     const [pending, setPending] = useState("");
     const [error, setError] = useState<PrivateData["error"]>(null);
     const keys = useRef(new Map<string, TOTP>());
-    const generation = useRef(0);
+    const generation = useRef({ value: 0 });
     const inFlight = useRef(false);
 
     useEffect(() => {
         const retained = keys.current;
+        const lifecycle = generation.current;
         return () => {
-            generation.current++;
+            lifecycle.value++;
             retained.forEach((otp) => otp.secret.bytes.fill(0));
             retained.clear();
         };
@@ -35,22 +36,28 @@ export function PrivateDataProvider({ children }: { children: React.ReactNode })
     async function unlock(name: string) {
         if (inFlight.current) return;
         inFlight.current = true;
-        const current = generation.current;
+        const current = generation.current.value;
         setPending(name);
         setError(null);
         try {
             const bytes = await decryptSecret(name);
-            if (current !== generation.current) { bytes.fill(0); return; }
+            if (current !== generation.current.value) {
+                bytes.fill(0);
+                return;
+            }
             const otp = parseOtp(bytes);
             keys.current.get(name)?.secret.bytes.fill(0);
             keys.current.set(name, otp);
             setAccounts(Object.fromEntries(keys.current));
         } catch {
-            if (current === generation.current) {
-                setError({ name, message: "Couldn’t unlock this account. Check wallet access and its TOTP configuration." });
+            if (current === generation.current.value) {
+                setError({
+                    name,
+                    message: "Couldn’t unlock this account. Check wallet access and its TOTP configuration.",
+                });
             }
         } finally {
-            if (current === generation.current) {
+            if (current === generation.current.value) {
                 inFlight.current = false;
                 setPending("");
             }

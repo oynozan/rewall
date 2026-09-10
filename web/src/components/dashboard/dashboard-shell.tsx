@@ -49,7 +49,13 @@ const step = (index: number) => ({ "--i": index }) as React.CSSProperties;
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
-    const pageTitle = pathname.includes("/2fa") ? "2FA" : pathname.includes("/transfers") ? "Transfers" : pathname.includes("/secrets") ? "Secrets" : "Home";
+    const pageTitle = pathname.includes("/2fa")
+        ? "2FA"
+        : pathname.includes("/transfers")
+          ? "Transfers"
+          : pathname.includes("/secrets")
+            ? "Secrets"
+            : "Home";
     const [vault, setVault] = useState<Vault | null>(null);
     const [busy, setBusy] = useState(true);
     const [error, setError] = useState("");
@@ -113,12 +119,24 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
     async function decryptSecret(name: string) {
         const injected = provider.current;
-        if (!injected || !account || !vault) { setPanel("wallet"); throw new Error("Connect your wallet first."); }
+        if (!injected || !account || !vault) {
+            setPanel("wallet");
+            throw new Error("Connect your wallet first.");
+        }
         const wallet = createWalletClient({ account: account as Address, chain: sepolia, transport: custom(injected) });
-        const reader = new Rewall({ publicClient: vaultClient, walletClient: wallet, account: { signMessage: ({ message }: { message: string }) => wallet.signMessage({ message }) }, name: vault.owner, universalResolver: UNIVERSAL_RESOLVER });
+        const reader = new Rewall({
+            publicClient: vaultClient,
+            walletClient: wallet,
+            account: { signMessage: ({ message }: { message: string }) => wallet.signMessage({ message }) },
+            name: vault.owner,
+            universalResolver: UNIVERSAL_RESOLVER,
+        });
         const identity = await reader.identity();
-        try { return await reader.get(name); }
-        finally { await wipe(identity.secretKey); }
+        try {
+            return await reader.get(name);
+        } finally {
+            await wipe(identity.secretKey);
+        }
     }
 
     const workspace: Workspace = {
@@ -175,21 +193,53 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                     </button>
                     <nav>
                         <div className="nav-group">
-                            {([
-                                { href: "/dashboard", label: "Home", icon: "home" },
-                                { href: "/dashboard/secrets", label: "Secrets", icon: "key" },
-                                { href: "/dashboard/2fa", label: "2FA", icon: "authenticator" },
-                                { href: "/dashboard/transfers", label: "Transfers", icon: "wallet" },
-                            ] as { href: string; label: string; icon: IconName }[]).map((item, index) => (
-                                <Link key={item.href} href={item.href} style={step(index + 2)} className={`nav-item ${pageTitle === item.label ? "selected" : ""}`} aria-current={pageTitle === item.label ? "page" : undefined} onClick={navigate}>
-                                    <Icon name={item.icon} />{item.label}
+                            {(
+                                [
+                                    { href: "/dashboard", label: "Home", icon: "home" },
+                                    { href: "/dashboard/secrets", label: "Secrets", icon: "key" },
+                                    { href: "/dashboard/2fa", label: "2FA", icon: "authenticator" },
+                                    { href: "/dashboard/transfers", label: "Transfers", icon: "wallet" },
+                                ] as { href: string; label: string; icon: IconName }[]
+                            ).map((item, index) => (
+                                <Link
+                                    key={item.href}
+                                    href={item.href}
+                                    style={step(index + 2)}
+                                    className={`nav-item ${pageTitle === item.label ? "selected" : ""}`}
+                                    aria-current={pageTitle === item.label ? "page" : undefined}
+                                    onClick={navigate}
+                                >
+                                    <Icon name={item.icon} />
+                                    {item.label}
                                 </Link>
                             ))}
                         </div>
                         <div className="nav-group">
-                            <span className="nav-caption" style={step(6)}>Resources</span>
-                            <a className="nav-item" style={step(7)} href="https://github.com/oynozan/rewall" target="_blank" rel="noreferrer"><Icon name="github" />Source Code</a>
-                            <a className="nav-item" style={step(8)} href="https://github.com/oynozan/rewall/blob/main/SPEC.md" target="_blank" rel="noreferrer"><Icon name="documents" />Docs</a>
+                            <span className="nav-caption" style={step(6)}>
+                                Resources
+                            </span>
+                            <a
+                                className="nav-item"
+                                style={step(7)}
+                                href="https://github.com/oynozan/rewall"
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                <Icon name="github" />
+                                Source Code
+                            </a>
+                            <a
+                                className="nav-item"
+                                style={step(8)}
+                                href="#"
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(event) => event.preventDefault()}
+                                aria-disabled="true"
+                            >
+                                <Icon name="documents" />
+                                Docs
+                            </a>
                         </div>
                     </nav>
                     <button className="sidebar-account" style={step(12)} onClick={() => setPanel("wallet")}>

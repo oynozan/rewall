@@ -10,14 +10,15 @@ import { Glyph, Icon } from "./ui";
 export function SecretsPage() {
     const params = useSearchParams();
     const requestedType = params.get("type") || "all";
-    const type = Object.hasOwn(TYPE_LABELS, requestedType) ? requestedType : "all";
+    const type =
+        Object.hasOwn(TYPE_LABELS, requestedType) && !["totp", "receipt"].includes(requestedType)
+            ? requestedType
+            : "all";
     const { setPanel } = useWorkspace();
     return (
         <FadeIn className="secrets-page">
             <div className="page-heading">
-                <h1>
-                    {TYPE_LABELS[type as SecretType] ? `${TYPE_LABELS[type as SecretType]} collection` : "All secrets"}
-                </h1>
+                <h1>{TYPE_LABELS[type as SecretType] || "Secrets"}</h1>
                 <button className="button primary" onClick={() => setPanel("find")}>
                     Find a secret
                 </button>
@@ -54,6 +55,7 @@ export function SecretsTable({ compact = false, initialType = "all" }: { compact
         return () => document.removeEventListener("keydown", focusSearch);
     }, []);
     const secrets = (vault?.secrets ?? [])
+        .filter((secret) => !["totp", "receipt"].includes(secret.type))
         .filter(
             (secret) =>
                 (type === "all" || secret.type === type) &&
@@ -96,11 +98,13 @@ export function SecretsTable({ compact = false, initialType = "all" }: { compact
                 <label className="filter-control">
                     <select aria-label="Filter by type" value={type} onChange={(event) => setType(event.target.value)}>
                         <option value="all">All types</option>
-                        {Object.entries(TYPE_LABELS).map(([key, value]) => (
-                            <option key={key} value={key}>
-                                {value}
-                            </option>
-                        ))}
+                        {Object.entries(TYPE_LABELS)
+                            .filter(([key]) => !["totp", "receipt"].includes(key))
+                            .map(([key, value]) => (
+                                <option key={key} value={key}>
+                                    {value}
+                                </option>
+                            ))}
                     </select>
                 </label>
                 {!compact && (
