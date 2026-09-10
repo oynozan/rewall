@@ -28,10 +28,12 @@ export type Secret = {
 };
 export type Vault = { owner: string; namespace: string; identityPublished: boolean; secrets: Secret[] };
 
+export const RPC_URL = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
+
 export const vaultClient = createPublicClient({
     chain: sepolia,
     // Batched because a single rotation read fans out to more than a dozen concurrent eth_calls
-    transport: http("https://ethereum-sepolia-rpc.publicnode.com", { timeout: 15000, retryCount: 1, batch: true }),
+    transport: http(RPC_URL, { timeout: 15000, retryCount: 1, batch: true }),
 });
 
 export function ownerName(input: string) {
