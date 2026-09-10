@@ -1,0 +1,54 @@
+# Secrets first. Nothing below this block is worth arguing about.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.keystore
+*.mnemonic
+*.seed
+keystore/
+secrets.json
+.npmrc
+wallets.json
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+.pnp
+.pnp.*
+*.log
+
+# TypeScript / bundler output
+dist/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Next.js
+.next/
+out/
+.vercel/
+
+# Chrome extension package
+*.crx
+*.zip
+
+# Node crash artifacts, these contain process env and argv verbatim
+report.*.json
+*.heapsnapshot
+*.cpuprofile
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local agent config
+.claude/settings.local.json

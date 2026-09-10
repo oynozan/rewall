@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "skills": {
+    "chainlink-confidential-ai-attester-skill": {
+      "source": "smartcontractkit/chainlink-agent-skills",
+      "sourceType": "github",
+      "skillPath": "chainlink-confidential-ai-attester-skill/SKILL.md",
+      "computedHash": "07bbdd9fded6c799be1430790a6ac81bc61c58006c36f973046b0b7df95cdb13"
+    },
+    "chainlink-cre-connect-skill": {
+      "source": "smartcontractkit/chainlink-agent-skills",
+      "sourceType": "github",
+      "skillPath": "chainlink-cre-connect-skill/SKILL.md",
+      "computedHash": "6d86b26cbe185f5687eafbbcd7b66e9a5706418811ca0883ded7f5c46577a108"
+    },
+    "chainlink-cre-skill": {
+      "source": "smartcontractkit/chainlink-agent-skills",
+      "sourceType": "github",
+      "skillPath": "chainlink-cre-skill/SKILL.md",
+      "computedHash": "ad448b40c8a6cf7bc5a2b7656ef0a70dfe878bfd71307ffe56ed2876f31ecfd0"
+    },
+    "clean-comment-lines": {
+      "source": "oynozan/clean-comment-lines",
+      "sourceType": "github",
+      "skillPath": "skills/clean-comment-lines/SKILL.md",
+      "computedHash": "c0a798fb0ae257b3c01f5294d5d18a099337490c58cc728239f194631e969d82"
+    },
+    "dmk-intent-vocabulary": {
+      "source": "ledgerhq/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/dmk/dmk-intent-vocabulary/SKILL.md",
+      "computedHash": "d1aee657a1e1bf14ecb8f4a8693f9f3c4b42b5be5a2c0fc1260735d2e045b1c4"
+    },
+    "ledger-dmk-implementation": {
+      "source": "ledgerhq/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/dmk/ledger-dmk-implementation/SKILL.md",
+      "computedHash": "511acfdb0601986c2e037e258ae58176b72f4fba5bebf121068e085d63b4f326"
+    },
+    "wallet-cli-usage": {
+      "source": "ledgerhq/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/wallet-cli/wallet-cli-usage/SKILL.md",
+      "computedHash": "f62a17c9328676a8f193bd7d87b4586a41fbc3ef5e8180833cd5de3866faf07a"
+    }
+  }
+}

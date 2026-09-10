@@ -1,0 +1,75 @@
+import { createPublicClient, createWalletClient, http, formatEther, parseEther } from "viem";
+import { privateKeyToAccount, mnemonicToAccount, generateMnemonic, english } from "viem/accounts";
+import { sepolia } from "viem/chains";
+import { readFileSync, writeFileSync } from "node:fs";
+
+const ENV_PATH = new URL(".env", import.meta.url);
+
+const ROLES = [
+  { index: 0, name: "owner", target: parseEther("0.12") },
+  { index: 1, name: "grantee", target: parseEther("0.02") },
+  { index: 2, name: "stranger", target: 0n },
+  { index: 3, name: "recovery", target: parseEther("0.02") },
+];
+
+/* Mnemonic */
+
+function loadOrCreateMnemonic(): string {
+  const existing = process.env.REWALL_TEST_MNEMONIC?.trim();
+  if (existing) return existing;
+
+  const phrase = generateMnemonic(english);
+  const env = readFileSync(ENV_PATH, "utf8");
+  if (!/^REWALL_TEST_MNEMONIC=\s*$/m.test(env)) {
+    throw new Error("REWALL_TEST_MNEMONIC line missing or already set in .env, refusing to overwrite");
+  }
+  // Written straight to disk so the phrase never reaches a shell argument or a log line
+  writeFileSync(ENV_PATH, env.replace(/^REWALL_TEST_MNEMONIC=\s*$/m, `REWALL_TEST_MNEMONIC=${phrase}`));
+  console.log("generated a new test mnemonic and wrote it to .env");
+  return phrase;
+}
+
+/* Setup */
+
+const rpc = process.env.SEPOLIA_RPC_URL;
+const funderKey = process.env.REWALL_FUNDER_KEY;
+if (!rpc) throw new Error("SEPOLIA_RPC_URL is not set");
+if (!funderKey) throw new Error("REWALL_FUNDER_KEY is not set");
+
+const publicClient = createPublicClient({ chain: sepolia, transport: http(rpc) });
+
+const chainId = await publicClient.getChainId();
+if (chainId !== sepolia.id) throw new Error(`refusing to run against chain ${chainId}, expected Sepolia ${sepolia.id}`);
+
+const funder = privateKeyToAccount(funderKey as `0x${string}`);
+const wallet = createWalletClient({ account: funder, chain: sepolia, transport: http(rpc) });
+
+const mnemonic = loadOrCreateMnemonic();
+const accounts = ROLES.map((r) => ({ ...r, account: mnemonicToAccount(mnemonic, { addressIndex: r.index }) }));
+
+/* Funding */
+
+const funderBalance = await publicClient.getBalance({ address: funder.address });
+console.log(`\nfunder   ${funder.address}  ${formatEther(funderBalance)} ETH\n`);
+
+const needed = accounts.reduce((sum, a) => sum + a.target, 0n);
+if (funderBalance < needed) {
+  throw new Error(`funder holds ${formatEther(funderBalance)} ETH but ${formatEther(needed)} ETH is needed`);
+}
+
+for (const a of accounts) {
+  const balance = await publicClient.getBalance({ address: a.account.address });
+  const short = a.target > balance ? a.target - balance : 0n;
+
+  if (short === 0n) {
+    console.log(`${a.name.padEnd(9)}${a.account.address}  ${formatEther(balance)} ETH  funded`);
+    continue;
+  }
+
+  const hash = await wallet.sendTransaction({ to: a.account.address, value: short });
+  await publicClient.waitForTransactionReceipt({ hash });
+  const after = await publicClient.getBalance({ address: a.account.address });
+  console.log(`${a.name.padEnd(9)}${a.account.address}  ${formatEther(after)} ETH  sent ${formatEther(short)}  ${hash}`);
+}
+
+console.log(`\nfunder remaining ${formatEther(await publicClient.getBalance({ address: funder.address }))} ETH`);
