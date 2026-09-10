@@ -17,7 +17,7 @@ export function TerminalOverview() {
     const sent = (vault?.secrets || []).filter((secret) => secret.type === "receipt").length;
     return (
         <div className="terminal-overview" aria-label="Workspace overview">
-            <section className="terminal-card">
+            <section className="terminal-card secrets-card">
                 <header>
                     <h2>Secrets</h2>
                 </header>
@@ -34,7 +34,7 @@ export function TerminalOverview() {
                     />
                 </div>
             </section>
-            <section className="terminal-card">
+            <section className="terminal-card otp-card">
                 <header>
                     <h2>2FA</h2>
                 </header>
@@ -51,7 +51,7 @@ export function TerminalOverview() {
                     />
                 </div>
             </section>
-            <section className="terminal-card">
+            <section className="terminal-card transfers-card">
                 <header>
                     <h2>Confidential Transfers</h2>
                 </header>
@@ -62,7 +62,9 @@ export function TerminalOverview() {
                     </div>
                     <div>
                         <span className="mono">Shared</span>
-                        <strong className="mono">{MOCKS_ENABLED ? mockTransfers.shared.length.toString().padStart(2, "0") : "—"}</strong>
+                        <strong className="mono">
+                            {MOCKS_ENABLED ? mockTransfers.shared.length.toString().padStart(2, "0") : "—"}
+                        </strong>
                     </div>
                 </div>
             </section>

@@ -17,6 +17,7 @@ export type IconName =
 
 /* Stroke drawings on the Arcticons 48 grid for the controls the icon set has no entry for */
 const GLYPHS = {
+    chevron_right: "M18 12L30 24L18 36",
     close: "M15 15L33 33M33 15L15 33",
     refresh: "M33.9 33.9A14 14 0 1 1 33.9 14.1M34.2 7.6L33.9 14.1L27.4 14.4",
     copy: "M17 17H35V36H17ZM11 30H9V10H28V12",
@@ -77,7 +78,10 @@ export function SegmentedProgress({
             aria-valuenow={value}
         >
             {Array.from({ length: segments }, (_, index) => (
-                <span key={index} style={{ backgroundColor: index < filled ? "#dcdcd4" : "#2f2f2f" }} />
+                <span
+                    key={index}
+                    style={{ backgroundColor: index < filled ? "var(--progress-fill, #dcdcd4)" : "#2f2f2f" }}
+                />
             ))}
         </div>
     );

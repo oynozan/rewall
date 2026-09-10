@@ -11,13 +11,13 @@ const bundled = await build({
         contents: `
 import React from 'react';
 import {createRoot} from 'react-dom/client';
-import {OtpCode} from './src/components/dashboard/otp-code';
+import {OtpCells} from './src/components/dashboard/otp-code';
 import {VolumeChart} from './src/components/dashboard/volume-chart';
 import {parseOtp,otpSnapshot} from './src/lib/otp';
 const bytes=new TextEncoder().encode('otpauth://totp/RFC%206238:Test?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&digits=8&period=30');
 const otp=parseOtp(bytes);
 window.otpTest={wiped:[...bytes].every(b=>b===0),at:timestamp=>otpSnapshot(otp,timestamp),reject:()=>{const b=new TextEncoder().encode('otpauth://hotp/Test?secret=GEZDGNBVGY3TQOJQ&counter=0');let rejected=false;try{parseOtp(b)}catch{rejected=true}return rejected&&b.every(v=>v===0)}};
-createRoot(document.getElementById('root')).render(<main className="fixture"><h1>Component test</h1><p className="muted">Public RFC 6238 test account</p><div className="secrets-browser"><div className="table-scroll"><table className="otp-table"><thead><tr><th>Account</th><th>Code / expires in</th></tr></thead><tbody><tr><td>RFC 6238</td><td><OtpCode otp={otp} label="RFC 6238"/></td></tr></tbody></table></div></div><div className="fixture-chart"><VolumeChart volume={{asset:'TEST',sentTotal:'150',sharedTotal:'75',points:[{label:'01 Sep',sent:5,shared:2},{label:'02 Sep',sent:12,shared:4},{label:'03 Sep',sent:8,shared:6},{label:'04 Sep',sent:22,shared:9},{label:'05 Sep',sent:15,shared:10},{label:'06 Sep',sent:32,shared:18},{label:'07 Sep',sent:24,shared:14},{label:'08 Sep',sent:32,shared:12}]}}/></div></main>);
+createRoot(document.getElementById('root')).render(<main className="fixture"><h1>Component test</h1><p className="muted">Public RFC 6238 test account</p><div className="secrets-browser"><div className="table-scroll"><table className="otp-table"><colgroup><col className="otp-account-col"/><col className="otp-code-col"/><col className="otp-expiry-col"/><col className="otp-action-col"/></colgroup><thead><tr><th>Account</th><th>Code</th><th>Expires in</th><th>Actions</th></tr></thead><tbody><tr><td>RFC 6238</td><OtpCells otp={otp} label="RFC 6238"/><td/></tr></tbody></table></div></div><div className="fixture-chart"><VolumeChart volume={{asset:'TEST',sentTotal:'150',sharedTotal:'75',points:[{label:'01 Sep',sent:5,shared:2},{label:'02 Sep',sent:12,shared:4},{label:'03 Sep',sent:8,shared:6},{label:'04 Sep',sent:22,shared:9},{label:'05 Sep',sent:15,shared:10},{label:'06 Sep',sent:32,shared:18},{label:'07 Sep',sent:24,shared:14},{label:'08 Sep',sent:32,shared:12}]}}/></div></main>);
 `,
         loader: "tsx",
         resolveDir: process.cwd(),
@@ -79,9 +79,28 @@ try {
         .getByRole("progressbar")
         .locator("span")
         .evaluateAll(
-            (spans) => spans.filter((span) => getComputedStyle(span).backgroundColor === "rgb(220, 220, 212)").length,
+            (spans) => spans.filter((span) => getComputedStyle(span).backgroundColor !== "rgb(47, 47, 47)").length,
         );
     assert.equal(lit, Math.round((expected.remaining / 30) * 20));
+    await expect(page.locator(".otp-timer")).toHaveAttribute("data-urgency", "high");
+    await expect(page.getByRole("progressbar").locator("span").first()).toHaveCSS(
+        "background-color",
+        "rgb(112, 181, 140)",
+    );
+    await page.clock.runFor(10000);
+    await expect(page.locator(".otp-timer")).toHaveAttribute("data-urgency", "medium");
+    await page.clock.runFor(250);
+    await expect(page.getByRole("progressbar").locator("span").first()).toHaveCSS(
+        "background-color",
+        "rgb(214, 184, 104)",
+    );
+    await page.clock.runFor(10000);
+    await expect(page.locator(".otp-timer")).toHaveAttribute("data-urgency", "low");
+    await page.clock.runFor(250);
+    await expect(page.getByRole("progressbar").locator("span").first()).toHaveCSS(
+        "background-color",
+        "rgb(217, 120, 120)",
+    );
     await expect(page.locator(".otp-digits")).toHaveAttribute("aria-hidden", "true");
     await copy.focus();
     await expect(page.locator(".otp-tooltip")).toHaveCSS("opacity", "1");
@@ -96,10 +115,11 @@ try {
         "RFC 6238 known code",
         "Input buffers wiped on success and failure",
         "HOTP rejected",
-        "Code remains blurred and hidden from accessible text",
+        "Code is blurred at rest and hidden from accessible text",
         "Copy tooltip on hover and keyboard focus",
         "Real clock rollover changes code and resets timer",
         "Copy uses the current code",
+        "Countdown changes from green to yellow to red and resets green",
         "Populated chart has separate sent/shared series",
         "Mobile component has no page overflow",
     ];

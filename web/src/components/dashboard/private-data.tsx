@@ -27,10 +27,14 @@ export function PrivateDataProvider({ children }: { children: React.ReactNode })
     useEffect(() => {
         const retained = keys.current;
         const lifecycle = generation.current;
-        const preview = MOCKS_ENABLED ? window.setTimeout(() => {
-            mockOtpAccounts.forEach(({ secret }) => retained.set(secret.name, parseOtp(mockOtpBytes(secret.name))));
-            setAccounts(Object.fromEntries(retained));
-        }, 0) : undefined;
+        const preview = MOCKS_ENABLED
+            ? window.setTimeout(() => {
+                  mockOtpAccounts.forEach(({ secret }) =>
+                      retained.set(secret.name, parseOtp(mockOtpBytes(secret.name))),
+                  );
+                  setAccounts(Object.fromEntries(retained));
+              }, 0)
+            : undefined;
         return () => {
             clearTimeout(preview);
             lifecycle.value++;

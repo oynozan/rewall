@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { Toaster } from "sonner";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
@@ -21,7 +22,7 @@ import {
     type SecretType,
     type Vault,
 } from "@/src/lib/vault";
-import { FadeDots, FadeIn } from "./amicro";
+import { FadeDots, FadeIn, SidebarFade } from "./amicro";
 import { CopyButton, Glyph, Icon, type IconName } from "./ui";
 
 type Panel = "vault" | "wallet" | "help" | "find" | Secret | null;
@@ -161,7 +162,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                     Skip to content
                 </a>
                 {mobileOpen && <button className="mobile-scrim" onClick={navigate} aria-label="Close navigation" />}
-                <aside className={`sidebar ${mobileOpen ? "is-open" : ""}`} aria-label="Main navigation">
+                <SidebarFade className={`sidebar ${mobileOpen ? "is-open" : ""}`} label="Main navigation">
                     <div className="brand-row" style={step(0)}>
                         <Link href="/dashboard" className="brand" aria-label="Rewall home" onClick={navigate}>
                             <Image
@@ -190,7 +191,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                         </span>
                         <span>
                             <strong>Personal workspace</strong>
-                            <small>{vault?.owner || "No vault open"}{MOCKS_ENABLED ? " · Mock" : ""}</small>
+                            <small>
+                                {vault?.owner || "No vault open"}
+                                {MOCKS_ENABLED ? " · Mock" : ""}
+                            </small>
                         </span>
                     </button>
                     <nav>
@@ -254,8 +258,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                             </strong>
                             <small>{account ? "MetaMask" : "Connect wallet"}</small>
                         </span>
+                        {!account && (
+                            <span className="wallet-chevron">
+                                <Glyph name="chevron_right" size={18} />
+                            </span>
+                        )}
                     </button>
-                </aside>
+                </SidebarFade>
                 <div className="workspace-main">
                     <header className="topbar">
                         <button
@@ -273,6 +282,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                     </main>
                 </div>
                 <WorkspacePanel providerRef={provider} onAccount={setAccount} />
+                <Toaster
+                    theme="dark"
+                    position="bottom-right"
+                    duration={2200}
+                    visibleToasts={1}
+                    swipeDirections={[]}
+                    toastOptions={{ className: "dashboard-toast" }}
+                />
             </div>
         </WorkspaceContext>
     );
@@ -287,15 +304,51 @@ function WorkspacePanel({
 }) {
     const { panel, setPanel, vault, loadVault, busy, error, account } = useWorkspace();
     const dialog = useRef<HTMLDialogElement>(null);
+    const drawerMotion = useRef<Animation | null>(null);
     const [localError, setLocalError] = useState("");
     const [working, setWorking] = useState(false);
     useEffect(() => {
-        if (panel) dialog.current?.showModal();
-        else dialog.current?.close();
+        const node = dialog.current;
+        if (!node) return;
+        if (!panel) {
+            node.close();
+            return;
+        }
+        if (node.open) return;
+        delete node.dataset.closing;
+        node.showModal();
+        if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            drawerMotion.current = node.animate([{ clipPath: "inset(0 0 0 100%)" }, { clipPath: "inset(0 0 0 0%)" }], {
+                duration: 320,
+                easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+            });
+        }
     }, [panel]);
+    useEffect(() => () => drawerMotion.current?.cancel(), []);
     const close = () => {
-        setPanel(null);
-        setLocalError("");
+        const node = dialog.current;
+        if (!node?.open || node.dataset.closing) return;
+        const finish = () => {
+            node.close();
+            delete node.dataset.closing;
+            setPanel(null);
+            setLocalError("");
+        };
+        const clipPath = getComputedStyle(node).clipPath;
+        drawerMotion.current?.cancel();
+        if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            finish();
+            return;
+        }
+        node.dataset.closing = "true";
+        drawerMotion.current = node.animate(
+            [{ clipPath: clipPath === "none" ? "inset(0 0 0 0%)" : clipPath }, { clipPath: "inset(0 0 0 100%)" }],
+            { duration: 220, easing: "cubic-bezier(0.4, 0, 1, 1)", fill: "forwards" },
+        );
+        drawerMotion.current.onfinish = () => {
+            finish();
+            drawerMotion.current?.cancel();
+        };
     };
     const secret = typeof panel === "object" ? panel : null;
     const title = secret
@@ -354,9 +407,13 @@ function WorkspacePanel({
         <dialog
             className="workspace-dialog"
             ref={dialog}
-            onCancel={close}
+            onCancel={(event) => {
+                event.preventDefault();
+                close();
+            }}
             onClose={() => {
-                if (panel) close();
+                setPanel(null);
+                setLocalError("");
             }}
             onClick={(event) => {
                 if (event.target === event.currentTarget) close();

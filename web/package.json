@@ -17,6 +17,7 @@
         "otpauth": "^9.5.2",
         "react": "19.2.8",
         "react-dom": "19.2.8",
+        "sonner": "^2.0.8",
         "viem": "^2.56.3"
     },
     "devDependencies": {

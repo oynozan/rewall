@@ -4,16 +4,27 @@ import { useWorkspace } from "./dashboard-shell";
 import { FadeIn } from "./amicro";
 import { Icon } from "./ui";
 
-import { VolumeChart } from "./volume-chart";
+import { MOCKS_ENABLED, mockTransfers } from "../../../scripts/dashboard-mocks";
 
 export function TransfersTable({ direction, compact = false }: { direction: "sent" | "shared"; compact?: boolean }) {
     const { vault, busy, error, setPanel } = useWorkspace();
     const receipts = (vault?.secrets || []).filter((secret) => secret.type === "receipt");
-    const sent = compact ? receipts.slice(0, 4) : receipts;
+    const rows = MOCKS_ENABLED
+        ? mockTransfers[direction]
+        : direction === "sent"
+          ? receipts.map((secret) => ({ secret, counterparty: secret.grantees.join(", ") || "Only you", amount: null }))
+          : [];
+    const shown = compact ? rows.slice(0, 4) : rows;
+    const unavailable = !MOCKS_ENABLED && direction === "shared";
     return (
         <div className="secrets-browser transfer-browser" aria-busy={busy}>
             <div className="table-scroll">
                 <table className="transfer-table">
+                    <colgroup>
+                        <col className="transfer-receipt-col" />
+                        <col className="transfer-party-col" />
+                        <col className="transfer-amount-col" />
+                    </colgroup>
                     <thead>
                         <tr>
                             <th scope="col">Receipt</th>
@@ -22,10 +33,9 @@ export function TransfersTable({ direction, compact = false }: { direction: "sen
                         </tr>
                     </thead>
                     <tbody>
-                        {direction === "sent" &&
-                            !busy &&
+                        {!busy &&
                             !error &&
-                            sent.map((secret) => (
+                            shown.map(({ secret, counterparty, amount }) => (
                                 <tr key={secret.name}>
                                     <td>
                                         <button className="secret-name" onClick={() => setPanel(secret)}>
@@ -46,27 +56,33 @@ export function TransfersTable({ direction, compact = false }: { direction: "sen
                                             </span>
                                         </button>
                                     </td>
-                                    <td className="transfer-recipient">{secret.grantees.join(", ") || "Only you"}</td>
+                                    <td className="transfer-recipient">{counterparty}</td>
                                     <td>
-                                        <span className="transfer-locked">
-                                            <Icon name="lock" size={15} />
-                                            Encrypted
-                                        </span>
+                                        {amount ? (
+                                            <span className="mono">{amount}</span>
+                                        ) : (
+                                            <span className="transfer-locked">
+                                                <Icon name="lock" size={15} />
+                                                Encrypted
+                                            </span>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
                     </tbody>
                 </table>
             </div>
-            {(direction === "shared" || busy || error || !sent.length) && (
+            {(unavailable || busy || error || !shown.length) && (
                 <div className="quiet-empty" role="status">
-                    {direction === "shared"
+                    {unavailable
                         ? "Shared transfers unavailable"
                         : busy
                           ? "Loading receipts…"
                           : error
                             ? "Sent transfers unavailable"
-                            : "No sent transfers"}
+                            : direction === "sent"
+                              ? "No sent transfers"
+                              : "No shared transfers"}
                 </div>
             )}
         </div>
@@ -78,12 +94,8 @@ export function TransfersPage() {
         <FadeIn className="secrets-page">
             <div className="page-heading">
                 <h1>Transfers</h1>
-                <span className="muted">Confidential</span>
             </div>
-            <div className="transfers-page-chart">
-                <VolumeChart />
-            </div>
-            <div className="transfer-sections">
+            <div className="transfer-sections transfers-page-tables">
                 <section>
                     <div className="section-heading">
                         <h2>Sent</h2>

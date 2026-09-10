@@ -62,7 +62,9 @@ async function readRecords(name: string, keys: string[]) {
 export async function readSecret(input: string): Promise<Secret> {
     const name = ownerName(input);
     if (MOCKS_ENABLED) {
-        const entry = [...mockVault.secrets, ...mockTransfers.shared.map((row) => row.secret)].find((secret) => secret.name === name);
+        const entry = [...mockVault.secrets, ...mockTransfers.shared.map((row) => row.secret)].find(
+            (secret) => secret.name === name,
+        );
         if (!entry) throw new Error("No secret at this name in the mock preview.");
         return entry;
     }
@@ -95,7 +97,8 @@ export async function readSecret(input: string): Promise<Secret> {
 
 export async function readVault(input: string): Promise<Vault> {
     if (MOCKS_ENABLED) {
-        if (![TEST_OWNER, mockVault.owner].includes(ownerName(input))) throw new Error("Open demo.eth in the mock preview.");
+        if (![TEST_OWNER, mockVault.owner].includes(ownerName(input)))
+            throw new Error("Open demo.eth in the mock preview.");
         return mockVault;
     }
     const owner = ownerName(input);

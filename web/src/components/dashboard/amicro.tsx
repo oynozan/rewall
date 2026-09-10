@@ -38,3 +38,39 @@ export function FadeDots() {
         </span>
     );
 }
+
+export function SidebarFade({
+    children,
+    className,
+    label,
+}: {
+    children: React.ReactNode;
+    className: string;
+    label: string;
+}) {
+    const reduced = useReducedMotion();
+    return (
+        <motion.aside
+            className={className}
+            aria-label={label}
+            initial={reduced ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: reduced ? 0 : 0.28, ease: [0.215, 0.61, 0.355, 1] }}
+        >
+            {children}
+        </motion.aside>
+    );
+}
+
+export function SidebarSection({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
+    const reduced = useReducedMotion();
+    return (
+        <motion.section
+            initial={reduced ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: reduced ? 0 : 0.36, delay: reduced ? 0 : delay, ease: [0.215, 0.61, 0.355, 1] }}
+        >
+            {children}
+        </motion.section>
+    );
+}

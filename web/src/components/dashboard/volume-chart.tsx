@@ -1,25 +1,28 @@
-"use client";
+﻿"use client";
 
 export type VolumePoint = { label: string; sent: number; shared: number };
 export type TransferVolume = { asset: string; sentTotal: string; sharedTotal: string; points: VolumePoint[] };
 
 export function VolumeChart({ volume = null }: { volume?: TransferVolume | null }) {
     const points = volume?.points || [];
-    const maximum = Math.max(1, ...points.flatMap((point) => [point.sent, point.shared]));
+    const highest = Math.max(1, ...points.flatMap((point) => [point.sent, point.shared]));
+    const magnitude = 10 ** Math.floor(Math.log10(highest / 3));
+    const step = Math.ceil(highest / 3 / magnitude) * magnitude;
+    const maximum = step * 3;
+    const y = (value: number) => 152 - (value / maximum) * 140;
     const line = (direction: "sent" | "shared") =>
         points
-            .map(
-                (point, index) =>
-                    `${12 + (index / Math.max(1, points.length - 1)) * 376},${77 - (point[direction] / maximum) * 62}`,
-            )
+            .map((point, index) => `${12 + (index / Math.max(1, points.length - 1)) * 376},${y(point[direction])}`)
             .join(" ");
+    const formatTick = (value: number) =>
+        new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
     return (
         <section className="terminal-card volume-card" aria-label="Confidential transfer volume">
             <header>
                 <h2>Transfer volume</h2>
                 <span className="mono">30D{volume ? ` · ${volume.asset}` : ""}</span>
             </header>
-            <div className="volume-legend mono">
+            <div className="volume-legend">
                 <span>
                     <i />
                     Sent <b>{volume?.sentTotal ?? "—"}</b>
@@ -30,19 +33,33 @@ export function VolumeChart({ volume = null }: { volume?: TransferVolume | null 
                 </span>
             </div>
             <div className="volume-plot">
+                <div className="chart-y-axis mono" aria-hidden="true">
+                    {[3, 2, 1, 0].map((tick) => (
+                        <span key={tick}>{volume ? formatTick(step * tick) : "—"}</span>
+                    ))}
+                </div>
                 <svg
-                    viewBox="0 0 400 88"
+                    viewBox="0 0 400 164"
                     role="img"
                     aria-label={
-                        volume ? `Daily sent and shared volume in ${volume.asset}` : "Transfer volume unavailable"
+                        volume
+                            ? `Daily sent and shared volume in ${volume.asset}, from 0 to ${formatTick(maximum)}`
+                            : "Transfer volume unavailable"
                     }
                     preserveAspectRatio="none"
                 >
-                    {[15, 46, 77].map((y) => (
-                        <line key={`y${y}`} x1="12" x2="388" y1={y} y2={y} className="chart-grid" />
+                    {[0, 1, 2, 3].map((tick) => (
+                        <line
+                            key={`y${tick}`}
+                            x1="12"
+                            x2="388"
+                            y1={y(step * tick)}
+                            y2={y(step * tick)}
+                            className="chart-grid"
+                        />
                     ))}
                     {[12, 87, 162, 237, 312, 388].map((x) => (
-                        <line key={`x${x}`} x1={x} x2={x} y1="15" y2="77" className="chart-grid" />
+                        <line key={`x${x}`} x1={x} x2={x} y1="12" y2="152" className="chart-grid" />
                     ))}
                     {points.length > 1 && (
                         <>
@@ -52,8 +69,8 @@ export function VolumeChart({ volume = null }: { volume?: TransferVolume | null 
                     )}
                     {points.length === 1 && (
                         <>
-                            <circle cx="12" cy={77 - (points[0].sent / maximum) * 62} r="2" fill="var(--foreground)" />
-                            <circle cx="12" cy={77 - (points[0].shared / maximum) * 62} r="2" fill="var(--muted)" />
+                            <circle cx="12" cy={y(points[0].sent)} r="2" fill="var(--foreground)" />
+                            <circle cx="12" cy={y(points[0].shared)} r="2" fill="var(--muted)" />
                         </>
                     )}
                 </svg>

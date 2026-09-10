@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useWorkspace } from "./dashboard-shell";
 import { usePrivateData } from "./private-data";
-import { OtpCode } from "./otp-code";
+import { OtpCells } from "./otp-code";
 import { Icon } from "./ui";
 import { FadeIn } from "./amicro";
 
@@ -18,10 +18,17 @@ export function TwoFactorTable({ compact = false, query = "" }: { compact?: bool
         <div className="secrets-browser otp-browser" aria-busy={busy}>
             <div className="table-scroll">
                 <table className="otp-table">
+                    <colgroup>
+                        <col className="otp-account-col" />
+                        <col className="otp-code-col" />
+                        <col className="otp-expiry-col" />
+                        <col className="otp-action-col" />
+                    </colgroup>
                     <thead>
                         <tr>
                             <th scope="col">Account</th>
-                            <th scope="col">Code / expires in</th>
+                            <th scope="col">Code</th>
+                            <th scope="col">Expires in</th>
                             <th scope="col">
                                 <span className="sr-only">Actions</span>
                             </th>
@@ -41,23 +48,25 @@ export function TwoFactorTable({ compact = false, query = "" }: { compact?: bool
                                         </span>
                                     </div>
                                 </td>
-                                <td>
-                                    {accounts[secret.name] ? (
-                                        <OtpCode otp={accounts[secret.name]} label={secret.label} />
-                                    ) : (
-                                        <div className="otp-live">
+                                {accounts[secret.name] ? (
+                                    <OtpCells otp={accounts[secret.name]} label={secret.label} />
+                                ) : (
+                                    <>
+                                        <td className="otp-code-cell">
                                             <span className="otp-locked mono" aria-label="Code locked">
                                                 ••• •••
                                             </span>
+                                            {error?.name === secret.name && (
+                                                <p className="row-error" role="alert">
+                                                    {error.message}
+                                                </p>
+                                            )}
+                                        </td>
+                                        <td className="otp-expiry-cell">
                                             <span className="muted mono">—</span>
-                                        </div>
-                                    )}
-                                    {error?.name === secret.name && (
-                                        <p className="row-error" role="alert">
-                                            {error.message}
-                                        </p>
-                                    )}
-                                </td>
+                                        </td>
+                                    </>
+                                )}
                                 <td className="row-action">
                                     <button
                                         className="button small"
