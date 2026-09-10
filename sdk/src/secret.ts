@@ -5,7 +5,7 @@ import type { Identity } from "./identity.ts";
 export type Grantee = {
     fingerprint: string;
     publicKey: Uint8Array;
-    // The ENS name this key came from. Without it a rotation cannot re-resolve the key to re-wrap.
+    // The ENS name this key came from. Without it a rotation cannot re-resolve the key to re-wrap
     name?: string;
     // True when the key is a subtree public key rather than an individual identity
     subtree?: boolean;
@@ -94,8 +94,7 @@ export async function recoverDek(
 ): Promise<Uint8Array> {
     const candidates = Array.isArray(holder) ? holder : [holder];
 
-    // Every candidate is tried, not just the first with a record. One corrupt wrap must not lock a holder
-    // out of a second key that would have opened the secret.
+    // Every candidate is tried, so one corrupt wrap cannot lock a holder out of a key that would work
     for (const candidate of candidates) {
         const wrapped = records[RECORD.wrap(candidate.fingerprint)];
         if (!wrapped) continue;
@@ -167,7 +166,7 @@ export async function planRotate(input: {
     return { records, cleared };
 }
 
-// Only sees wraps the caller actually read. Use RECORD.holders to learn about wraps you did not fetch.
+// Only sees wraps the caller actually read. Use RECORD.holders to learn about wraps you did not fetch
 export function wrapFingerprints(records: Record<string, string>): string[] {
     return Object.entries(records)
         .filter(([key, value]) => key.startsWith("rewall.key.") && value !== "")

@@ -8,6 +8,7 @@ import { createWalletClient, custom, type Address, type EIP1193Provider } from "
 import { sepolia } from "viem/chains";
 import { Rewall, wipe } from "@rewall/sdk";
 import { PrivateDataProvider } from "./private-data";
+import { MOCKS_ENABLED, mockOtpBytes } from "../../../scripts/dashboard-mocks";
 import {
     vaultClient,
     UNIVERSAL_RESOLVER,
@@ -118,6 +119,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     }, []);
 
     async function decryptSecret(name: string) {
+        if (MOCKS_ENABLED) return mockOtpBytes(name);
         const injected = provider.current;
         if (!injected || !account || !vault) {
             setPanel("wallet");
@@ -188,7 +190,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                         </span>
                         <span>
                             <strong>Personal workspace</strong>
-                            <small>{vault?.owner || "No vault open"}</small>
+                            <small>{vault?.owner || "No vault open"}{MOCKS_ENABLED ? " · Mock" : ""}</small>
                         </span>
                     </button>
                     <nav>

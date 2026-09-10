@@ -19,7 +19,7 @@ const ASCII_ICONS = ["↗", "⌄", "☰", "↻", "×", "✓", "↑", "↓", "▷
 
 async function screenshot(name) {
     await page.evaluate(() => document.fonts.ready);
-    await page.screenshot({ path: `${output}/${name}.png`, fullPage: true });
+    await page.screenshot({ path: `${output}/${name}.png`, fullPage: true, animations: "disabled" });
 }
 
 async function noOverflow() {
@@ -38,8 +38,8 @@ async function noAsciiIcons(where) {
 try {
     await page.goto(`${baseURL}/dashboard`, { waitUntil: "domcontentloaded", timeout: 120000 });
     await expect(page.locator(".secrets-browser button.secret-name").first()).toBeVisible({ timeout: 90000 });
-    const firstName=await page.locator(".secrets-browser .secret-name small").first().innerText();
-    const firstLabel=firstName.split(".")[0];
+    const firstName = await page.locator(".secrets-browser .secret-name small").first().innerText();
+    const firstLabel = firstName.split(".")[0];
     await page.evaluate(() => document.fonts.ready);
     const fonts = await page.evaluate(() => ({
         body: getComputedStyle(document.body).fontFamily,

@@ -19,8 +19,7 @@ export const RECORD = {
     grantees: "rewall.grantees",
     subtrees: "rewall.subtrees",
     recovery: "rewall.recovery",
-    // Every fingerprint that currently has a wrap. Text records cannot be enumerated, so without this a
-    // rotation cannot find the wraps it must clear and a stale one survives around a live key.
+    // Text records cannot be enumerated, so without this a rotation cannot find the wraps it must clear
     holders: "rewall.holders",
     // Signed by the address holding the name, which is the one thing a write delegate cannot rewrite
     authCounter: "rewall.auth.n",

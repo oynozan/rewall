@@ -81,7 +81,7 @@ test("crypto_box_seed_keypair would derive a different key from the same seed", 
     await sodium.ready;
     const { secretKey, publicKey } = await deriveIdentity(await sign(accountA));
 
-    // Guards SPEC section 1. If these ever match, the normative choice stopped mattering and this test is wrong.
+    // Guards SPEC section 1. If these ever match, the normative choice stopped mattering and this test is wrong
     const wrong = sodium.crypto_box_seed_keypair(secretKey);
     assert.notDeepEqual(publicKey, wrong.publicKey);
     assert.deepEqual(publicKey, sodium.crypto_scalarmult_base(secretKey));

@@ -1,4 +1,4 @@
-// Drives the whole Rewall surface against real Sepolia. Every assertion below is a chain round trip.
+// Drives the whole Rewall surface against real Sepolia. Every assertion below is a chain round trip
 
 import { createWalletClient, http } from "viem";
 import { sepolia } from "viem/chains";
@@ -134,8 +134,7 @@ await parentClient.subtree.distribute([memberClient.name]);
 if (text(await memberClient.get(secretName)) !== ROTATED) fail("member did not regain access after redistribution");
 pass("member regains access after the parent redistributes");
 
-// The removed member. A bare re-grant would leave the old subtree wrap alive on an unchanged data key,
-// which is exactly how a removed member kept reading before the re-grant path was made to rotate.
+// A bare re-grant would leave the old subtree wrap alive on an unchanged data key
 const removed = clientFor(SUBTREE_MEMBERS[1]!.index, `${SUBTREE_MEMBERS[1]!.label}.${grantee.label}.eth`);
 await removed
     .get(secretName)

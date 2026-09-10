@@ -66,4 +66,3 @@ export function VolumeChart({ volume = null }: { volume?: TransferVolume | null 
         </section>
     );
 }
-

@@ -1,5 +1,4 @@
-// The attack SPEC section 2 used to be open to. A write delegate appends itself to rewall.grantees and
-// waits for the owner to rotate, at which point the owner seals the data key to it. Run against Sepolia.
+// A write delegate appends itself to rewall.grantees and waits for the owner to rotate
 
 import { createWalletClient, http, namehash } from "viem";
 import { sepolia } from "viem/chains";

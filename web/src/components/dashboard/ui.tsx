@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import { motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 
 export type IconName =
@@ -19,8 +18,6 @@ export type IconName =
 /* Stroke drawings on the Arcticons 48 grid for the controls the icon set has no entry for */
 const GLYPHS = {
     close: "M15 15L33 33M33 15L15 33",
-    pause: "M19 13V35M29 13V35",
-    play: "M18 12L36 24L18 36Z",
     refresh: "M33.9 33.9A14 14 0 1 1 33.9 14.1M34.2 7.6L33.9 14.1L27.4 14.4",
     copy: "M17 17H35V36H17ZM11 30H9V10H28V12",
 } as const;
@@ -68,7 +65,6 @@ export function SegmentedProgress({
     label: string;
     segments?: number;
 }) {
-    const reduced = useReducedMotion();
     const ratio = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
     const filled = ratio > 0 ? Math.max(1, Math.round(ratio * segments)) : 0;
     return (
@@ -81,12 +77,7 @@ export function SegmentedProgress({
             aria-valuenow={value}
         >
             {Array.from({ length: segments }, (_, index) => (
-                <motion.span
-                    key={index}
-                    initial={{ backgroundColor: "#2f2f2f" }}
-                    animate={{ backgroundColor: index < filled ? "#dcdcd4" : "#2f2f2f" }}
-                    transition={{ duration: reduced ? 0 : 0.28, delay: reduced ? 0 : index * 0.024 }}
-                />
+                <span key={index} style={{ backgroundColor: index < filled ? "#dcdcd4" : "#2f2f2f" }} />
             ))}
         </div>
     );

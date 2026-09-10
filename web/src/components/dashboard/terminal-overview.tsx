@@ -4,6 +4,7 @@ import { useWorkspace } from "./dashboard-shell";
 import { usePrivateData } from "./private-data";
 import { SegmentedProgress } from "./ui";
 import { VolumeChart } from "./volume-chart";
+import { MOCKS_ENABLED, mockTransfers, mockVolume } from "../../../scripts/dashboard-mocks";
 
 export function TerminalOverview() {
     const { vault, busy, error } = useWorkspace();
@@ -52,7 +53,7 @@ export function TerminalOverview() {
             </section>
             <section className="terminal-card">
                 <header>
-                    <h2>Transfers</h2>
+                    <h2>Confidential Transfers</h2>
                 </header>
                 <div className="terminal-transfer-counts">
                     <div>
@@ -61,12 +62,11 @@ export function TerminalOverview() {
                     </div>
                     <div>
                         <span className="mono">Shared</span>
-                        <strong className="mono">—</strong>
+                        <strong className="mono">{MOCKS_ENABLED ? mockTransfers.shared.length.toString().padStart(2, "0") : "—"}</strong>
                     </div>
                 </div>
-                <div className="terminal-foot mono">Confidential receipts</div>
             </section>
-            <VolumeChart />
+            <VolumeChart volume={MOCKS_ENABLED ? mockVolume : null} />
         </div>
     );
 }

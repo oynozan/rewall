@@ -15,6 +15,7 @@ import {
     guardianRecoveryEntry,
     removeFromIndex,
     dnsEncode,
+    WRAP_PREFIX,
     type SecretRecords,
 } from "./records.ts";
 import { planSecret, planGrant, planRotate, openSecret, wrapFingerprints, type Grantee } from "./secret.ts";
@@ -158,6 +159,15 @@ export class Rewall {
             allow: options.allow,
         });
 
+        // A stale wrap from a previous secret here turns a clean denial into a decryption failure
+        const existing = await this.read(secretName, [RECORD.holders]);
+        const kept = new Set(
+            records.filter((r) => r.key.startsWith(WRAP_PREFIX)).map((r) => r.key.slice(WRAP_PREFIX.length)),
+        );
+        const cleared = splitNames(existing[RECORD.holders])
+            .filter((fingerprint) => !kept.has(fingerprint))
+            .map((fingerprint) => ({ key: RECORD.wrap(fingerprint), value: "" }));
+
         const named = (list: Grantee[]) => list.map((g) => g.name).filter((n): n is string => Boolean(n));
         const authorization = await this.signAuthorization({
             secretName,
@@ -168,7 +178,7 @@ export class Rewall {
             recovery: named(recovery),
         });
 
-        const hash = await this.write(secretName, [...records, ...authorization]);
+        const hash = await this.write(secretName, [...records, ...cleared, ...authorization]);
         await this.indexAdd(secretName);
         return hash;
     }
@@ -202,9 +212,7 @@ export class Rewall {
         await this.assertAuthorized(secretName, current);
         const listKey = options?.subtree ? RECORD.subtrees : RECORD.grantees;
 
-        // Re-granting a name whose key changed has to rotate. A bare add would leave the old key's wrap
-        // on an unchanged data key, so whoever held that key keeps reading. That is the exact path taken
-        // to remove a subtree member, and to re-grant someone after a key compromise.
+        // A bare re-grant would leave the old key's wrap live on an unchanged data key
         if (splitNames(current[listKey]).includes(granteeName)) {
             return this.rotateTo(secretName, current, {
                 grantees: splitNames(current[RECORD.grantees]),
@@ -233,8 +241,7 @@ export class Rewall {
         ]);
     }
 
-    // The subtree flag matters because one name can hold both an individual grant and a subtree grant,
-    // and revoking the person should not silently revoke everyone under them
+    // One name can hold both an individual and a subtree grant, and they use different keys
     async revoke(secretName: string, granteeName: string, options?: { subtree?: boolean }): Promise<Hash> {
         const current = await this.readForRotate(secretName);
 
@@ -247,9 +254,7 @@ export class Rewall {
             throw new Error(`${granteeName} is not a ${kind} of ${secretName}`);
         }
 
-        // A recovery entry resolves to the same rewall.pubkey an individual grant does, so dropping the
-        // grant alone leaves that name reading. Reporting success there is worse than failing, because
-        // the caller believes they are safe. A subtree entry uses a different key and is unaffected.
+        // A recovery entry uses the same key as an individual grant, so dropping the grant leaves it reading
         if (!options?.subtree && splitNames(current[RECORD.recovery]).includes(granteeName)) {
             throw new Error(
                 `${granteeName} is also a recovery entry on ${secretName} and would keep reading, revoke that first`,
@@ -271,8 +276,7 @@ export class Rewall {
         });
     }
 
-    // Re-signs the lists as they stand, or a corrected set. Only the owner's signature verifies, so this
-    // is the repair path after a delegate edits the records, and it deliberately does not verify first.
+    // Only the owner signature verifies, so this deliberately does not verify before writing
     async reauthorize(
         secretName: string,
         lists?: { grantees?: string[]; subtrees?: string[]; recovery?: string[] },
@@ -440,7 +444,7 @@ export class Rewall {
         // Refuses a list the owner never signed, which is what stops a write delegate steering a rotation
         await this.assertAuthorized(secretName, current);
 
-        // The same gate get() applies. Without it an older client silently overwrites a newer record set.
+        // The same gate get() applies. Without it an older client silently overwrites a newer record set
         const version = current[RECORD.version];
         if (version && version !== SCHEMA_VERSION) {
             throw new Error(
@@ -455,15 +459,14 @@ export class Rewall {
         const ownerName = current[RECORD.owner] || this.name;
         const owner = ownerName === this.name ? await this.selfAsGrantee() : await this.publicKeyOf(ownerName);
 
-        // Strict. A name that no longer resolves must stop the rotation, not vanish from the keep set.
+        // Strict. A name that no longer resolves must stop the rotation, not vanish from the keep set
         const recovery = await Promise.all(splitNames(current[RECORD.recovery]).map((n) => this.resolveRecovery(n)));
         const grantees = [
             ...(await Promise.all(next.grantees.map((n) => this.publicKeyOf(n)))),
             ...(await Promise.all(next.subtrees.map((n) => this.subtreeKeyOf(n)))),
         ];
 
-        // Read off rewall.holders rather than re-derived from names. A name whose key changed since the
-        // last write resolves to a new fingerprint, so re-deriving would leave the old wrap live on chain.
+        // A name whose key changed resolves to a new fingerprint, so re-deriving leaves the old wrap live
         const previous = [...splitNames(current[RECORD.holders]), ...wrapFingerprints(current)];
 
         const { records } = await planRotate({
@@ -509,8 +512,7 @@ export class Rewall {
 
     /* Authorization, so a rotation cannot be steered by whoever can write the records */
 
-    // The address holding the name in its registry. A write delegate can rewrite every record on a
-    // secret, but not who owns it, which is what makes this a usable trust anchor.
+    // A write delegate can rewrite every record on a secret but not who owns it
     private async ownerAddressOf(secretName: string): Promise<Address> {
         const registry = await this.publicClient.readContract({
             address: this.universalResolver,

@@ -8,6 +8,7 @@ import { SecretsTable } from "./secrets-table";
 import { TerminalOverview } from "./terminal-overview";
 import { TwoFactorTable } from "./two-factor";
 import { TransfersTable } from "./transfers";
+import { AccountRail } from "./account-rail";
 
 export function DashboardHome() {
     const { vault } = useWorkspace();
@@ -19,7 +20,7 @@ export function DashboardHome() {
             <FadeIn delay={0.04}>
                 <TerminalOverview />
             </FadeIn>
-            <div className="home-sections">
+            <div className="home-body"><div className="home-sections">
                 <FadeIn delay={0.08}>
                     <div className="section-heading">
                         <h2>
@@ -67,7 +68,7 @@ export function DashboardHome() {
                         </section>
                     </div>
                 </FadeIn>
-            </div>
+            </div><AccountRail /></div>
         </div>
     );
 }

@@ -39,8 +39,7 @@ export function authorizationPayload(auth: Authorization): string {
     ].join("\n");
 }
 
-// Recovers who signed the list. The caller compares that to the address holding the name in the registry,
-// which is the one thing about a secret that a write delegate cannot rewrite.
+// Compared against the address holding the name, the one thing a write delegate cannot rewrite
 export async function authorizationSigner(auth: Authorization, signature: string): Promise<Address | null> {
     if (!/^0x[0-9a-fA-F]{130}$/.test(signature)) return null;
 

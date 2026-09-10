@@ -4,8 +4,7 @@ import { toBase64, fromBase64, seal, unseal } from "./crypto.ts";
 
 export const SUBTREE_CONTEXT = "Rewall subtree v1";
 
-// Derived from the parent identity rather than stored, so the parent can always re-seal it to a new subname
-// without keeping state. The version is the rotation counter and is published as rewall.subtree.v.
+// Derived rather than stored, so the parent can re-seal for a new subname without keeping state
 export async function deriveSubtreeKey(parent: Identity, version: number): Promise<Identity> {
     await sodium.ready;
 

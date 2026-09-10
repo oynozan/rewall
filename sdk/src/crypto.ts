@@ -29,8 +29,7 @@ export function toBase64(bytes: Uint8Array): string {
     return btoa(binary);
 }
 
-// Strict, because atob accepts whitespace and unpadded input, which would let one byte string be written
-// several ways and make a record value non-canonical
+// Strict because atob accepts whitespace and unpadded input, which makes a record value non-canonical
 export function fromBase64(value: string): Uint8Array {
     if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value) || value.length % 4 !== 0) {
         throw new Error("not canonical standard base64");
@@ -46,16 +45,14 @@ export function fromBase64(value: string): Uint8Array {
 
 /* Payload, AES-256-GCM through platform WebCrypto */
 
-// WebCrypto wants ArrayBuffer backing while Uint8Array is generic over ArrayBufferLike, so this bridges the
-// two without copying, because a copy of key material is a duplicate that memzero cannot reach
+// Bridges to ArrayBuffer without copying, because a copy of key material is one memzero cannot reach
 const buf = (bytes: Uint8Array) => bytes as unknown as BufferSource;
 
 export function randomDek(): Uint8Array {
     return crypto.getRandomValues(new Uint8Array(DEK_BYTES));
 }
 
-// AES-GCM is not a committing AEAD. Given two chosen keys it is solvable to produce one ciphertext that
-// authenticates under both, so a blob alone does not say which key it belongs to. This binds it to one.
+// AES-GCM is not committing, so two chosen keys can authenticate one ciphertext
 async function commitmentFor(dek: Uint8Array, nonce: Uint8Array): Promise<Uint8Array> {
     const material = new Uint8Array(COMMITMENT_CONTEXT.length + dek.length + nonce.length);
     material.set(COMMITMENT_CONTEXT, 0);

@@ -38,8 +38,7 @@ const MAX_GUARDIANS = 12;
 
 /* Setup */
 
-// The recovery private key is destroyed here on purpose. Secrets are wrapped to its public half, and
-// only a threshold of guardians acting together can bring the private half back.
+// Destroyed on purpose, only a threshold of guardians together can bring the private half back
 export async function createGuardianSet(guardians: Grantee[], threshold: number): Promise<GuardianSet> {
     await sodium.ready;
 
@@ -84,7 +83,7 @@ export async function createGuardianSet(guardians: Grantee[], threshold: number)
 
 /* Recovery */
 
-// Run by each guardian. The share is re-sealed to the new owner key and never leaves in the clear.
+// Run by each guardian. The share is re-sealed to the new owner key and never leaves in the clear
 export async function reshare(sealed: string, guardian: Identity, newOwnerPublicKey: Uint8Array): Promise<string> {
     await sodium.ready;
 
@@ -110,8 +109,7 @@ function combinations(n: number, k: number): number[][] {
     return out;
 }
 
-// Verified against the published recovery public key rather than trusted. Shamir reconstruction is
-// unauthenticated, so a single forged piece would otherwise dictate the result for everyone.
+// Verified rather than trusted, because one forged piece would otherwise dictate the result
 export async function recoverWithShares(
     resealed: string[],
     newOwner: Identity,
@@ -136,8 +134,7 @@ export async function recoverWithShares(
             if (piece.length !== SHARE_BYTES) {
                 throw new ForgedShareError(`it is ${piece.length} bytes, expected ${SHARE_BYTES}`);
             }
-            // x is the trailing byte. Zero makes every honest share vanish from the interpolation and
-            // hands the whole result to whoever supplied it, so it can never be legitimate.
+            // Zero makes every honest share vanish from the interpolation and hands the result to the forger
             if (piece[SHARE_BYTES - 1] === 0) throw new ForgedShareError("its x coordinate is zero");
         }
 

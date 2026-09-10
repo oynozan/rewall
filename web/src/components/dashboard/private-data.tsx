@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { TOTP } from "otpauth";
 import { parseOtp } from "@/src/lib/otp";
 import { useWorkspace } from "./dashboard-shell";
+import { MOCKS_ENABLED, mockOtpAccounts, mockOtpBytes } from "../../../scripts/dashboard-mocks";
 
 type PrivateData = {
     accounts: Record<string, TOTP>;
@@ -26,7 +27,12 @@ export function PrivateDataProvider({ children }: { children: React.ReactNode })
     useEffect(() => {
         const retained = keys.current;
         const lifecycle = generation.current;
+        const preview = MOCKS_ENABLED ? window.setTimeout(() => {
+            mockOtpAccounts.forEach(({ secret }) => retained.set(secret.name, parseOtp(mockOtpBytes(secret.name))));
+            setAccounts(Object.fromEntries(retained));
+        }, 0) : undefined;
         return () => {
+            clearTimeout(preview);
             lifecycle.value++;
             retained.forEach((otp) => otp.secret.bytes.fill(0));
             retained.clear();

@@ -3,7 +3,7 @@ import { keccak256, hexToBytes, bytesToHex, numberToHex, concat, type Hex } from
 
 export const IDENTITY_MESSAGE = "Rewall identity v1";
 
-// Order of the secp256k1 group. identity.test.ts proves this value by recovering a signer from N - s.
+// Order of the secp256k1 group. identity.test.ts proves this value by recovering a signer from N - s
 export const SECP256K1_N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
 
 export type Identity = {

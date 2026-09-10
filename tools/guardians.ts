@@ -1,5 +1,4 @@
-// Proves SPEC section 5.2 against Sepolia. The owner loses its wallet and a threshold of guardians
-// brings the recovery key back, without any single guardian ever being able to.
+// Proves SPEC section 5.2, a lost wallet recovered by a threshold of guardians
 
 import { createWalletClient, http } from "viem";
 import { sepolia } from "viem/chains";
