@@ -13,15 +13,27 @@ export const RECORD = {
     created: "rewall.created",
     pubkey: "rewall.pubkey",
     index: "rewall.index",
+    // A fingerprint is a hash, so the names have to be recorded or a rotation cannot re-wrap for anyone
+    grantees: "rewall.grantees",
+    subtrees: "rewall.subtrees",
+    recovery: "rewall.recovery",
     subtreePubkey: "rewall.subtree.pubkey",
     subtreeKey: "rewall.subtree.key",
     subtreeVersion: "rewall.subtree.v",
+    guardians: "rewall.guardians",
+    guardian: (fingerprint: string) => `rewall.guardian.${fingerprint}`,
+    recoveryPubkey: "rewall.recovery.pubkey",
+    recoveryThreshold: "rewall.recovery.k",
     site: "rewall.site",
     allow: "rewall.allow",
     wrap: (fingerprint: string) => `rewall.key.${fingerprint}`,
 } as const;
 
 export const WRAP_PREFIX = "rewall.key.";
+
+// Marks a recovery entry backed by a guardian set rather than by a name that publishes its own key
+export const GUARDIAN_RECOVERY_PREFIX = "guardians:";
+export const guardianRecoveryEntry = (ownerName: string) => `${GUARDIAN_RECOVERY_PREFIX}${ownerName}`;
 
 export const resolverAbi = parseAbi([
     "function setText(bytes32 node, string key, string value)",
@@ -42,12 +54,22 @@ export type SecretRecords = { key: string; value: string }[];
 
 /* Building */
 
+export const joinNames = (names: string[]) => [...new Set(names)].sort().join(",");
+export const splitNames = (value: string | undefined) =>
+    (value ?? "")
+        .split(",")
+        .map((n) => n.trim())
+        .filter(Boolean);
+
 export function buildSecretRecords(input: {
     type: string;
     blob: string;
     wraps: { fingerprint: string; wrapped: string }[];
     createdAt: number;
     allow?: string[];
+    grantees?: string[];
+    subtrees?: string[];
+    recovery?: string[];
 }): SecretRecords {
     if (input.wraps.length === 0) {
         throw new Error("a secret needs at least one wrap, otherwise nobody can read it");
@@ -71,6 +93,12 @@ export function buildSecretRecords(input: {
     ];
 
     if (input.allow?.length) records.push({ key: RECORD.allow, value: input.allow.join(",") });
+
+    // Always written, including empty, so a rotation that drops the last grantee clears the old list
+    records.push({ key: RECORD.recovery, value: joinNames(input.recovery ?? []) });
+    records.push({ key: RECORD.grantees, value: joinNames(input.grantees ?? []) });
+    records.push({ key: RECORD.subtrees, value: joinNames(input.subtrees ?? []) });
+
     for (const w of input.wraps) records.push({ key: RECORD.wrap(w.fingerprint), value: w.wrapped });
 
     return records;
@@ -135,3 +163,10 @@ export async function readTexts(
 }
 
 export const wrapKeyFor = (fingerprint: string) => RECORD.wrap(fingerprint);
+
+/* The rewall.index record, which is what list reads because ENSv2 exposes no enumeration */
+
+export const addToIndex = (current: string | undefined, label: string) => joinNames([...splitNames(current), label]);
+
+export const removeFromIndex = (current: string | undefined, label: string) =>
+    joinNames(splitNames(current).filter((l) => l !== label));

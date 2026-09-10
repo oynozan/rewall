@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Glyph } from "./ui";
 
 const BAYER = [
     0, 32, 8, 40, 2, 34, 10, 42, 48, 16, 56, 24, 50, 18, 58, 26, 12, 44, 4, 36, 14, 46, 6, 38, 60, 28, 52, 20, 62, 30,
@@ -36,8 +37,7 @@ export function DitherBanner() {
                         Math.sin(u * 13 + v * 6 + bend + time * 0.12) +
                         Math.cos(v * 9 - u * 4 + time * 0.18) * 0.62 +
                         Math.sin(u * 23 - v * 12 + time * 0.08) * 0.3;
-                    const quiet = Math.min(1, Math.max(0, (u - 0.28) * 2.1 + (0.3 - v) * 0.8));
-                    const intensity = Math.max(0, Math.min(0.87, (field + 0.65) * 0.32)) * quiet;
+                    const intensity = Math.max(0, Math.min(0.87, (field + 0.65) * 0.32));
                     const on = intensity > (BAYER[(y % 8) * 8 + (x % 8)] + 0.5) / 64;
                     const offset = (y * width + x) * 4;
                     pixels.data[offset] = on ? 214 : 23;
@@ -86,22 +86,17 @@ export function DitherBanner() {
     return (
         <section className="welcome-banner" aria-label="Welcome to Rewall">
             <canvas ref={canvasRef} aria-hidden="true" />
-            <span className="banner-eyebrow mono">A SPACE THAT’S ONLY YOURS</span>
             <button
                 className="banner-pause"
                 onClick={() => setPaused(!paused)}
                 aria-label={paused ? "Play banner animation" : "Pause banner animation"}
                 aria-pressed={paused}
             >
-                <span aria-hidden="true">{paused ? "▷" : "Ⅱ"}</span>
+                <Glyph name={paused ? "play" : "pause"} size={14} />
             </button>
             <div className="welcome-copy">
-                <h1>Welcome to your private space.</h1>
-                <p>A little less worry. Everything important, in your hands.</p>
+                <h1>Welcome to Rewall.</h1>
             </div>
-            <span className="banner-mark mono" aria-hidden="true">
-                [ rewall / 001 ]
-            </span>
         </section>
     );
 }

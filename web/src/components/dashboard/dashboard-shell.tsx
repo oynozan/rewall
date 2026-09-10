@@ -16,7 +16,7 @@ import {
     type Vault,
 } from "@/src/lib/vault";
 import { FadeDots, FadeIn } from "./amicro";
-import { CopyButton, Icon, SegmentedProgress, type IconName } from "./ui";
+import { CopyButton, Glyph, Icon, type IconName } from "./ui";
 
 type Panel = "vault" | "wallet" | "help" | "find" | Secret | null;
 type WalletProvider = EIP1193Provider & { isMetaMask?: boolean; providers?: WalletProvider[] };
@@ -37,6 +37,9 @@ export function useWorkspace() {
     if (!workspace) throw new Error("Workspace must be inside the dashboard");
     return workspace;
 }
+
+/* Each sidebar row fades in one step later than the row above it */
+const step = (index: number) => ({ "--i": index }) as React.CSSProperties;
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
@@ -123,7 +126,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 </a>
                 {mobileOpen && <button className="mobile-scrim" onClick={navigate} aria-label="Close navigation" />}
                 <aside className={`sidebar ${mobileOpen ? "is-open" : ""}`} aria-label="Main navigation">
-                    <div className="brand-row">
+                    <div className="brand-row" style={step(0)}>
                         <Link href="/dashboard" className="brand" aria-label="Rewall home" onClick={navigate}>
                             <Image
                                 src="/logo.svg"
@@ -144,25 +147,24 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                                 aria-hidden="true"
                             />
                         </Link>
-                        <span className="version-tag mono">beta</span>
                     </div>
-                    <button className="workspace-switcher" onClick={() => setPanel("vault")}>
+                    <button className="workspace-switcher" style={step(1)} onClick={() => setPanel("vault")}>
                         <span className="workspace-avatar">
-                            <Icon name="lock" size={21} />
+                            <Icon name="lock" size={20} />
                         </span>
                         <span>
                             <strong>Personal workspace</strong>
-                            <small>{vault?.owner || "Your private space"}</small>
-                        </span>
-                        <span className="chevron" aria-hidden="true">
-                            ⌄
+                            <small>{vault?.owner || "No vault open"}</small>
                         </span>
                     </button>
                     <nav>
                         <div className="nav-group">
-                            <span className="nav-caption">Workspace</span>
+                            <span className="nav-caption" style={step(2)}>
+                                Workspace
+                            </span>
                             <Link
                                 href="/dashboard"
+                                style={step(3)}
                                 className={`nav-item ${isHome ? "selected" : ""}`}
                                 aria-current={isHome ? "page" : undefined}
                                 onClick={navigate}
@@ -172,6 +174,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                             </Link>
                             <Link
                                 href="/dashboard/secrets"
+                                style={step(4)}
                                 className={`nav-item ${!isHome ? "selected" : ""}`}
                                 aria-current={!isHome ? "page" : undefined}
                                 onClick={navigate}
@@ -181,17 +184,20 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                             </Link>
                         </div>
                         <div className="nav-group">
-                            <span className="nav-caption">Collections</span>
+                            <span className="nav-caption" style={step(5)}>
+                                Collections
+                            </span>
                             {(
                                 [
                                     { type: "apikey", label: "API keys", icon: "key" },
                                     { type: "generic", label: "Secure notes", icon: "documents" },
                                     { type: "totp", label: "Authenticator", icon: "authenticator" },
                                 ] as { type: string; label: string; icon: IconName }[]
-                            ).map((item) => (
+                            ).map((item, index) => (
                                 <Link
                                     key={item.type}
                                     className="nav-item"
+                                    style={step(6 + index)}
                                     href={`/dashboard/secrets?type=${item.type}`}
                                     onClick={navigate}
                                 >
@@ -201,105 +207,60 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                                 </Link>
                             ))}
                         </div>
-                        <div className="nav-group resource-group">
-                            <span className="nav-caption">A little guidance</span>
+                        <div className="nav-group">
+                            <span className="nav-caption" style={step(9)}>
+                                Resources
+                            </span>
                             <button
                                 className="nav-item"
+                                style={step(10)}
                                 onClick={() => {
                                     setPanel("help");
                                     navigate();
                                 }}
                             >
-                                <Icon name="bitwarden" />
+                                <Icon name="shield" />
                                 How Rewall works
-                                <span className="nav-end" aria-hidden="true">
-                                    ↗
-                                </span>
                             </button>
+                            <a
+                                className="nav-item"
+                                style={step(11)}
+                                href="https://github.com/oynozan/rewall"
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                <Icon name="github" />
+                                Source code
+                            </a>
                         </div>
                     </nav>
-                    <div className="sidebar-bottom">
-                        <div className="sidebar-setup">
-                            <div className="setup-caption">
-                                <span>Make yourself at home</span>
-                                <span className="mono">{Number(Boolean(account)) + Number(Boolean(vault))}/2</span>
-                            </div>
-                            <SegmentedProgress
-                                value={Number(Boolean(account)) + Number(Boolean(vault))}
-                                max={2}
-                                label="Workspace setup"
-                            />
-                            <button className="text-button" onClick={() => setPanel(account ? "vault" : "wallet")}>
-                                {account ? "Open your vault" : "Connect your wallet"}
-                                <span aria-hidden="true">↗</span>
-                            </button>
-                        </div>
-                        <a
-                            className="nav-item"
-                            href="https://github.com/oynozan/rewall"
-                            target="_blank"
-                            rel="noreferrer"
-                        >
-                            <Icon name="github" />
-                            Source code
-                            <span className="nav-end" aria-hidden="true">
-                                ↗
-                            </span>
-                        </a>
-                        <div className="network-row">
-                            <span className="status-dot" />
-                            ENSv2 Sepolia<span className="mini-badge">Testnet</span>
-                        </div>
-                        <button className="sidebar-account" onClick={() => setPanel("wallet")}>
-                            <span className="account-avatar">
-                                <Image src="/icon.svg" width={24} height={24} alt="" unoptimized />
-                            </span>
-                            <span>
-                                <strong>
-                                    {account ? `${account.slice(0, 6)}…${account.slice(-4)}` : "Your wallet"}
-                                </strong>
-                                <small>{account ? "Connected with MetaMask" : "Not connected"}</small>
-                            </span>
-                            <span className="nav-end" aria-hidden="true">
-                                ⌄
-                            </span>
-                        </button>
-                    </div>
+                    <button className="sidebar-account" style={step(12)} onClick={() => setPanel("wallet")}>
+                        <span className="account-avatar">
+                            <Icon name="wallet" size={18} />
+                        </span>
+                        <span>
+                            <strong className={account ? "mono" : ""}>
+                                {account ? `${account.slice(0, 6)}…${account.slice(-4)}` : "Not connected"}
+                            </strong>
+                            <small>{account ? "MetaMask" : "Connect wallet"}</small>
+                        </span>
+                    </button>
                 </aside>
                 <div className="workspace-main">
                     <header className="topbar">
-                        <div className="topbar-heading">
-                            <button
-                                className="mobile-menu icon-button"
-                                onClick={() => setMobileOpen(!mobileOpen)}
-                                aria-expanded={mobileOpen}
-                                aria-label="Open navigation"
-                            >
-                                ☰
-                            </button>
-                            <Icon name={isHome ? "home" : "key"} size={19} />
-                            <span className="topbar-divider" />
-                            <span>{isHome ? "Home" : "Secrets"}</span>
-                            <span className="mini-badge topbar-badge">Personal</span>
-                        </div>
-                        <div className="topbar-actions">
-                            <span className="privacy-note">
-                                <Icon name="lock" size={15} />A space of your own
-                            </span>
-                            <button className="button small" onClick={() => setPanel("wallet")}>
-                                {account ? `${account.slice(0, 6)}…${account.slice(-4)}` : "Connect wallet"}
-                            </button>
-                        </div>
+                        <button
+                            className="mobile-menu icon-button"
+                            onClick={() => setMobileOpen(!mobileOpen)}
+                            aria-expanded={mobileOpen}
+                            aria-label="Open navigation"
+                        >
+                            <Icon name="hamburger_menu" size={17} />
+                        </button>
+                        <span>{isHome ? "Home" : "Secrets"}</span>
                     </header>
                     <main id="workspace-content" tabIndex={-1}>
                         {children}
                     </main>
-                    <footer className="workspace-footer">
-                        <span>Private by design. Yours by name.</span>
-                        <span className="mono">
-                            ENSv2 / SEPOLIA<span className="footer-divider">·</span>REWALL BETA
-                        </span>
-                    </footer>
                 </div>
                 <WorkspacePanel providerRef={provider} onAccount={setAccount} />
             </div>
@@ -335,7 +296,7 @@ function WorkspacePanel({
             ? "Your wallet"
             : panel === "find"
               ? "Find a secret"
-              : "A little peace of mind";
+              : "How Rewall works";
 
     async function submit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -394,9 +355,9 @@ function WorkspacePanel({
         >
             <div className="panel-inner">
                 <header className="panel-header">
-                    <span className="nav-caption">{secret ? "Secret details" : "Your workspace"}</span>
+                    <span className="nav-caption">{secret ? "Secret" : "Workspace"}</span>
                     <button className="icon-button" onClick={close} aria-label="Close panel">
-                        ×
+                        <Glyph name="close" size={17} />
                     </button>
                 </header>
                 <FadeIn key={secret?.name || String(panel)}>
@@ -404,11 +365,6 @@ function WorkspacePanel({
                         <h2 id="panel-title">{title}</h2>
                         {(panel === "vault" || panel === "find") && (
                             <>
-                                <p className="panel-intro">
-                                    {panel === "vault"
-                                        ? "Your ENS name is the address of your private space. Open a vault to view its public details."
-                                        : "Have the full name of a secret? Look it up directly, even if it isn’t in the vault’s list."}
-                                </p>
                                 <form onSubmit={submit} className="panel-form">
                                     <label htmlFor="ens-name">
                                         {panel === "vault" ? "Owner’s ENS name" : "Secret’s full ENS name"}
@@ -417,26 +373,14 @@ function WorkspacePanel({
                                         id="ens-name"
                                         name="name"
                                         defaultValue={panel === "vault" ? vault?.owner : ""}
-                                        placeholder={
-                                            panel === "vault" ? "Your ENS name" : "Full secret name ending in .eth"
-                                        }
+                                        placeholder={panel === "vault" ? "name.eth" : "secret.rewall.name.eth"}
                                         autoComplete="off"
                                         autoCapitalize="none"
                                         spellCheck={false}
                                         required
                                     />
-                                    <p className="field-help">
-                                        {panel === "vault"
-                                            ? "We’ll look inside the rewall subname."
-                                            : "Only public metadata will be read. The value stays encrypted."}
-                                    </p>
                                     <button className="button primary" disabled={busy || working}>
-                                        {busy || working
-                                            ? "Opening…"
-                                            : panel === "vault"
-                                              ? "Open vault"
-                                              : "Find secret"}
-                                        <span aria-hidden="true">↗</span>
+                                        {busy || working ? "Opening…" : panel === "vault" ? "Open vault" : "Find secret"}
                                     </button>
                                 </form>
                                 {panel === "vault" && (
@@ -447,32 +391,17 @@ function WorkspacePanel({
                                             if (await loadVault(TEST_OWNER)) close();
                                         }}
                                     >
-                                        Explore the Sepolia test vault<span aria-hidden="true">↗</span>
+                                        Open the Sepolia test vault
                                     </button>
                                 )}
                                 <div className="notice">
                                     <Icon name="lock" />
-                                    <p>
-                                        This viewer is read-only. Opening a vault doesn’t grant access to its secret
-                                        values.
-                                    </p>
+                                    <p>Opening a vault reads public metadata. It does not decrypt any value.</p>
                                 </div>
                             </>
                         )}
                         {panel === "wallet" && (
                             <>
-                                <Image
-                                    className="panel-illustration"
-                                    src="/illustrations/quiet-key.png"
-                                    width={224}
-                                    height={224}
-                                    alt="A dithered key resting on a folded envelope"
-                                />
-                                <p className="panel-intro">
-                                    {account
-                                        ? "Your wallet is connected. Your secret values stay encrypted in this read-only viewer."
-                                        : "Your wallet is your connection to Rewall. No new account, email, or password to remember."}
-                                </p>
                                 {account ? (
                                     <>
                                         <div className="detail-block">
@@ -481,7 +410,7 @@ function WorkspacePanel({
                                             <CopyButton value={account} label="Copy wallet address" />
                                         </div>
                                         <button className="button" onClick={() => onAccount("")}>
-                                            Disconnect from Rewall
+                                            Disconnect
                                         </button>
                                     </>
                                 ) : (
@@ -492,7 +421,6 @@ function WorkspacePanel({
                                             disabled={working}
                                         >
                                             {working ? "Waiting for MetaMask…" : "Connect MetaMask"}
-                                            <span aria-hidden="true">↗</span>
                                         </button>
                                         <p className="field-help">
                                             Connecting requests your public address. It does not sign a message or send
@@ -504,76 +432,52 @@ function WorkspacePanel({
                                             rel="noreferrer"
                                             className="text-button"
                                         >
-                                            Get MetaMask<span aria-hidden="true">↗</span>
+                                            Get MetaMask
                                         </a>
                                     </>
                                 )}
                             </>
                         )}
                         {panel === "help" && (
-                            <>
-                                <Image
-                                    className="panel-illustration"
-                                    src="/illustrations/quiet-key.png"
-                                    width={224}
-                                    height={224}
-                                    alt="A dithered key resting on a folded envelope"
-                                />
-                                <p className="panel-intro">Important things deserve a space you control.</p>
-                                <ol className="explanation-list">
-                                    <li>
-                                        <span className="mono">01</span>
-                                        <div>
-                                            <h3>Yours, by name</h3>
-                                            <p>
-                                                Your secrets live under your ENS name. No Rewall account or company
-                                                server holds them.
-                                            </p>
-                                        </div>
-                                    </li>
-                                    <li>
-                                        <span className="mono">02</span>
-                                        <div>
-                                            <h3>Closed to everyone else</h3>
-                                            <p>
-                                                Secret values are encrypted on your device. Public names and metadata
-                                                never reveal the value inside.
-                                            </p>
-                                        </div>
-                                    </li>
-                                    <li>
-                                        <span className="mono">03</span>
-                                        <div>
-                                            <h3>A spare key, by design</h3>
-                                            <p>
-                                                Creating a secret requires a recovery recipient, so a lost wallet
-                                                doesn’t have to mean lost access.
-                                            </p>
-                                        </div>
-                                    </li>
-                                </ol>
-                                <div className="notice">
-                                    <p>
-                                        You’re using the Sepolia testnet viewer. Creating secrets, sharing access, and
-                                        recovery are not available in this version.
-                                    </p>
-                                </div>
-                            </>
+                            <ol className="explanation-list">
+                                <li>
+                                    <span className="mono">01</span>
+                                    <div>
+                                        <h3>ENS ownership</h3>
+                                        <p>Your secrets live under your ENS name. No account, no company server.</p>
+                                    </div>
+                                </li>
+                                <li>
+                                    <span className="mono">02</span>
+                                    <div>
+                                        <h3>Encryption</h3>
+                                        <p>Values are encrypted on your device. Public metadata never reveals them.</p>
+                                    </div>
+                                </li>
+                                <li>
+                                    <span className="mono">03</span>
+                                    <div>
+                                        <h3>Recovery</h3>
+                                        <p>Every secret carries a recovery recipient, so a lost wallet is not the end.</p>
+                                    </div>
+                                </li>
+                            </ol>
                         )}
                         {secret && (
                             <>
                                 <div className="secret-detail-name">
-                                    <Icon name="key" size={30} />
                                     <span className="mono">{secret.name}</span>
                                     <CopyButton value={secret.name} />
                                 </div>
-                                <span className="badge">{TYPE_LABELS[secret.type as SecretType] || secret.type}</span>
                                 <div className="sealed-value">
-                                    <Icon name="lock" size={25} />
+                                    <Icon name="lock" size={22} />
                                     <span className="mono">•••• •••• •••• ••••</span>
-                                    <small>Value stays encrypted</small>
                                 </div>
                                 <dl className="detail-list">
+                                    <div>
+                                        <dt>Type</dt>
+                                        <dd>{TYPE_LABELS[secret.type as SecretType] || secret.type}</dd>
+                                    </div>
                                     <div>
                                         <dt>Encryption</dt>
                                         <dd>
@@ -594,25 +498,10 @@ function WorkspacePanel({
                                         </dd>
                                     </div>
                                     <div>
-                                        <dt>Network</dt>
-                                        <dd>ENSv2 Sepolia</dd>
-                                    </div>
-                                    <div>
-                                        <dt>View</dt>
-                                        <dd>Public metadata only</dd>
-                                    </div>
-                                    <div>
                                         <dt>Allowed hosts</dt>
-                                        <dd>{secret.allow.length ? secret.allow.join(", ") : "None specified"}</dd>
+                                        <dd>{secret.allow.length ? secret.allow.join(", ") : "None"}</dd>
                                     </div>
                                 </dl>
-                                <div className="notice">
-                                    <Icon name="lock" />
-                                    <p>
-                                        Reading a secret’s name doesn’t open its contents. Decryption and access changes
-                                        aren’t available in this viewer.
-                                    </p>
-                                </div>
                             </>
                         )}
                         {(localError || (panel === "vault" && error)) && (
@@ -623,10 +512,6 @@ function WorkspacePanel({
                         {working && <FadeDots />}
                     </div>
                 </FadeIn>
-                <footer className="panel-footer">
-                    <span className="status-dot" />
-                    ENSv2 Sepolia<span className="mono">READ-ONLY</span>
-                </footer>
             </div>
         </dialog>
     );

@@ -224,6 +224,55 @@ test("wrapFingerprints ignores cleared wraps and unrelated keys", () => {
     assert.deepEqual(wrapFingerprints(records), ["aaaaaaaaaaaaaaaa"]);
 });
 
+/* Grantee lists, which are what makes a rotation possible at all */
+
+test("the names of everyone granted are recorded, split by kind", async () => {
+    const subtree: Grantee = {
+        name: "team.eth",
+        fingerprint: "cccccccccccccccc",
+        publicKey: late.publicKey,
+        subtree: true,
+    };
+    const records = toMap(
+        await planSecret({
+            ...baseInput,
+            owner: { ...asGrantee(owner), name: "alice.eth" },
+            recovery: [{ ...asGrantee(recovery), name: "vault.alice.eth" }],
+            grantees: [{ ...asGrantee(grantee), name: "bob.eth" }, subtree],
+        }),
+    );
+
+    assert.equal(records[RECORD.grantees], "bob.eth");
+    assert.equal(records[RECORD.subtrees], "team.eth");
+    assert.equal(records[RECORD.recovery], "vault.alice.eth");
+});
+
+test("the lists are written even when empty, so a rotation can clear them", async () => {
+    const records = toMap(await planSecret(baseInput));
+    assert.equal(records[RECORD.grantees], "");
+    assert.equal(records[RECORD.subtrees], "");
+});
+
+test("names are deduplicated and sorted so the record is stable", async () => {
+    const records = toMap(
+        await planSecret({
+            ...baseInput,
+            grantees: [
+                { ...asGrantee(grantee), name: "zed.eth" },
+                { ...asGrantee(late), name: "alice.eth" },
+                { ...asGrantee(grantee), name: "zed.eth" },
+            ],
+        }),
+    );
+    assert.equal(records[RECORD.grantees], "alice.eth,zed.eth");
+});
+
+test("a grantee with no name still gets a wrap but adds nothing to the list", async () => {
+    const records = toMap(await planSecret({ ...baseInput, grantees: [asGrantee(late)] }));
+    assert.ok(records[RECORD.wrap(late.fingerprint)]);
+    assert.equal(records[RECORD.grantees], "");
+});
+
 test("recoverDek returns a 32 byte key for a holder", async () => {
     const records = toMap(await planSecret(baseInput));
     const dek = await recoverDek(records, owner);

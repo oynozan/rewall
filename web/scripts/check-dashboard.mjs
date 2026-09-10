@@ -57,7 +57,7 @@ try {
     await page.keyboard.press("/");
     await expect(page.getByRole("textbox", { name: "Search secrets" })).toBeFocused();
     await page.getByRole("textbox", { name: "Search secrets" }).fill("a-search-with-no-matching-secret");
-    await expect(page.getByText("Nothing here matches just yet.")).toBeVisible();
+    await expect(page.getByText("No matching secrets")).toBeVisible();
     await page.getByRole("button", { name: "Clear filters" }).click();
     await page.getByRole("button", { name: "View openai details" }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
@@ -122,7 +122,7 @@ try {
     assert.equal(await frame(), reducedFrame, "Reduced motion should stop the banner");
     await page.getByRole("link", { name: "Rewall home" }).hover();
     assert.equal(await page.locator(".logo-alternate").evaluate((element) => getComputedStyle(element).animationName), "none");
-    const shadows = await page.locator("body *").evaluateAll((elements) => elements.filter((element) => getComputedStyle(element).boxShadow !== "none").map((element) => element.tagName));
+    const shadows = await page.locator(".dashboard-app *").evaluateAll((elements) => elements.filter((element) => getComputedStyle(element).boxShadow !== "none").map((element) => ({ tag: element.tagName, className: element.className, shadow: getComputedStyle(element).boxShadow })));
     assert.deepEqual(shadows, [], "The dashboard must not use box shadows");
     assert.deepEqual(errors, [], "The browser must not have runtime errors");
     checks.push("900 px tablet layout, reduced motion, and no-shadow constraint pass");

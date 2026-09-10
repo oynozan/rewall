@@ -11,6 +11,9 @@ importers:
       libsodium-wrappers:
         specifier: ^0.8.4
         version: 0.8.4
+      shamir-secret-sharing:
+        specifier: ^0.0.4
+        version: 0.0.4
       viem:
         specifier: ^2.56.3
         version: 2.56.3(typescript@7.0.2)
@@ -212,6 +215,9 @@ packages:
     engines: {node: '>=14'}
     hasBin: true
 
+  shamir-secret-sharing@0.0.4:
+    resolution: {integrity: sha512-ui8u/cIg2j16b9on/LH3V/glL6wHdwiTo/Iajzqx0STniBvuOzl6VYUxhrow3waF0dggovJfYiBZSWfTAN4XLQ==}
+
   typescript@7.0.2:
     resolution: {integrity: sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==}
     engines: {node: '>=16.20.0'}
@@ -361,6 +367,8 @@ snapshots:
       - zod
 
   prettier@3.9.6: {}
+
+  shamir-secret-sharing@0.0.4: {}
 
   typescript@7.0.2:
     optionalDependencies:

@@ -61,6 +61,56 @@ export async function readRecords(name: string, keys: string[]): Promise<Record<
     return readTexts(publicClient, UNIVERSAL_RESOLVER, name, keys);
 }
 
+// A secret has to exist as a registered subname before any record can be written under it
+export async function ensureSecretName(ownerIndex: number, ownerLabel: string, label: string): Promise<boolean> {
+    const { parseAbi, keccak256, toBytes } = await import("viem");
+    const { sepolia } = await import("viem/chains");
+    const { ETH_REGISTRY, ZERO_ADDRESS } = await import("./participants.ts");
+
+    const abi = parseAbi([
+        "function register(string label, address owner, address registry, address resolver, uint256 roleBitmap, uint64 expiry) returns (uint256)",
+        "function getResolver(string label) view returns (address)",
+        "function getExpiry(uint256 anyId) view returns (uint64)",
+    ]);
+
+    const entry = deployments[ownerLabel];
+    const configured = await publicClient.readContract({
+        address: entry.namespaceRegistry,
+        abi,
+        functionName: "getResolver",
+        args: [label],
+    });
+    if (configured !== ZERO_ADDRESS) return false;
+
+    const roleSetResolver = 1n << 24n;
+    const expiry = await publicClient.readContract({
+        address: ETH_REGISTRY,
+        abi,
+        functionName: "getExpiry",
+        args: [BigInt(keccak256(toBytes(ownerLabel)))],
+    });
+
+    const { account, client } = walletFor(ownerIndex);
+    const hash = await client.writeContract({
+        address: entry.namespaceRegistry,
+        abi,
+        functionName: "register",
+        args: [
+            label,
+            account.address,
+            ZERO_ADDRESS,
+            entry.resolver,
+            roleSetResolver | (roleSetResolver << 128n),
+            expiry,
+        ],
+        account,
+        chain: sepolia,
+    });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status !== "success") throw new Error(`register reverted ${hash}`);
+    return true;
+}
+
 export async function writeRecords(index: number, name: string, records: SecretRecords) {
     // Looked up every write, never cached, because the owner can repoint the name at another resolver
     const resolver = await resolverFor(publicClient, UNIVERSAL_RESOLVER, name);

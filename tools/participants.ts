@@ -20,6 +20,18 @@ export const SUBTREE_MEMBERS = [
     { label: "deploy", index: 5 },
 ];
 
+// Reuses names that already publish a key. A guardian only needs a published pubkey, not its own org.
+export const GUARDIANS = [
+    { name: "rewall-test-2.eth", index: 1 },
+    { name: "rewall-test-3.eth", index: 3 },
+    { name: "ci.rewall-test-2.eth", index: 4 },
+    { name: "deploy.rewall-test-2.eth", index: 5 },
+];
+export const GUARDIAN_THRESHOLD = 3;
+
+// Stands in for the owner replacing a lost wallet. It holds no name and no wrap.
+export const REPLACEMENT_WALLET_INDEX = 9;
+
 // Reserves the Rewall subtree so a participant keeps <secret>.<their name>.eth for their own use
 export const NAMESPACE_LABEL = "rewall";
 

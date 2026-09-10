@@ -2,7 +2,14 @@ import { randomDek, encrypt, decrypt, seal, unseal, toBase64, fromBase64, wipe }
 import { buildSecretRecords, RECORD, type SecretRecords } from "./records.ts";
 import type { Identity } from "./identity.ts";
 
-export type Grantee = { fingerprint: string; publicKey: Uint8Array };
+export type Grantee = {
+    fingerprint: string;
+    publicKey: Uint8Array;
+    // The ENS name this key came from. Without it a rotation cannot re-resolve the key to re-wrap.
+    name?: string;
+    // True when the key is a subtree public key rather than an individual identity
+    subtree?: boolean;
+};
 
 // Distinguishable from a broken lookup, because an unset ENS text record reads as an empty string
 export class NoWrapError extends Error {
@@ -51,7 +58,9 @@ export async function planSecret(input: {
 }): Promise<SecretRecords> {
     assertRecovery(input.recovery);
 
-    const holders = dedupe([input.owner, ...input.recovery, ...(input.grantees ?? [])]);
+    const grantees = input.grantees ?? [];
+    const holders = dedupe([input.owner, ...input.recovery, ...grantees]);
+    const named = (list: Grantee[]) => list.map((g) => g.name).filter((n): n is string => Boolean(n));
     const dek = randomDek();
 
     try {
@@ -65,6 +74,9 @@ export async function planSecret(input: {
             wraps,
             createdAt: input.createdAt,
             allow: input.allow,
+            recovery: named(input.recovery),
+            grantees: named(grantees.filter((g) => !g.subtree)),
+            subtrees: named(grantees.filter((g) => g.subtree)),
         });
     } finally {
         await wipe(dek);

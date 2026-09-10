@@ -1,19 +1,28 @@
 "use client";
 
 import Image from "next/image";
+import { motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 
 export type IconName =
     | "home"
     | "key"
     | "lock"
-    | "bitwarden"
+    | "shield"
+    | "wallet"
     | "authenticator"
     | "github"
     | "documents"
-    | "folder_shared"
     | "folder_search"
-    | "folder_settings";
+    | "hamburger_menu";
+
+/* Stroke drawings on the Arcticons 48 grid for the controls the icon set has no entry for */
+const GLYPHS = {
+    close: "M15 15L33 33M33 15L15 33",
+    pause: "M19 13V35M29 13V35",
+    play: "M18 12L36 24L18 36Z",
+    refresh: "M33.9 33.9A14 14 0 1 1 36.7 18.1M37.7 12.2L36.7 18.1L31.5 15.1",
+} as const;
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     return (
@@ -29,6 +38,24 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     );
 }
 
+export function Glyph({ name, size = 20 }: { name: keyof typeof GLYPHS; size?: number }) {
+    return (
+        <svg
+            className="glyph"
+            width={size}
+            height={size}
+            viewBox="0 0 48 48"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+        >
+            <path d={GLYPHS[name]} />
+        </svg>
+    );
+}
+
 export function SegmentedProgress({
     value,
     max,
@@ -40,7 +67,9 @@ export function SegmentedProgress({
     label: string;
     segments?: number;
 }) {
-    const percent = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
+    const reduced = useReducedMotion();
+    const ratio = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
+    const filled = ratio > 0 ? Math.max(1, Math.round(ratio * segments)) : 0;
     return (
         <div
             className="segmented-progress"
@@ -51,7 +80,12 @@ export function SegmentedProgress({
             aria-valuenow={value}
         >
             {Array.from({ length: segments }, (_, index) => (
-                <span key={index} className={index < Math.round((percent / 100) * segments) ? "filled" : ""} />
+                <motion.span
+                    key={index}
+                    initial={{ backgroundColor: "#2f2f2f" }}
+                    animate={{ backgroundColor: index < filled ? "#dcdcd4" : "#2f2f2f" }}
+                    transition={{ duration: reduced ? 0 : 0.28, delay: reduced ? 0 : index * 0.024 }}
+                />
             ))}
         </div>
     );

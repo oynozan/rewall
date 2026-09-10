@@ -51,18 +51,28 @@ rewall.enc        "aes-256-gcm"
 rewall.blob       base64 ciphertext (nonce || ciphertext || tag)
 rewall.cid        reserved for offchain ciphertext, unimplemented
 rewall.key.<fp>   wrapped data key for grantee with fingerprint fp, base64
+rewall.grantees   comma-separated ENS names granted directly
+rewall.subtrees   comma-separated ENS names whose subtree was granted
+rewall.recovery   comma-separated recovery entries, each a name or "guardians:<owner name>"
 rewall.site       hostname pattern, totp type only
 rewall.allow      comma-separated allowed hosts, enforced by the MCP tool process
 rewall.created    unix timestamp
 ```
 
+`rewall.grantees`, `rewall.subtrees` and `rewall.recovery` exist because a fingerprint is a hash. Nothing can turn `rewall.key.<fp>` back into a public key, and ENS text records cannot be enumerated, so without the names on chain a rotation has no way to re-wrap for the people who should keep access. They are written on every create and every rotation, including when empty, so dropping the last grantee clears the list.
+
 Records on a participant name:
 
 ```
 rewall.pubkey            X25519 public key, base64
+rewall.index             comma-separated secret labels, read by list
 rewall.subtree.pubkey    subtree public key (on parent names that enable subtree grants)
+rewall.subtree.v         subtree key version, bumped to remove a member
 rewall.subtree.key       subtree private key sealed to this subname's pubkey (on subnames)
+rewall.guardians         comma-separated guardian names
 rewall.guardian.<fp>     Shamir share of the recovery key sealed to guardian fp
+rewall.recovery.pubkey   public half of the guardian backed recovery key
+rewall.recovery.k        guardian threshold
 rewall.shielded          shielded address for private transfers (optional)
 ```
 
@@ -107,14 +117,18 @@ Document clearly: a revoked party may already have read the old value. Rotate th
 
 ## 4. Subtree grants
 
-1. The owner of `alice.eth` generates a subtree X25519 keypair and publishes the public half as `rewall.subtree.pubkey` on `alice.eth`.
+1. The owner of `alice.eth` derives a subtree X25519 keypair and publishes the public half as `rewall.subtree.pubkey` on `alice.eth`, with the version in `rewall.subtree.v`.
+
+The subtree key is derived, not generated and stored: `SHA-256("Rewall subtree v1:" || version || ":" || parentSecretKey)` used directly as the X25519 scalar. The parent can always re-derive it to seal for a new subname, so it keeps no secret state of its own, and the only thing that has to persist is a public counter.
 2. When a subname is created under `alice.eth`, the parent seals the subtree private key to that subname's `rewall.pubkey` and writes it on the subname as `rewall.subtree.key`.
 3. Granting a secret to "alice.eth and all subnames" means wrapping `DEK` to the subtree public key, stored as `rewall.key.<subtree-fp>`.
 4. Every current subname unseals `rewall.subtree.key` to get the subtree private key, then unseals the secret's wrap.
 5. Future subnames receive the subtree key when the parent creates them.
-6. Removing one subname: rotate the subtree key and re-distribute to the remaining subnames.
+6. Removing one subname: bump `rewall.subtree.v`, which changes the derived key and invalidates every copy already distributed, then re-distribute to the remaining subnames and re-grant each affected secret to the new subtree key.
 
-For the hackathon, a CLI command run by the parent performs distribution and rotation.
+Step 6 has a cost worth stating. Bumping the version locks out every member at once, not just the one being removed, until the parent redistributes. That is the trade for keeping no state.
+
+`rewall.subtree.init`, `rewall.subtree.distribute` and `rewall.subtree.rotate` in the SDK perform these steps.
 
 ---
 
@@ -125,7 +139,9 @@ The SDK refuses to create a secret with only the owner's wrap. At least one reco
 Supported recovery grantees, in implementation priority:
 
 1. **Recovery name.** A second ENS name backed by a cold wallet. Auto-wrapped on every create.
-2. **Guardians.** A recovery keypair whose private key is split with Shamir (k of n). Each share is sealed to a guardian's ENS name and stored on the owner's name as `rewall.guardian.<fp>`. Every secret is wrapped to the recovery public key. Recovery: new wallet and key, k guardians re-seal their share to the new key, reconstruct, decrypt, re-wrap.
+2. **Guardians.** A recovery keypair whose private key is split with Shamir (k of n). Each share is sealed to a guardian's ENS name and stored on the owner's name as `rewall.guardian.<fp>`, alongside `rewall.guardians`, `rewall.recovery.pubkey` and `rewall.recovery.k`. Every secret is wrapped to the recovery public key, referenced in `rewall.recovery` as `guardians:<owner name>`. Recovery: new wallet and key, k guardians re-seal their share to the new key, reconstruct, decrypt, re-wrap.
+
+   The recovery private key is destroyed the moment the shares are made. Nobody holds it, and no fewer than k guardians can bring it back. Below k, Shamir reconstruction is unauthenticated and returns a key that is simply wrong rather than an error, so the failure shows up as a decryption that does not work. A threshold below 2 is refused, because it would let one guardian recover alone.
 3. **Org recovery.** Anything created under a parent name is also wrapped to the parent's recovery key.
 
 After any recovery: publish a new `rewall.pubkey`, then run rotate on every secret.
@@ -205,4 +221,4 @@ Rail: Chainlink's private transfer service on Sepolia (deposit to vault, signed 
 - Target ENSv2 on Sepolia. Read via the universal resolver. Use ENSv2 registry and permissioned resolver contracts, not ENSv1.
 - Secrets are never written to disk in plaintext by any client.
 - Ciphertext lives inline in `rewall.blob`. There is no offchain storage and no content addressing. ENS record reads are cached with a short TTL, resolver addresses are never cached.
-- Encryption uses platform WebCrypto for AES-256-GCM and libsodium for the sealed-box wraps and X25519. No hand-rolled primitives, and no algorithm not named in this document.
+- Encryption uses platform WebCrypto for AES-256-GCM and libsodium for the sealed-box wraps and X25519. Guardian shares use an audited zero-dependency Shamir implementation. No hand-rolled primitives, and no algorithm not named in this document.
