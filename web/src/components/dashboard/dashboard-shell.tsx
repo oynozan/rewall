@@ -355,7 +355,6 @@ function WorkspacePanel({
         >
             <div className="panel-inner">
                 <header className="panel-header">
-                    <span className="nav-caption">{secret ? "Secret" : "Workspace"}</span>
                     <button className="icon-button" onClick={close} aria-label="Close panel">
                         <Glyph name="close" size={17} />
                     </button>
@@ -380,7 +379,11 @@ function WorkspacePanel({
                                         required
                                     />
                                     <button className="button primary" disabled={busy || working}>
-                                        {busy || working ? "Opening…" : panel === "vault" ? "Open vault" : "Find secret"}
+                                        {busy || working
+                                            ? "Opening…"
+                                            : panel === "vault"
+                                              ? "Open vault"
+                                              : "Find secret"}
                                     </button>
                                 </form>
                                 {panel === "vault" && (
@@ -458,7 +461,9 @@ function WorkspacePanel({
                                     <span className="mono">03</span>
                                     <div>
                                         <h3>Recovery</h3>
-                                        <p>Every secret carries a recovery recipient, so a lost wallet is not the end.</p>
+                                        <p>
+                                            Every secret carries a recovery recipient, so a lost wallet is not the end.
+                                        </p>
                                     </div>
                                 </li>
                             </ol>

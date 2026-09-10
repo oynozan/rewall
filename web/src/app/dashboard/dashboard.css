@@ -109,8 +109,7 @@
     flex-shrink: 0;
 }
 .workspace-switcher strong,
-.sidebar-account strong,
-.rail-account strong {
+.sidebar-account strong {
     display: block;
     font-size: 14px;
     font-weight: 500;
@@ -202,8 +201,7 @@
 .sidebar-account:hover {
     background: #202020;
 }
-.sidebar-account small,
-.rail-account small {
+.sidebar-account small {
     display: block;
     font-size: 12px;
     color: var(--muted);
@@ -228,17 +226,15 @@
     display: flex;
     flex-direction: column;
 }
+/* The sidebar names the page on desktop, so the bar only exists where the sidebar is hidden */
 .topbar {
-    height: 65px;
-    border-bottom: 1px solid var(--border);
-    padding: 0 29px;
-    display: flex;
-    align-items: center;
-    gap: 13px;
-    font-size: 14px;
-}
-.mobile-menu {
     display: none;
+    height: 59px;
+    border-bottom: 1px solid var(--border);
+    padding: 0 14px;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
 }
 #workspace-content {
     flex: 1;
@@ -307,12 +303,15 @@
     border-color: var(--border-strong);
 }
 .glyph {
-    stroke-width: 1.4;
+    stroke-width: 1.5;
+}
+.mobile-menu {
+    display: none;
 }
 
 /* Home */
 .home-content {
-    padding: 25px 29px 40px;
+    padding: 29px 29px 40px;
     max-width: 1740px;
     margin: 0 auto;
 }
@@ -408,16 +407,11 @@
 .account-rail .nav-caption {
     margin-bottom: 14px;
 }
-.rail-account {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 0;
-    text-align: left;
-}
-.rail-account:hover strong {
-    color: #fff;
+.rail-address {
+    font-size: 13px;
+    color: #c4c4bb;
+    overflow-wrap: anywhere;
+    margin-bottom: 16px;
 }
 .rail-namespace {
     font-size: 12px;
@@ -538,14 +532,15 @@ kbd {
     white-space: nowrap;
 }
 .filter-control select {
-    appearance: auto;
+    appearance: none;
     outline: 0;
     border: 0;
-    background: transparent;
     cursor: pointer;
     font-size: 12px;
     max-width: 116px;
-    padding: 3px 0;
+    padding: 3px 17px 3px 0;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none' stroke='%23a2a29a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19l12 12 12-12'/%3E%3C/svg%3E")
+        no-repeat right center / 10px;
 }
 .filter-control option {
     background: #202020;
@@ -792,14 +787,12 @@ input[type="checkbox"]:checked::after {
     flex-direction: column;
 }
 .panel-header {
-    padding: 16px 20px 16px 28px;
+    padding: 14px 20px;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid var(--border);
+    justify-content: flex-end;
 }
 .panel-content {
-    padding: 30px 28px 40px;
+    padding: 16px 28px 40px;
 }
 .panel-content h2 {
     font-size: 25px;
@@ -829,7 +822,7 @@ input[type="checkbox"]:checked::after {
     border-color: #929288;
 }
 .field-help {
-    margin: 14px 0 0;
+    margin: 14px 0 20px;
     font-size: 12px;
     color: #9a9a8e;
     line-height: 1.8;
@@ -885,13 +878,11 @@ input[type="checkbox"]:checked::after {
     padding: 20px 0 0;
 }
 .secret-detail-name .mono {
+    flex: 1;
+    min-width: 0;
     font-size: 13px;
     color: var(--muted);
-    word-break: break-word;
-    max-width: 28ch;
-}
-.secret-detail-name .button {
-    margin-left: auto;
+    overflow-wrap: anywhere;
 }
 .sealed-value {
     display: flex;
@@ -923,6 +914,9 @@ input[type="checkbox"]:checked::after {
     gap: 20px;
     border-bottom: 1px solid var(--border);
 }
+.detail-list > div:last-child {
+    border-bottom: 0;
+}
 .detail-list dt {
     color: var(--muted);
 }
@@ -942,6 +936,9 @@ input[type="checkbox"]:checked::after {
     gap: 18px;
     padding: 20px 0;
     border-bottom: 1px solid var(--border);
+}
+.explanation-list li:last-child {
+    border-bottom: 0;
 }
 .explanation-list li > .mono {
     color: #6f6f64;
@@ -1007,6 +1004,10 @@ input[type="checkbox"]:checked::after {
         grid-template-columns: minmax(0, 1fr);
         gap: 34px;
     }
+    /* Stacked, the rail keeps its own width so the meters keep their segment density */
+    .account-rail {
+        max-width: 420px;
+    }
     .secrets-page .table-scroll,
     .home-grid .table-scroll {
         min-width: 0;
@@ -1026,19 +1027,15 @@ input[type="checkbox"]:checked::after {
     .workspace-main {
         margin-left: 0;
     }
+    .topbar,
     .mobile-menu {
-        display: inline-grid;
+        display: flex;
     }
     .mobile-scrim {
         position: fixed;
         inset: 0;
         background: #0009;
         z-index: 29;
-    }
-    .topbar {
-        height: 59px;
-        padding: 0 14px;
-        gap: 10px;
     }
     .home-content {
         padding: 17px 18px 32px;
@@ -1080,6 +1077,13 @@ input[type="checkbox"]:checked::after {
     }
     .page-heading h1 {
         font-size: 25px;
+    }
+    /* Search takes its own row so the selects and refresh never get squeezed off the edge */
+    .table-toolbar {
+        flex-wrap: wrap;
+    }
+    .search-field {
+        flex-basis: 100%;
     }
     .secrets-page .search-field {
         max-width: none;

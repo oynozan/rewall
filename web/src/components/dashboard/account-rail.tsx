@@ -1,7 +1,7 @@
 "use client";
 
 import { useWorkspace } from "./dashboard-shell";
-import { Icon, SegmentedProgress } from "./ui";
+import { SegmentedProgress } from "./ui";
 
 /* readVault refuses an index longer than this, so it is the vault size the viewer can open */
 const VAULT_LIMIT = 128;
@@ -14,17 +14,19 @@ export function AccountRail() {
         <aside className="account-rail" aria-label="Account and vault">
             <section>
                 <span className="nav-caption">Account</span>
-                <button className="rail-account" onClick={() => setPanel("wallet")}>
-                    <span className="account-avatar">
-                        <Icon name="wallet" size={18} />
-                    </span>
-                    <span>
-                        <strong className={account ? "mono" : ""}>
-                            {account ? `${account.slice(0, 6)}…${account.slice(-4)}` : "Not connected"}
-                        </strong>
-                        <small>{account ? "MetaMask" : "Connect"}</small>
-                    </span>
-                </button>
+                {account ? (
+                    <>
+                        <p className="rail-address mono">{account}</p>
+                        <div className="rail-row">
+                            <span>Wallet</span>
+                            <span>MetaMask</span>
+                        </div>
+                    </>
+                ) : (
+                    <button className="button small" onClick={() => setPanel("wallet")}>
+                        Connect wallet
+                    </button>
+                )}
             </section>
             <section>
                 <span className="nav-caption">Vault</span>
