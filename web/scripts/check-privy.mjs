@@ -90,11 +90,12 @@ pass(`the derived identity is stable, ${a.fingerprint}`);
 /* Typed data is what the SDK actually signs, so confirm the method exists */
 
 try {
-    const { EIP712Domain: _ignored, ...types } = { ...IDENTITY_TYPED_DATA.types };
+    const { domain, types, primaryType, message } = IDENTITY_TYPED_DATA;
     const typed = await privy(`/wallets/${walletId}/rpc`, {
         chain_type: "ethereum",
         method: "eth_signTypedData_v4",
-        params: { typed_data: { ...IDENTITY_TYPED_DATA, types } },
+        // The API takes snake_case and rejects any key it does not know
+        params: { typed_data: { domain, types, primary_type: primaryType, message } },
     });
     const signature = typed.data?.signature ?? typed.signature;
     assert.equal(canonicalSignature(signature).length, 64);

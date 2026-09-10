@@ -22,6 +22,11 @@ export function explain(error: unknown): string {
     if (cause instanceof Error && MESSAGES[cause.name]) return MESSAGES[cause.name];
 
     if (/user rejected|user denied/i.test(error.message)) return MESSAGES.UserRejectedRequestError!;
+
+    // A contract account returns an ERC-1271 signature, which has no recoverable key to derive from
+    if (/expected a 65 byte signature/i.test(error.message)) {
+        return "This wallet signs as a smart contract, which Rewall cannot derive a key from. Connect a standard wallet.";
+    }
     if (/schema version/i.test(error.message)) return "This secret was written by a newer version of Rewall.";
     if (/no resolver configured/i.test(error.message)) return "This name is not set up for Rewall yet.";
     if (/has published no rewall\.pubkey/i.test(error.message)) return "That name has not set up Rewall yet.";
