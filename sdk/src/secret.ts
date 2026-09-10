@@ -1,5 +1,5 @@
 import { randomDek, encrypt, decrypt, seal, unseal, toBase64, fromBase64, wipe } from "./crypto.ts";
-import { buildSecretRecords, RECORD, type SecretRecords } from "./records.ts";
+import { buildSecretRecords, nameContext, RECORD, type SecretRecords } from "./records.ts";
 import type { Identity } from "./identity.ts";
 
 export type Grantee = {
@@ -30,6 +30,14 @@ export class MissingBlobError extends Error {
     }
 }
 
+// Overwriting a live secret is almost always a mistake, so it takes saying so
+export class SecretExistsError extends Error {
+    constructor(secretName: string) {
+        super(`${secretName} already holds a secret, pass { overwrite: true } to replace it`);
+        this.name = "SecretExistsError";
+    }
+}
+
 /* Grantee sets */
 
 function assertRecovery(recovery: Grantee[]): void {
@@ -48,6 +56,7 @@ function dedupe(grantees: Grantee[]): Grantee[] {
 /* Create */
 
 export async function planSecret(input: {
+    secretName: string;
     type: string;
     plaintext: Uint8Array;
     owner: Grantee;
@@ -64,7 +73,7 @@ export async function planSecret(input: {
     const dek = randomDek();
 
     try {
-        const blob = await encrypt(input.plaintext, dek);
+        const blob = await encrypt(input.plaintext, dek, nameContext(input.secretName));
         const wraps = await Promise.all(
             holders.map(async (g) => ({ fingerprint: g.fingerprint, wrapped: toBase64(await seal(dek, g.publicKey)) })),
         );
@@ -112,17 +121,18 @@ export async function recoverDek(
     );
 }
 
+// The name is required, because it is mixed into the AEAD and a blob will not open without the right one
 export async function openSecret(
     records: Record<string, string>,
     holder: Identity | Identity[],
-    secretName?: string,
+    secretName: string,
 ): Promise<Uint8Array> {
     const blob = records[RECORD.blob];
     if (!blob) throw new MissingBlobError(secretName);
 
     const dek = await recoverDek(records, holder, secretName);
     try {
-        return await decrypt(fromBase64(blob), dek);
+        return await decrypt(fromBase64(blob), dek, nameContext(secretName));
     } finally {
         await wipe(dek);
     }
@@ -146,6 +156,7 @@ export async function planGrant(
 /* Rotate, which is also how revoke works */
 
 export async function planRotate(input: {
+    secretName: string;
     type: string;
     plaintext: Uint8Array;
     owner: Grantee;

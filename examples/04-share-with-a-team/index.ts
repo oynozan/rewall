@@ -42,6 +42,7 @@ await alice.create(SECRET, new TextEncoder().encode(VALUE), {
     type: "generic",
     subtreeGrantees: [BOB],
     recovery: ["rewall-test-3.eth"],
+    overwrite: true,
 });
 console.log(`\nAlice granted the secret to ${BOB} and everything under it.`);
 

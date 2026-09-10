@@ -29,6 +29,7 @@ const bob = connect(1, BOB);
 await alice.create(SECRET, new TextEncoder().encode(API_KEY), {
     type: "apikey",
     recovery: ["rewall-test-3.eth"],
+    overwrite: true,
 });
 console.log("Alice stored the API key.");
 

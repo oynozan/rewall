@@ -1,9 +1,21 @@
-import { parseAbi, encodeFunctionData, decodeFunctionResult, namehash, toHex, type Address, type Hex } from "viem";
+import {
+    parseAbi,
+    encodeFunctionData,
+    decodeFunctionResult,
+    hexToBytes,
+    namehash,
+    toHex,
+    type Address,
+    type Hex,
+} from "viem";
 import { packetToBytes } from "viem/ens";
 
-// Bumped to 2 when the blob gained a key commitment header, so a v1 blob is refused rather than misparsed
-export const SCHEMA_VERSION = "2";
+// Bumped to 3 when blobs gained name binding and padding, so an older blob is refused rather than misparsed
+export const SCHEMA_VERSION = "3";
 export const ENCRYPTION = "aes-256-gcm";
+
+// Binds a blob to the name it sits on, so a ciphertext moved to another name refuses to open
+export const nameContext = (secretName: string): Uint8Array => hexToBytes(namehash(secretName));
 
 export const RECORD = {
     version: "rewall.v",

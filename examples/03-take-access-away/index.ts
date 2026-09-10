@@ -32,6 +32,7 @@ await alice.create(SECRET, new TextEncoder().encode(TOKEN), {
     type: "apikey",
     grantees: [BOB],
     recovery: ["rewall-test-3.eth"],
+    overwrite: true,
 });
 
 console.log(`Bob reads: ${text(await bob.get(SECRET))}`);
@@ -51,4 +52,5 @@ try {
 
 console.log(`Alice still reads: ${text(await alice.get(SECRET))}`);
 console.log(`\nBob kept a copy of the old value: ${stolen}`);
-console.log("Rotate the real token too. Revoking does not un-see what was already seen.");
+console.log("He did not even need to keep it. The old wrap and the old blob are in chain history forever,");
+console.log("so his key still opens them. Revoking protects the next value. Rotate the real token too.");

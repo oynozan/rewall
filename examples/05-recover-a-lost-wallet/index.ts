@@ -46,6 +46,7 @@ console.log(`Alice set up ${THRESHOLD} of ${GUARDIANS.length} guardians.`);
 await alice.create(SECRET, new TextEncoder().encode(VALUE), {
     type: "generic",
     recovery: [alice.guardians.entry()],
+    overwrite: true,
 });
 console.log(`Alice reads: ${text(await alice.get(SECRET))}`);
 

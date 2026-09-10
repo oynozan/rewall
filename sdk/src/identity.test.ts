@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import sodium from "libsodium-wrappers";
 import { privateKeyToAccount } from "viem/accounts";
-import { hashMessage, recoverAddress, hexToBytes, bytesToHex, numberToHex, concat, type Hex } from "viem";
-import { canonicalSignature, deriveIdentity, fingerprintOf, IDENTITY_MESSAGE, SECP256K1_N } from "./identity.ts";
+import { hashTypedData, recoverAddress, hexToBytes, bytesToHex, numberToHex, concat, type Hex } from "viem";
+import { canonicalSignature, deriveIdentity, fingerprintOf, IDENTITY_TYPED_DATA, SECP256K1_N } from "./identity.ts";
 
 const KEY_A = "0x0000000000000000000000000000000000000000000000000000000000000001" as const;
 const KEY_B = "0x0000000000000000000000000000000000000000000000000000000000000002" as const;
@@ -11,7 +11,7 @@ const KEY_B = "0x000000000000000000000000000000000000000000000000000000000000000
 const accountA = privateKeyToAccount(KEY_A);
 const accountB = privateKeyToAccount(KEY_B);
 
-const sign = (account: typeof accountA) => account.signMessage({ message: IDENTITY_MESSAGE });
+const sign = (account: typeof accountA) => account.signTypedData(IDENTITY_TYPED_DATA);
 
 // Rebuilds a signature with s replaced by N - s and v flipped, which is the other valid form of the same signature
 function flipS(signature: Hex): Hex {
@@ -25,7 +25,7 @@ function flipS(signature: Hex): Hex {
 
 test("SECP256K1_N is the real curve order, proven by recovering the signer from N - s", async () => {
     const signature = await sign(accountA);
-    const hash = hashMessage(IDENTITY_MESSAGE);
+    const hash = hashTypedData(IDENTITY_TYPED_DATA);
 
     assert.equal((await recoverAddress({ hash, signature })).toLowerCase(), accountA.address.toLowerCase());
 
@@ -101,6 +101,30 @@ test("fingerprint is 16 lowercase hex characters", async () => {
 test("fingerprint rejects a key that is not 32 bytes", () => {
     assert.throws(() => fingerprintOf(new Uint8Array(31)), /32 byte/);
     assert.throws(() => fingerprintOf(new Uint8Array(33)), /32 byte/);
+});
+
+/* Domain separation, which is what stops another app collecting a usable identity signature */
+
+test("the typed data carries a Rewall domain and a warning the wallet can render", () => {
+    assert.equal(IDENTITY_TYPED_DATA.domain.name, "Rewall");
+    assert.equal(IDENTITY_TYPED_DATA.primaryType, "Identity");
+    assert.match(IDENTITY_TYPED_DATA.message.warning, /every secret/);
+});
+
+test("another app signing the same fields derives a different key", async () => {
+    const mine = await deriveIdentity(await sign(accountA));
+    const theirs = await deriveIdentity(
+        await accountA.signTypedData({ ...IDENTITY_TYPED_DATA, domain: { name: "NotRewall", version: "1" } }),
+    );
+
+    assert.notDeepEqual(mine.publicKey, theirs.publicKey);
+});
+
+test("a plain personal_sign of the same words derives a different key", async () => {
+    const typed = await deriveIdentity(await sign(accountA));
+    const plain = await deriveIdentity(await accountA.signMessage({ message: IDENTITY_TYPED_DATA.message.purpose }));
+
+    assert.notDeepEqual(typed.publicKey, plain.publicKey);
 });
 
 test("canonicalSignature rejects a signature that is not 65 bytes", () => {

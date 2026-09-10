@@ -3,11 +3,10 @@ import { mnemonicToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 import { readFileSync } from "node:fs";
 import {
-    deriveIdentity,
+    identityFromAccount,
     encodeSetTextCalls,
     readTexts,
     resolverFor,
-    IDENTITY_MESSAGE,
     RECORD,
     resolverAbi,
     fromBase64,
@@ -35,7 +34,7 @@ export function walletFor(index: number) {
 }
 
 export async function identityFor(index: number): Promise<Identity> {
-    return deriveIdentity(await accountFor(index).signMessage({ message: IDENTITY_MESSAGE }));
+    return identityFromAccount(accountFor(index));
 }
 
 export async function identityOf(role: string): Promise<Identity> {

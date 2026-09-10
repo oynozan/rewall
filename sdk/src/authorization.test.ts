@@ -35,7 +35,7 @@ test("a delegate's signature over the same list does not verify as the owner", a
 test("adding a grantee after signing invalidates the signature", async () => {
     const signature = await sign(owner, base);
 
-    // This is the attack: a write delegate appends themselves to rewall.grantees and waits for a rotation
+    // The attack is a write delegate appending themselves to rewall.grantees then waiting for a rotation
     const tampered = { ...base, grantees: [...base.grantees, "mallory.eth"] };
     assert.ok(!(await isAuthorizedBy(tampered, signature, owner.address)));
 });

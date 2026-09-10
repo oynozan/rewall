@@ -67,6 +67,7 @@ pass(`guardian set published, ${declared.threshold} of ${declared.names.length}`
 await ownerClient.create(secretName, new TextEncoder().encode(SECRET), {
     type: "generic",
     recovery: [ownerClient.guardians.entry()],
+    overwrite: true,
 });
 
 if (text(await ownerClient.get(secretName)) !== SECRET) fail("owner cannot read what it created");

@@ -1,6 +1,6 @@
 import { parseAbi, keccak256, toBytes } from "viem";
 import { sepolia } from "viem/chains";
-import { planSecret, openSecret, wrapFingerprints, RECORD, NoWrapError } from "@rewall/sdk";
+import { planSecret, openSecret, wrapFingerprints, RECORD, SCHEMA_VERSION, NoWrapError } from "@rewall/sdk";
 import { ETH_REGISTRY, ZERO_ADDRESS } from "./participants.ts";
 import {
     publicClient,
@@ -92,6 +92,7 @@ if (configured === ZERO_ADDRESS) {
 /* Create */
 
 const records = await planSecret({
+    secretName: name,
     type: "apikey",
     plaintext: new TextEncoder().encode(PLAINTEXT),
     owner: holders.owner,
@@ -113,7 +114,7 @@ console.log(`tx https://sepolia.etherscan.io/tx/${receipt.transactionHash}\n`);
 const keys = [RECORD.blob, RECORD.version, RECORD.type, ...records.map((r) => r.key)];
 const onchain = await readRecords(name, [...new Set(keys)]);
 
-if (onchain[RECORD.version] !== "1") throw new Error(`FAIL bad schema version ${onchain[RECORD.version]}`);
+if (onchain[RECORD.version] !== SCHEMA_VERSION) throw new Error(`FAIL bad schema version ${onchain[RECORD.version]}`);
 
 const opened = new TextDecoder().decode(await openSecret(onchain, granteeIdentity, name));
 if (opened !== PLAINTEXT) throw new Error("FAIL the grantee decrypted the wrong value");

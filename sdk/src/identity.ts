@@ -1,7 +1,21 @@
 import sodium from "libsodium-wrappers";
 import { keccak256, hexToBytes, bytesToHex, numberToHex, concat, type Hex } from "viem";
 
-export const IDENTITY_MESSAGE = "Rewall identity v1";
+// EIP-712 rather than a bare string, so a wallet renders what is being signed instead of an opaque line
+export const IDENTITY_TYPED_DATA = {
+    domain: { name: "Rewall", version: "1" },
+    types: {
+        Identity: [
+            { name: "purpose", type: "string" },
+            { name: "warning", type: "string" },
+        ],
+    },
+    primaryType: "Identity",
+    message: {
+        purpose: "Derive the X25519 key that unseals secrets shared with this wallet",
+        warning: "Sign this only in Rewall, whoever collects it reads every secret shared with you forever",
+    },
+} as const;
 
 // Order of the secp256k1 group. identity.test.ts proves this value by recovering a signer from N - s
 export const SECP256K1_N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
@@ -44,6 +58,11 @@ export async function deriveIdentity(signature: Hex): Promise<Identity> {
     const publicKey = sodium.crypto_scalarmult_base(seed);
 
     return { secretKey: seed, publicKey, fingerprint: fingerprintOf(publicKey) };
+}
+
+// The wallet client path spreads IDENTITY_TYPED_DATA itself, because it needs an account alongside it
+export async function identityFromAccount(account: { signTypedData: (data: any) => Promise<Hex> }): Promise<Identity> {
+    return deriveIdentity(await account.signTypedData(IDENTITY_TYPED_DATA));
 }
 
 // First 8 bytes of keccak256(pubkey) as 16 lowercase hex, used as the rewall.key.<fp> suffix

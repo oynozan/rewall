@@ -46,6 +46,7 @@ console.log(
 /* Revoke, which is a rotate that drops one holder */
 
 const revoked = await planRotate({
+    secretName: name,
     type: "apikey",
     plaintext: new TextEncoder().encode(PLAINTEXT),
     owner: holders.owner,
@@ -93,6 +94,7 @@ try {
 /* Restore, so the script can run again */
 
 const restored = await planRotate({
+    secretName: name,
     type: "apikey",
     plaintext: new TextEncoder().encode(PLAINTEXT),
     owner: holders.owner,

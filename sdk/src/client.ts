@@ -1,5 +1,5 @@
 import { namehash, keccak256, toBytes, parseAbi, type Address, type Hash } from "viem";
-import { deriveIdentity, fingerprintOf, IDENTITY_MESSAGE, type Identity } from "./identity.ts";
+import { deriveIdentity, fingerprintOf, IDENTITY_TYPED_DATA, type Identity } from "./identity.ts";
 import { toBase64, fromBase64, wipe } from "./crypto.ts";
 import {
     RECORD,
@@ -10,6 +10,7 @@ import {
     splitNames,
     joinNames,
     SCHEMA_VERSION,
+    ENCRYPTION,
     addToIndex,
     GUARDIAN_RECOVERY_PREFIX,
     guardianRecoveryEntry,
@@ -18,7 +19,15 @@ import {
     WRAP_PREFIX,
     type SecretRecords,
 } from "./records.ts";
-import { planSecret, planGrant, planRotate, openSecret, wrapFingerprints, type Grantee } from "./secret.ts";
+import {
+    planSecret,
+    planGrant,
+    planRotate,
+    openSecret,
+    wrapFingerprints,
+    SecretExistsError,
+    type Grantee,
+} from "./secret.ts";
 import { deriveSubtreeKey, sealSubtreeKey, openSubtreeKey } from "./subtree.ts";
 import { createGuardianSet, reshare, recoverWithShares } from "./guardians.ts";
 import {
@@ -43,6 +52,7 @@ export type CreateOptions = {
     subtreeGrantees?: string[];
     recovery: string[];
     allow?: string[];
+    overwrite?: boolean;
 };
 
 const NAMESPACE_LABEL = "rewall";
@@ -75,7 +85,11 @@ export class Rewall {
     // Cached for the life of the process only, never written to disk, and re-derived on the next run
     async identity(): Promise<Identity> {
         if (!this.cachedIdentity) {
-            const signature = await this.account.signMessage({ message: IDENTITY_MESSAGE });
+            // Through the wallet client, so an injected wallet works the same as a local key
+            const signature = await this.walletClient.signTypedData({
+                account: this.account,
+                ...IDENTITY_TYPED_DATA,
+            });
             this.cachedIdentity = await deriveIdentity(signature);
         }
         return this.cachedIdentity;
@@ -149,7 +163,11 @@ export class Rewall {
             ...(await Promise.all((options.subtreeGrantees ?? []).map((n) => this.subtreeKeyOf(n)))),
         ];
 
+        const existing = await this.read(secretName, [RECORD.holders, RECORD.blob]);
+        if (existing[RECORD.blob] && !options.overwrite) throw new SecretExistsError(secretName);
+
         const records = await planSecret({
+            secretName,
             type: options.type ?? "generic",
             plaintext,
             owner,
@@ -160,7 +178,6 @@ export class Rewall {
         });
 
         // A stale wrap from a previous secret here turns a clean denial into a decryption failure
-        const existing = await this.read(secretName, [RECORD.holders]);
         const kept = new Set(
             records.filter((r) => r.key.startsWith(WRAP_PREFIX)).map((r) => r.key.slice(WRAP_PREFIX.length)),
         );
@@ -187,12 +204,14 @@ export class Rewall {
         const keys = await this.heldKeys();
 
         try {
-            const wanted = [RECORD.blob, RECORD.version, ...keys.map((k) => RECORD.wrap(k.fingerprint))];
+            const wanted = [
+                RECORD.blob,
+                RECORD.version,
+                RECORD.encryption,
+                ...keys.map((k) => RECORD.wrap(k.fingerprint)),
+            ];
             const records = await this.read(secretName, wanted);
-
-            const version = records[RECORD.version];
-            if (version && version !== SCHEMA_VERSION)
-                throw new Error(`${secretName} uses schema version ${version}, expected ${SCHEMA_VERSION}`);
+            this.assertReadable(secretName, records);
 
             return await openSecret(records, keys, secretName);
         } finally {
@@ -241,30 +260,41 @@ export class Rewall {
         ]);
     }
 
-    // One name can hold both an individual and a subtree grant, and they use different keys
-    async revoke(secretName: string, granteeName: string, options?: { subtree?: boolean }): Promise<Hash> {
+    // One name can hold an individual grant, a subtree grant and a recovery entry, each on a different key
+    async revoke(
+        secretName: string,
+        granteeName: string,
+        options?: { subtree?: boolean; recovery?: boolean },
+    ): Promise<Hash> {
+        if (options?.subtree && options?.recovery) throw new Error("revoke is subtree or recovery, never both");
+
         const current = await this.readForRotate(secretName);
+        const lists = {
+            grantees: splitNames(current[RECORD.grantees]),
+            subtrees: splitNames(current[RECORD.subtrees]),
+            recovery: splitNames(current[RECORD.recovery]),
+        };
 
-        const listKey = options?.subtree ? RECORD.subtrees : RECORD.grantees;
-        const before = splitNames(current[listKey]);
-        const after = before.filter((n) => n !== granteeName);
+        const field = options?.recovery ? "recovery" : options?.subtree ? "subtrees" : "grantees";
+        const after = lists[field].filter((n) => n !== granteeName);
 
-        if (before.length === after.length) {
-            const kind = options?.subtree ? "subtree grantee" : "grantee";
-            throw new Error(`${granteeName} is not a ${kind} of ${secretName}`);
+        if (after.length === lists[field].length) {
+            throw new Error(`${granteeName} is not in ${field} on ${secretName}`);
+        }
+
+        // planSecret refuses a secret only its owner can open, so say it here rather than deep inside a rotation
+        if (field === "recovery" && after.length === 0) {
+            throw new Error(`${granteeName} is the last recovery entry on ${secretName}, add another before revoking`);
         }
 
         // A recovery entry uses the same key as an individual grant, so dropping the grant leaves it reading
-        if (!options?.subtree && splitNames(current[RECORD.recovery]).includes(granteeName)) {
+        if (field === "grantees" && lists.recovery.includes(granteeName)) {
             throw new Error(
-                `${granteeName} is also a recovery entry on ${secretName} and would keep reading, revoke that first`,
+                `${granteeName} is also a recovery entry on ${secretName} and would keep reading, revoke that first with { recovery: true }`,
             );
         }
 
-        return this.rotateTo(secretName, current, {
-            grantees: options?.subtree ? splitNames(current[RECORD.grantees]) : after,
-            subtrees: options?.subtree ? after : splitNames(current[RECORD.subtrees]),
-        });
+        return this.rotateTo(secretName, current, { ...lists, [field]: after });
     }
 
     async rotate(secretName: string, plaintext?: Uint8Array): Promise<Hash> {
@@ -418,11 +448,25 @@ export class Rewall {
         return raw ? Number(raw) : 0;
     }
 
+    // A client that cannot parse a blob refuses it rather than misreading it or overwriting it
+    private assertReadable(secretName: string, records: Record<string, string>): void {
+        const version = records[RECORD.version];
+        if (version && version !== SCHEMA_VERSION) {
+            throw new Error(`${secretName} uses schema version ${version}, expected ${SCHEMA_VERSION}`);
+        }
+
+        const encryption = records[RECORD.encryption];
+        if (encryption && encryption !== ENCRYPTION) {
+            throw new Error(`${secretName} is encrypted with ${encryption}, expected ${ENCRYPTION}`);
+        }
+    }
+
     private async readForRotate(secretName: string): Promise<Record<string, string>> {
         const keys = await this.heldKeys();
         return this.read(secretName, [
             RECORD.blob,
             RECORD.version,
+            RECORD.encryption,
             RECORD.type,
             RECORD.allow,
             RECORD.owner,
@@ -439,18 +483,13 @@ export class Rewall {
     private async rotateTo(
         secretName: string,
         current: Record<string, string>,
-        next: { grantees: string[]; subtrees: string[]; plaintext?: Uint8Array },
+        next: { grantees: string[]; subtrees: string[]; recovery?: string[]; plaintext?: Uint8Array },
     ): Promise<Hash> {
         // Refuses a list the owner never signed, which is what stops a write delegate steering a rotation
         await this.assertAuthorized(secretName, current);
 
-        // The same gate get() applies. Without it an older client silently overwrites a newer record set
-        const version = current[RECORD.version];
-        if (version && version !== SCHEMA_VERSION) {
-            throw new Error(
-                `${secretName} uses schema version ${version}, refusing to rotate what this client cannot read`,
-            );
-        }
+        // The same gate get() applies, or an older client silently overwrites a newer record set
+        this.assertReadable(secretName, current);
 
         const keys = await this.heldKeys();
         const plaintext = next.plaintext ?? (await openSecret(current, keys, secretName));
@@ -460,7 +499,8 @@ export class Rewall {
         const owner = ownerName === this.name ? await this.selfAsGrantee() : await this.publicKeyOf(ownerName);
 
         // Strict. A name that no longer resolves must stop the rotation, not vanish from the keep set
-        const recovery = await Promise.all(splitNames(current[RECORD.recovery]).map((n) => this.resolveRecovery(n)));
+        const recoveryNames = next.recovery ?? splitNames(current[RECORD.recovery]);
+        const recovery = await Promise.all(recoveryNames.map((n) => this.resolveRecovery(n)));
         const grantees = [
             ...(await Promise.all(next.grantees.map((n) => this.publicKeyOf(n)))),
             ...(await Promise.all(next.subtrees.map((n) => this.subtreeKeyOf(n)))),
@@ -470,6 +510,7 @@ export class Rewall {
         const previous = [...splitNames(current[RECORD.holders]), ...wrapFingerprints(current)];
 
         const { records } = await planRotate({
+            secretName,
             type: current[RECORD.type] || "generic",
             plaintext,
             owner,
@@ -487,7 +528,7 @@ export class Rewall {
             owner: ownerName,
             grantees: next.grantees,
             subtrees: next.subtrees,
-            recovery: auth.recovery,
+            recovery: recoveryNames,
         });
 
         return this.write(secretName, [...records, ...signed]);
@@ -563,7 +604,10 @@ export class Rewall {
     }
 
     private async signAuthorization(auth: Authorization): Promise<SecretRecords> {
-        const signature = await this.account.signMessage({ message: authorizationPayload(auth) });
+        const signature = await this.walletClient.signMessage({
+            account: this.account,
+            message: authorizationPayload(auth),
+        });
         return [
             { key: RECORD.authCounter, value: String(auth.counter) },
             { key: RECORD.authSig, value: signature },

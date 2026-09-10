@@ -47,6 +47,7 @@ if (await ensureSecretName(owner.index, owner.label!, LABEL)) console.log(`regis
 await ownerClient.create(secretName, new TextEncoder().encode(SECRET), {
     type: "apikey",
     recovery: [`${byRole.recovery!.label}.eth`],
+    overwrite: true,
 });
 
 const delegateClient = clientFor(delegate.index, `${delegate.label}.eth`);

@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { privateKeyToAccount } from "viem/accounts";
-import { deriveIdentity, IDENTITY_MESSAGE, type Identity } from "./identity.ts";
+import { identityFromAccount, type Identity } from "./identity.ts";
+import { KeyCommitmentError } from "./crypto.ts";
 import { RECORD, SCHEMA_VERSION } from "./records.ts";
 import {
     planSecret,
@@ -17,12 +18,10 @@ import {
 
 const PLAINTEXT = new TextEncoder().encode("sk-proj-not-a-real-key-0123456789");
 const CREATED = 1_760_000_000;
+const SECRET = "openai.rewall.alice.eth";
 
-const identityFor = async (n: number): Promise<Identity> => {
-    const key = `0x${n.toString(16).padStart(64, "0")}` as const;
-    const account = privateKeyToAccount(key);
-    return deriveIdentity(await account.signMessage({ message: IDENTITY_MESSAGE }));
-};
+const identityFor = (n: number): Promise<Identity> =>
+    identityFromAccount(privateKeyToAccount(`0x${n.toString(16).padStart(64, "0")}`));
 
 const owner = await identityFor(1);
 const grantee = await identityFor(2);
@@ -32,8 +31,10 @@ const late = await identityFor(5);
 
 const asGrantee = (i: Identity): Grantee => ({ fingerprint: i.fingerprint, publicKey: i.publicKey });
 const toMap = (records: { key: string; value: string }[]) => Object.fromEntries(records.map((r) => [r.key, r.value]));
+const open = (records: Record<string, string>, holder: Identity | Identity[]) => openSecret(records, holder, SECRET);
 
 const baseInput = {
+    secretName: SECRET,
     type: "apikey",
     plaintext: PLAINTEXT,
     owner: asGrantee(owner),
@@ -45,12 +46,12 @@ const baseInput = {
 
 test("a created secret opens for the owner", async () => {
     const records = toMap(await planSecret(baseInput));
-    assert.deepEqual(await openSecret(records, owner), PLAINTEXT);
+    assert.deepEqual(await open(records, owner), PLAINTEXT);
 });
 
 test("a created secret opens for the recovery holder", async () => {
     const records = toMap(await planSecret(baseInput));
-    assert.deepEqual(await openSecret(records, recovery), PLAINTEXT);
+    assert.deepEqual(await open(records, recovery), PLAINTEXT);
 });
 
 test("creation is refused without a recovery grantee", async () => {
@@ -59,13 +60,13 @@ test("creation is refused without a recovery grantee", async () => {
 
 test("a stranger gets NoWrapError, not a decryption failure", async () => {
     const records = toMap(await planSecret(baseInput));
-    await assert.rejects(() => openSecret(records, stranger), NoWrapError);
+    await assert.rejects(() => open(records, stranger), NoWrapError);
 });
 
 test("NoWrapError names the fingerprint and the secret", async () => {
     const records = toMap(await planSecret(baseInput));
     await assert.rejects(
-        () => openSecret(records, stranger, "openai.rewall.alice.eth"),
+        () => open(records, stranger),
         (e: NoWrapError) => {
             assert.equal(e.name, "NoWrapError");
             assert.deepEqual(e.fingerprints, [stranger.fingerprint]);
@@ -78,7 +79,7 @@ test("NoWrapError names the fingerprint and the secret", async () => {
 test("a missing blob is distinguishable from a missing wrap", async () => {
     const records = toMap(await planSecret(baseInput));
     delete records[RECORD.blob];
-    await assert.rejects(() => openSecret(records, owner), MissingBlobError);
+    await assert.rejects(() => open(records, owner), MissingBlobError);
 });
 
 test("the record set carries version, type, encryption and created", async () => {
@@ -102,6 +103,20 @@ test("an owner who is also the recovery holder still yields one wrap", async () 
     assert.equal(wrapFingerprints(toMap(records)).length, 1);
 });
 
+test("a secret lifted onto another name refuses to open, even for a real holder", async () => {
+    const records = toMap(await planSecret(baseInput));
+
+    // A write delegate can copy every record across, so the blob itself has to refuse the new name
+    await assert.rejects(() => openSecret(records, owner, "stripe.rewall.alice.eth"), KeyCommitmentError);
+});
+
+test("the blob length does not follow the plaintext length", async () => {
+    const short = toMap(await planSecret({ ...baseInput, plaintext: new TextEncoder().encode("a") }));
+    const long = toMap(await planSecret({ ...baseInput, plaintext: new TextEncoder().encode("x".repeat(200)) }));
+
+    assert.equal(short[RECORD.blob]!.length, long[RECORD.blob]!.length);
+});
+
 test("two encryptions of the same plaintext differ", async () => {
     const a = toMap(await planSecret(baseInput));
     const b = toMap(await planSecret(baseInput));
@@ -112,10 +127,10 @@ test("two encryptions of the same plaintext differ", async () => {
 
 test("a grant lets a new holder open the same secret", async () => {
     const records = toMap(await planSecret(baseInput));
-    assert.rejects(() => openSecret(records, late));
+    assert.rejects(() => open(records, late));
 
     const added = toMap(await planGrant(records, owner, asGrantee(late)));
-    assert.deepEqual(await openSecret({ ...records, ...added }, late), PLAINTEXT);
+    assert.deepEqual(await open({ ...records, ...added }, late), PLAINTEXT);
 });
 
 test("granting does not change the ciphertext, only adds a wrap", async () => {
@@ -154,13 +169,13 @@ test("everyone kept can still open a rotated secret", async () => {
 
     const rotated = toMap(records);
     for (const holder of [owner, recovery, grantee]) {
-        assert.deepEqual(await openSecret(rotated, holder), PLAINTEXT);
+        assert.deepEqual(await open(rotated, holder), PLAINTEXT);
     }
 });
 
 test("revoking clears the wrap and locks that holder out", async () => {
     const first = toMap(await planSecret({ ...baseInput, grantees: [asGrantee(grantee)] }));
-    assert.deepEqual(await openSecret(first, grantee), PLAINTEXT);
+    assert.deepEqual(await open(first, grantee), PLAINTEXT);
 
     const { records, cleared } = await planRotate({
         ...baseInput,
@@ -171,8 +186,8 @@ test("revoking clears the wrap and locks that holder out", async () => {
 
     const after = { ...first, ...toMap(records) };
     assert.equal(after[RECORD.wrap(grantee.fingerprint)], "");
-    await assert.rejects(() => openSecret(after, grantee), NoWrapError);
-    assert.deepEqual(await openSecret(after, owner), PLAINTEXT);
+    await assert.rejects(() => open(after, grantee), NoWrapError);
+    assert.deepEqual(await open(after, owner), PLAINTEXT);
 });
 
 test("a revoked holder cannot open the new blob even with the old wrap kept", async () => {
@@ -184,7 +199,7 @@ test("a revoked holder cannot open the new blob even with the old wrap kept", as
         ...toMap(records),
         [RECORD.wrap(grantee.fingerprint)]: first[RECORD.wrap(grantee.fingerprint)]!,
     };
-    await assert.rejects(() => openSecret(replayed, grantee));
+    await assert.rejects(() => open(replayed, grantee));
 });
 
 test("rotation can change the plaintext", async () => {
@@ -196,7 +211,7 @@ test("rotation can change the plaintext", async () => {
         plaintext: next,
         previousFingerprints: wrapFingerprints(first),
     });
-    assert.deepEqual(await openSecret(toMap(records), owner), next);
+    assert.deepEqual(await open(toMap(records), owner), next);
 });
 
 test("rotation still refuses to drop the recovery grantee", async () => {

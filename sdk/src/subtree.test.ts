@@ -2,16 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import sodium from "libsodium-wrappers";
 import { privateKeyToAccount } from "viem/accounts";
-import { deriveIdentity, IDENTITY_MESSAGE, type Identity } from "./identity.ts";
+import { identityFromAccount, type Identity } from "./identity.ts";
 import { deriveSubtreeKey, sealSubtreeKey, openSubtreeKey } from "./subtree.ts";
 import { planSecret, openSecret, NoWrapError, type Grantee } from "./secret.ts";
 
 const PLAINTEXT = new TextEncoder().encode("shared-across-the-subtree");
+const SECRET = "team-key.rewall.alice.eth";
 
-const identityFor = async (n: number): Promise<Identity> => {
-    const account = privateKeyToAccount(`0x${n.toString(16).padStart(64, "0")}`);
-    return deriveIdentity(await account.signMessage({ message: IDENTITY_MESSAGE }));
-};
+const identityFor = (n: number): Promise<Identity> =>
+    identityFromAccount(privateKeyToAccount(`0x${n.toString(16).padStart(64, "0")}`));
 
 const parent = await identityFor(1);
 const otherParent = await identityFor(2);
@@ -87,6 +86,7 @@ test("a member opens a secret granted to the subtree, without its own wrap", asy
 
     const records = toMap(
         await planSecret({
+            secretName: SECRET,
             type: "apikey",
             plaintext: PLAINTEXT,
             owner: asGrantee(parent),
@@ -97,16 +97,17 @@ test("a member opens a secret granted to the subtree, without its own wrap", asy
     );
 
     // The member is not a grantee in its own right, only through the subtree key it was given
-    await assert.rejects(() => openSecret(records, member), NoWrapError);
+    await assert.rejects(() => openSecret(records, member, SECRET), NoWrapError);
 
     const held = await openSubtreeKey(await sealSubtreeKey(subtree, member.publicKey), member);
-    assert.deepEqual(await openSecret(records, [member, held]), PLAINTEXT);
+    assert.deepEqual(await openSecret(records, [member, held], SECRET), PLAINTEXT);
 });
 
 test("every member of a subtree opens the same secret", async () => {
     const subtree = await deriveSubtreeKey(parent, 0);
     const records = toMap(
         await planSecret({
+            secretName: SECRET,
             type: "apikey",
             plaintext: PLAINTEXT,
             owner: asGrantee(parent),
@@ -118,7 +119,7 @@ test("every member of a subtree opens the same secret", async () => {
 
     for (const m of [member, secondMember]) {
         const held = await openSubtreeKey(await sealSubtreeKey(subtree, m.publicKey), m);
-        assert.deepEqual(await openSecret(records, [m, held]), PLAINTEXT);
+        assert.deepEqual(await openSecret(records, [m, held], SECRET), PLAINTEXT);
     }
 });
 
@@ -126,6 +127,7 @@ test("an outsider with no subtree key is refused", async () => {
     const subtree = await deriveSubtreeKey(parent, 0);
     const records = toMap(
         await planSecret({
+            secretName: SECRET,
             type: "apikey",
             plaintext: PLAINTEXT,
             owner: asGrantee(parent),
@@ -134,7 +136,7 @@ test("an outsider with no subtree key is refused", async () => {
             createdAt: 1_760_000_000,
         }),
     );
-    await assert.rejects(() => openSecret(records, outsider), NoWrapError);
+    await assert.rejects(() => openSecret(records, outsider, SECRET), NoWrapError);
 });
 
 test("a removed member's old subtree key does not open a secret granted to the new one", async () => {
@@ -146,6 +148,7 @@ test("a removed member's old subtree key does not open a secret granted to the n
     // The parent rotated to version 1 and re-granted, which is SPEC section 4 step 6
     const records = toMap(
         await planSecret({
+            secretName: SECRET,
             type: "apikey",
             plaintext: PLAINTEXT,
             owner: asGrantee(parent),
@@ -155,16 +158,17 @@ test("a removed member's old subtree key does not open a secret granted to the n
         }),
     );
 
-    await assert.rejects(() => openSecret(records, [member, heldByRemoved]), NoWrapError);
+    await assert.rejects(() => openSecret(records, [member, heldByRemoved], SECRET), NoWrapError);
 
     const heldByKept = await openSubtreeKey(await sealSubtreeKey(newSubtree, secondMember.publicKey), secondMember);
-    assert.deepEqual(await openSecret(records, [secondMember, heldByKept]), PLAINTEXT);
+    assert.deepEqual(await openSecret(records, [secondMember, heldByKept], SECRET), PLAINTEXT);
 });
 
 test("NoWrapError lists every fingerprint that was tried", async () => {
     const subtree = await deriveSubtreeKey(parent, 0);
     const records = toMap(
         await planSecret({
+            secretName: SECRET,
             type: "apikey",
             plaintext: PLAINTEXT,
             owner: asGrantee(parent),
@@ -174,7 +178,7 @@ test("NoWrapError lists every fingerprint that was tried", async () => {
     );
 
     await assert.rejects(
-        () => openSecret(records, [outsider, subtree]),
+        () => openSecret(records, [outsider, subtree], SECRET),
         (e: NoWrapError) => {
             assert.deepEqual(e.fingerprints, [outsider.fingerprint, subtree.fingerprint]);
             return true;

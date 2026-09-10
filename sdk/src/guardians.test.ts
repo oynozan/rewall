@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import sodium from "libsodium-wrappers";
 import { privateKeyToAccount } from "viem/accounts";
-import { deriveIdentity, IDENTITY_MESSAGE, type Identity } from "./identity.ts";
+import { identityFromAccount, type Identity } from "./identity.ts";
 import {
     createGuardianSet,
     reshare,
@@ -15,11 +15,10 @@ import { seal, toBase64 } from "./crypto.ts";
 import { planSecret, openSecret, NoWrapError, type Grantee } from "./secret.ts";
 
 const PLAINTEXT = new TextEncoder().encode("sk-proj-guarded-value");
+const SECRET = "guarded.rewall.alice.eth";
 
-const identityFor = async (n: number): Promise<Identity> => {
-    const account = privateKeyToAccount(`0x${n.toString(16).padStart(64, "0")}`);
-    return deriveIdentity(await account.signMessage({ message: IDENTITY_MESSAGE }));
-};
+const identityFor = (n: number): Promise<Identity> =>
+    identityFromAccount(privateKeyToAccount(`0x${n.toString(16).padStart(64, "0")}`));
 
 const owner = await identityFor(1);
 const newOwner = await identityFor(2);
@@ -192,6 +191,7 @@ test("guardians recover a secret after the owner loses their key", async () => {
 
     const records = toMap(
         await planSecret({
+            secretName: SECRET,
             type: "apikey",
             plaintext: PLAINTEXT,
             owner: asGrantee(owner, "alice.eth"),
@@ -200,8 +200,8 @@ test("guardians recover a secret after the owner loses their key", async () => {
         }),
     );
 
-    await assert.rejects(() => openSecret(records, newOwner), NoWrapError);
+    await assert.rejects(() => openSecret(records, newOwner, SECRET), NoWrapError);
 
     const recoveryKey = await recoverWithShares(await resharedBy(set, [1, 2, 3]), newOwner, expectOf(set));
-    assert.deepEqual(await openSecret(records, recoveryKey), PLAINTEXT);
+    assert.deepEqual(await openSecret(records, recoveryKey, SECRET), PLAINTEXT);
 });

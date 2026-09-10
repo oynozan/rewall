@@ -26,6 +26,7 @@ const alice = new Rewall({
 await alice.create(SECRET, new TextEncoder().encode(CONNECTION_STRING), {
     type: "generic",
     recovery: ["rewall-test-3.eth"],
+    overwrite: true,
 });
 
 console.log(`Stored a secret at ${SECRET}`);

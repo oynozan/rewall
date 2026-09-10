@@ -17,16 +17,28 @@ Every participant (human, agent, org) is an ENS name with an X25519 public key p
 
 The private key is never written to disk in plaintext. It is derived on demand:
 
-1. The wallet signs the fixed message `Rewall identity v1` (EIP-191 personal_sign).
+1. The wallet signs a fixed EIP-712 typed data payload, `IDENTITY_TYPED_DATA` in the SDK.
 2. The 65-byte signature is reduced to canonical form. The recovery byte `v` is discarded and `s` is normalized to the low half of the curve order, leaving 64 bytes of `r || s`.
 3. Those 64 bytes are hashed with SHA-256 to produce a 32-byte seed.
 4. The seed is the X25519 secret scalar directly. The public key is `crypto_scalarmult_base(seed)`.
+
+The payload is normative in full, because changing any byte changes every identity:
+
+```
+domain      { name: "Rewall", version: "1" }
+primaryType Identity
+types       Identity(string purpose,string warning)
+message     purpose  "Derive the X25519 key that unseals secrets shared with this wallet"
+            warning  "Sign this only in Rewall, whoever collects it reads every secret shared with you forever"
+```
+
+Typed data rather than a bare string for two reasons. The wallet renders the fields, so the user sees what the signature is for instead of an opaque line, and the EIP-712 domain separates Rewall from any other application asking for a signature. Neither prevents a targeted phishing site from requesting this exact payload. A signature over it **is** the identity key, and read access can never be revoked, so anyone who obtains it reads every secret ever shared with that wallet, permanently. `domain` deliberately carries no `chainId` or `verifyingContract`, so one wallet has one identity on every network.
 
 Step 4 is normative. `crypto_box_seed_keypair` hashes the seed before deriving and produces a different keypair from the same input, so a client using it cannot read secrets written by a client using scalarmult. Only `crypto_scalarmult_base` agrees with noble, stablelib and tweetnacl. Every Rewall client must derive the same way or the same wallet silently becomes two identities.
 
 Step 2 exists so that clients disagreeing about the recovery byte, or wallets returning a high-s signature, still derive one identity.
 
-MetaMask is the supported wallet. Its `personal_sign` is deterministic, so the same account always yields the same key. Other EOA wallets are expected to behave identically but are unverified. Smart-contract and MPC wallets are not deterministic and must use a generated key stored by the client instead, which forfeits the property that the key is never stored.
+MetaMask is the supported wallet. Its `eth_signTypedData_v4` is deterministic, so the same account always yields the same key. Other EOA wallets are expected to behave identically but are unverified. Smart-contract and MPC wallets are not deterministic and must use a generated key stored by the client instead, which forfeits the property that the key is never stored.
 
 The SDK, CLI and MCP server hold the derived key in memory for the life of the process and re-derive it on the next run. The browser extension is the one exception and stores it, encrypted under a passphrase, because a page action cannot prompt for a wallet signature on every use. Section 8 covers that trade.
 
@@ -45,10 +57,10 @@ Clients always look up a name's configured resolver at write time. Never hardcod
 Records on the secret subname:
 
 ```
-rewall.v          schema version, "2"
+rewall.v          schema version, "3"
 rewall.type       "generic" | "apikey" | "privkey" | "totp" | "receipt"
-rewall.enc        "aes-256-gcm"
-rewall.blob       base64 ciphertext (nonce || key commitment || ciphertext || tag)
+rewall.enc        "aes-256-gcm", checked on read
+rewall.blob       base64 ciphertext (nonce || key commitment || padded ciphertext || tag)
 rewall.cid        reserved for offchain ciphertext, unimplemented
 rewall.key.<fp>   wrapped data key for grantee with fingerprint fp, base64
 rewall.owner      the ENS name that owns this secret
@@ -95,10 +107,30 @@ Read access cannot be taken directly, but without a signature it could be obtain
 
 So the lists are signed. The owner signs a canonical payload over the secret name, a counter, the owner name and all three lists, and stores it as `rewall.auth.sig` with the counter in `rewall.auth.n`. Before any rotation a client recovers the signer and compares it to the address that holds the name in its registry, found with `UniversalResolverV2.findParentRegistry`. That address is the one thing about a secret a write delegate cannot rewrite. A tampered list fails to verify and the rotation refuses.
 
-Two limits worth stating plainly:
+One limit remains, worth stating plainly. A delegate can still roll the records back to an **older list the owner did sign**, because nothing on chain orders the counters. That can reinstate a grantee who was revoked. It cannot introduce a party the owner never authorized.
 
-- A delegate can still roll the records back to an **older list the owner did sign**, because nothing on chain orders the counters. That can reinstate a grantee who was revoked. It cannot introduce a party the owner never authorized.
-- Nothing binds a ciphertext to the name it sits on, so a delegate with write on `rewall.blob` can substitute a credential. The reader decrypts successfully and gets the wrong value. Only delegate write to a party you would trust with the secret's contents.
+A second limit used to sit here and is now closed. A ciphertext is bound to the name it sits on, so copying a blob and its wraps onto another name produces something that refuses to open. Section 3 covers how. A delegate with write on `rewall.blob` can still overwrite the value in place with a fresh secret of their own, which no cryptography can prevent, so delegate write only to a party you would trust with the secret's contents.
+
+### What is public
+
+Everything in this section except the plaintext. A public chain has no private records, so the layout above is also a disclosure list, and it needs reading as one.
+
+Public and unavoidable:
+
+- **That the secret exists**, and its label. `stripe-key.rewall.alice.eth` announces that alice uses Stripe before anyone decrypts anything. Owners who care should register an opaque label.
+- **The owner's address**, and the timing of every change. Each grant, revoke and rotation is a timestamped transaction. "alice.eth revoked bob.eth at 14:05" is public and permanent.
+- **Creation time**, which the block timestamp gives regardless of `rewall.created`.
+
+Public today, closable later:
+
+- **The access graph.** `rewall.grantees`, `rewall.subtrees`, `rewall.recovery`, `rewall.guardians` and `rewall.owner` are plaintext ENS names. Who can read what, and who is trusted to recover it, is fully legible. These records exist only so a rotation can re-wrap, and only a party who can already read needs them, so they could be encrypted under the `DEK` with `rewall.auth.sig` signing their hash instead of their contents.
+- **The reader set.** A fingerprint is `keccak256(pubkey)`, so anyone can take a list of candidate names, read each `rewall.pubkey`, hash it, and test whether that `rewall.key.<fp>` record exists. `rewall.holders` states the same thing outright. Hiding this needs fixed wrap slots (`rewall.key.0` through `rewall.key.N`) that readers trial-decrypt, with unused slots filled by random bytes indistinguishable from a real 80-byte seal. That hides both who and how many, at the cost of a fixed maximum reader count.
+- **The type and policy.** `rewall.type`, `rewall.allow` and `rewall.site` are only ever used after decryption, so they belong inside the encrypted payload.
+
+Already closed:
+
+- **Plaintext length**, hidden by the padding in section 3. Everything under 252 bytes looks identical.
+- **Which plaintext a blob holds**, and **which name it belongs to**, both bound by the commitment and the AEAD context.
 
 ---
 
@@ -106,22 +138,28 @@ Two limits worth stating plainly:
 
 ### Create
 
-1. Generate a random 32-byte data key `DEK`.
-2. Encrypt plaintext with AES-256-GCM under `DEK` with a random 12-byte nonce. Store as `rewall.blob`. There is no size threshold and no offchain path. The only ceiling is roughly 22 KB of record value per transaction, set by the EIP-7825 gas clamp, which no credential approaches.
+Two values feed every blob. `DEK` is a fresh random 32-byte data key. `context` is `namehash(secretName)`, 32 bytes, which binds the blob to the name it sits on.
 
-   The blob carries a key commitment, `SHA-256("Rewall dek v1" || DEK || nonce)`, between the nonce and the ciphertext, and readers check it before decrypting. AES-GCM is not a committing AEAD: given two chosen keys it is solvable to produce a single ciphertext that authenticates under both, which would let whoever wrote the blob hand two grantees different plaintexts from one record with neither seeing an error. The commitment fixes exactly one key per blob.
-3. For each grantee (always including the owner and at least one recovery key), wrap `DEK` to the grantee's X25519 public key using libsodium `crypto_box_seal` (ephemeral X25519 + XSalsa20-Poly1305). Store as `rewall.key.<fp>`.
-4. Write all records in one multicall.
+1. Generate `DEK`.
+2. Pad the plaintext. Four bytes of big-endian length, then the plaintext, then zeros, out to a multiple of 256 bytes. Every credential under 252 bytes therefore produces an identical blob length. Unpadding is strict and rejects a non-canonical block count, a length longer than the buffer, or padding that is not zero filled.
+3. Encrypt the padded plaintext with AES-256-GCM under `DEK`, with a random 12-byte nonce and `context` as additional authenticated data. Store as `rewall.blob`. There is no size threshold and no offchain path. The only ceiling is roughly 22 KB of record value per transaction, set by the EIP-7825 gas clamp, which no credential approaches.
+
+   The blob carries a key commitment, `SHA-256("Rewall dek v1" || context || DEK || nonce)`, between the nonce and the ciphertext, and readers check it before decrypting. It does two jobs. AES-GCM is not a committing AEAD, and given two chosen keys it is solvable to produce a single ciphertext that authenticates under both, which would let whoever wrote the blob hand two grantees different plaintexts from one record with neither seeing an error. The commitment fixes exactly one key per blob. Including `context` also fixes exactly one name, so a blob copied to a different name fails the commitment check and reports which problem it hit rather than failing opaquely inside GCM.
+4. For each grantee (always including the owner and at least one recovery key), wrap `DEK` to the grantee's X25519 public key using libsodium `crypto_box_seal` (ephemeral X25519 + XSalsa20-Poly1305). Store as `rewall.key.<fp>`.
+5. Write all records in one multicall.
+
+Creating a secret at a name that already holds one is refused unless the caller passes `overwrite: true`. When it does overwrite, wraps listed in the previous `rewall.holders` that the new secret does not keep are cleared in the same multicall, so a stale wrap cannot turn a clean denial into a decryption failure.
 
 ### Read
 
-1. Resolve the subname via the ENSv2 universal resolver and read all records in one call.
-2. Find `rewall.key.<fp>` for the caller's fingerprint, or for any subtree key the caller holds.
-3. Unseal to recover `DEK`. Decrypt `rewall.blob`. Plaintext stays in memory only.
+1. Resolve the subname via the ENSv2 universal resolver and read the records the caller needs.
+2. Refuse the secret if `rewall.v` is not the current schema version or `rewall.enc` is not `aes-256-gcm`.
+3. Find `rewall.key.<fp>` for the caller's fingerprint, or for any subtree key the caller holds.
+4. Unseal to recover `DEK`. Check the commitment, decrypt `rewall.blob`, unpad. Plaintext stays in memory only.
 
 ### Grant
 
-Wrap `DEK` to the new name's public key and write one record.
+Wrap `DEK` to the new name's public key and write one record. Granting a name that is already on the list routes through a rotation instead, because a bare re-grant would leave the old key's wrap live on an unchanged data key.
 
 ### Revoke / Rotate
 
@@ -130,9 +168,11 @@ Same operation:
 1. Generate a new `DEK`.
 2. Re-encrypt the plaintext.
 3. Re-wrap for every remaining grantee.
-4. Overwrite records; delete the revoked wrap.
+4. Overwrite records; clear the revoked wrap.
 
-Document clearly: a revoked party may already have read the old value. Rotate the underlying credential (the real API key, etc.) as well.
+`revoke` takes which kind of access to remove, because one name can hold three at once on different keys. No flag removes an individual grant, `{ subtree: true }` removes a subtree grant, `{ recovery: true }` removes a recovery entry. Revoking an individual grant from a name that is also a recovery entry is refused, since the recovery entry uses the same key and would keep reading. Revoking the last recovery entry is refused, since section 5 requires one.
+
+**Revocation is forward only, and on a public chain that is stronger than it sounds.** The transaction that granted a name is permanently in chain history and contains its wrap. The block that carried the old blob is permanently there too. Anyone holding that key can decrypt the old value from an archive node at any point in the future, whether or not they ever read it while granted. Rotation replaces the current value and cannot unpublish the previous one. Treat granting access as handing over a copy of the value as it stands, not as lending a revocable key, and rotate the underlying credential when someone leaves.
 
 ---
 
@@ -162,8 +202,9 @@ Supported recovery grantees, in implementation priority:
 1. **Recovery name.** A second ENS name backed by a cold wallet. Auto-wrapped on every create.
 2. **Guardians.** A recovery keypair whose private key is split with Shamir (k of n). Each share is sealed to a guardian's ENS name and stored on the owner's name as `rewall.guardian.<fp>`, alongside `rewall.guardians`, `rewall.recovery.pubkey` and `rewall.recovery.k`. Every secret is wrapped to the recovery public key, referenced in `rewall.recovery` as `guardians:<owner name>`. Recovery: new wallet and key, k guardians re-seal their share to the new key, reconstruct, decrypt, re-wrap.
 
-   The recovery private key is destroyed the moment the shares are made. Nobody holds it, and no fewer than k guardians can bring it back. Below k, Shamir reconstruction is unauthenticated and returns a key that is simply wrong rather than an error, so the failure shows up as a decryption that does not work. A threshold below 2 is refused, because it would let one guardian recover alone.
-3. **Org recovery.** Anything created under a parent name is also wrapped to the parent's recovery key.
+   The recovery private key is destroyed the moment the shares are made. Nobody holds it, and no fewer than k guardians can bring it back. Below k, Shamir reconstruction is unauthenticated and returns a key that is simply wrong rather than an error, so recovery never trusts a reconstruction. It rejects a share whose x coordinate is zero or that duplicates another's, tries each exact-threshold subset in turn, and accepts only a candidate whose public half matches the published `rewall.recovery.pubkey`. A threshold below 2 is refused, because it would let one guardian recover alone, and a set below 2 guardians for the same reason.
+
+Not implemented: automatically wrapping anything created under a parent name to that parent's recovery key. A parent that wants recovery on a child's secrets is named explicitly in `recovery` like any other entry.
 
 After any recovery: publish a new `rewall.pubkey`, then run rotate on every secret.
 
@@ -174,32 +215,58 @@ Because every stored blob is encrypted, key loss can never cause a leak. The onl
 ## 6. SDK surface
 
 ```ts
-const rewall = await Rewall.fromSigner(signer, { chain: "sepolia" });
+const rewall = new Rewall({
+  publicClient,        // viem, reads
+  walletClient,        // viem, writes and signatures
+  account,             // the wallet, local or injected
+  name: "alice.eth",   // which of the caller's names it acts as
+  universalResolver,
+});
 
-await rewall.publishIdentity();                       // writes rewall.pubkey on caller's name
+await rewall.identity();                              // derives the X25519 key, memory only
+await rewall.publishIdentity();                       // writes rewall.pubkey on rewall.name
 
 await rewall.create("openai.rewall.alice.eth", plaintext, {
   type: "apikey",
   grantees: ["ci.alice.eth"],
-  recovery: ["vault.alice.eth"],                       // required, at least one
+  subtreeGrantees: ["team.eth"],
+  recovery: ["vault.alice.eth"],                      // required, at least one
   allow: ["api.openai.com"],
+  overwrite: false,                                   // default, refuses to replace a live secret
 });
 
 const value = await rewall.get("openai.rewall.alice.eth");   // Uint8Array, memory only
 
 await rewall.grant("openai.rewall.alice.eth", "bob.eth");
-await rewall.grant("openai.rewall.alice.eth", "alice.eth", { subtree: true });
-await rewall.revoke("openai.rewall.alice.eth", "bob.eth");   // rotates
+await rewall.grant("openai.rewall.alice.eth", "team.eth", { subtree: true });
+
+await rewall.revoke("openai.rewall.alice.eth", "bob.eth");                      // rotates
+await rewall.revoke("openai.rewall.alice.eth", "team.eth", { subtree: true });
+await rewall.revoke("openai.rewall.alice.eth", "old.eth", { recovery: true });
+
 await rewall.rotate("openai.rewall.alice.eth", newPlaintext?);
+await rewall.reauthorize("openai.rewall.alice.eth", { recovery: [...] });       // re-signs the lists
 
-await rewall.subtree.init("alice.eth");                 // parent publishes subtree pubkey
-await rewall.subtree.distribute("alice.eth");           // seals subtree key to each subname
-await rewall.subtree.rotate("alice.eth");
+await rewall.subtree.init();                          // publishes subtree pubkey on rewall.name
+await rewall.subtree.distribute(["ci.alice.eth"]);    // seals the subtree key to each member
+await rewall.subtree.rotate();                        // bumps the version, locking every member out
+await rewall.subtree.version();
 
-await rewall.list("alice.eth");                          // reads the rewall.index record
+await rewall.guardians.init(["a.eth", "b.eth", "c.eth"], 2);   // returns the recovery grantee
+rewall.guardians.entry();                                       // "guardians:alice.eth"
+await rewall.guardians.of("alice.eth");
+await rewall.guardians.reshare("alice.eth", newOwnerPublicKey); // run by a guardian
+await rewall.guardians.recover(resealedShares, "alice.eth");    // run by the new owner
+
+await rewall.list();                                  // labels under rewall.<name>
+await rewall.unindex("openai.rewall.alice.eth");
 ```
 
-`list` does not enumerate the chain. ENSv2 exposes no way to list a registry's children, its tokens are not enumerable, and no subgraph exists for it. Instead every create and revoke rewrites a `rewall.index` text record on the namespace name, holding a comma-separated list of secret labels, in the same multicall the operation already sends. `list` reads that one record. The index is a convenience, not the source of truth, and a secret stays readable whether or not it is listed.
+`name` is a constructor argument rather than something looked up, because it is a namespace choice and not an identity. The identity is the key derived in section 1, which is the same for every name a wallet holds. `name` says where `publishIdentity` writes, where a subtree key sealed to the caller is looked for, which namespace `list` reads, and what goes into `rewall.owner`. One address can hold several names, and nothing in the protocol picks between them.
+
+Reads go through `UniversalResolverV2.resolve` once per record key. ENSv2 also supports batching them as `resolve(dnsEncodedName, multicall(bytes[]))`, which the SDK does not yet use.
+
+`list` does not enumerate the chain. ENSv2 exposes no way to list a registry's children, its tokens are not enumerable, and no subgraph exists for it. Instead every create rewrites a `rewall.index` text record on the namespace name, holding a comma-separated list of secret labels. `list` reads that one record and `unindex` removes an entry. The index is a convenience, not the source of truth, and a secret stays readable whether or not it is listed.
 
 CLI mirrors the SDK. `rewall run -- <cmd>` passes secrets to a child process through its environment. That keeps them off disk, out of shell history, and gone when the child exits. It is not confidentiality against the local machine: on Linux any process with the same user id can read `/proc/<pid>/environ`, and on Windows the child inherits a descriptor derived from the creator's token. Anyone who can run code as this user can already read the secret.
 

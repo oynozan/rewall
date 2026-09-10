@@ -2,16 +2,7 @@ import { createPublicClient, createWalletClient, http, namehash } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 import { readFileSync } from "node:fs";
-import {
-    deriveIdentity,
-    fingerprintOf,
-    toBase64,
-    fromBase64,
-    IDENTITY_MESSAGE,
-    RECORD,
-    resolverAbi,
-    readTexts,
-} from "@rewall/sdk";
+import { identityFromAccount, fingerprintOf, toBase64, fromBase64, RECORD, resolverAbi, readTexts } from "@rewall/sdk";
 import { PARTICIPANTS, UNIVERSAL_RESOLVER } from "./participants.ts";
 
 const rpc = process.env.SEPOLIA_RPC_URL;
@@ -26,7 +17,7 @@ const state = JSON.parse(readFileSync(new URL("deployments.json", import.meta.ur
 
 for (const p of PARTICIPANTS) {
     const account = mnemonicToAccount(mnemonic, { addressIndex: p.index });
-    const identity = await deriveIdentity(await account.signMessage({ message: IDENTITY_MESSAGE }));
+    const identity = await identityFromAccount(account);
     const encoded = toBase64(identity.publicKey);
 
     console.log(`\n${p.role.toUpperCase()}`);

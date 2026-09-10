@@ -2,9 +2,17 @@
 
 import { createWalletClient, http } from "viem";
 import { sepolia } from "viem/chains";
-import { Rewall, NoWrapError } from "@rewall/sdk";
+import {
+    Rewall,
+    NoWrapError,
+    SecretExistsError,
+    KeyCommitmentError,
+    openSecret,
+    splitNames,
+    RECORD,
+} from "@rewall/sdk";
 import { NAMESPACE_LABEL, SUBTREE_MEMBERS, SUBTREE_PARENT_ROLE, UNIVERSAL_RESOLVER } from "./participants.ts";
-import { publicClient, byRole, accountFor, ensureSecretName } from "./chain.ts";
+import { publicClient, byRole, accountFor, ensureSecretName, readRecords, writeRecords } from "./chain.ts";
 
 const LABEL = process.env.REWALL_SECRET_LABEL ?? "stripe";
 const SECRET = "sk_live_not_a_real_stripe_key_7c1d";
@@ -60,6 +68,7 @@ await ownerClient.create(secretName, new TextEncoder().encode(SECRET), {
     grantees: [`${grantee.label}.eth`],
     recovery: [`${recovery.label}.eth`],
     allow: ["api.stripe.com"],
+    overwrite: true,
 });
 console.log("");
 
@@ -147,5 +156,57 @@ await ownerClient.grant(secretName, `${grantee.label}.eth`);
 if (text(await granteeClient.get(secretName)) !== ROTATED) fail("re-granting the individual did not work");
 pass("individual grant restored");
 
+/* Creating over a live secret takes saying so */
+
+await ownerClient
+    .create(secretName, new TextEncoder().encode("overwritten"), { recovery: [`${recovery.label}.eth`] })
+    .then(() => fail("create silently replaced a live secret"))
+    .catch((e) => (e instanceof SecretExistsError ? pass("create refuses to replace a live secret") : fail(String(e))));
+
+/* A blob is bound to its name, so copying every record to another name does not move the secret */
+
+const otherName = `${LABEL}-copy.${NAMESPACE_LABEL}.${owner.label}.eth`;
+if (await ensureSecretName(owner.index, owner.label!, `${LABEL}-copy`)) console.log(`registered ${otherName}`);
+
+const lifted = await readRecords(secretName, [
+    RECORD.blob,
+    RECORD.version,
+    RECORD.encryption,
+    RECORD.wrap((await ownerClient.identity()).fingerprint),
+]);
+await writeRecords(
+    owner.index,
+    otherName,
+    Object.entries(lifted).map(([key, value]) => ({ key, value })),
+);
+
+await openSecret(lifted, await ownerClient.identity(), otherName)
+    .then(() => fail("a blob copied to another name still opened"))
+    .catch((e) =>
+        e instanceof KeyCommitmentError ? pass("a blob copied to another name refuses to open") : fail(String(e)),
+    );
+
+/* Revoking a recovery entry, which used to be impossible */
+
+await ownerClient.grant(secretName, `${recovery.label}.eth`);
+await ownerClient.reauthorize(secretName, { recovery: [`${recovery.label}.eth`, `${grantee.label}.eth`] });
+await ownerClient.rotate(secretName);
+
+await ownerClient
+    .revoke(secretName, `${grantee.label}.eth`, { recovery: true })
+    .then(() => pass("a recovery entry can be revoked"))
+    .catch((e) => fail(String(e)));
+
+if (splitNames((await readRecords(secretName, [RECORD.recovery]))[RECORD.recovery]).includes(`${grantee.label}.eth`)) {
+    fail("the revoked recovery entry is still listed");
+}
+pass("the revoked recovery entry is gone from the list");
+
+await ownerClient
+    .revoke(secretName, `${recovery.label}.eth`, { recovery: true })
+    .then(() => fail("the last recovery entry was revoked, stranding the secret"))
+    .catch(() => pass("revoking the last recovery entry is refused"));
+
+await ownerClient.reauthorize(secretName, { recovery: [`${recovery.label}.eth`] });
 await ownerClient.rotate(secretName, new TextEncoder().encode(SECRET));
 console.log(`\n${passed} checks passed against real Sepolia`);
