@@ -8,9 +8,9 @@ importers:
 
   .:
     dependencies:
-      '@rewall/sdk':
-        specifier: link:../sdk
-        version: link:../sdk
+      libsodium-wrappers:
+        specifier: ^0.8.4
+        version: 0.8.4
       viem:
         specifier: ^2.56.3
         version: 2.56.3(typescript@7.0.2)
@@ -193,6 +193,12 @@ packages:
     peerDependencies:
       ws: '*'
 
+  libsodium-wrappers@0.8.4:
+    resolution: {integrity: sha512-mu8aAWucZjTB5O/BtGXtW4e1agy7uHxNYG7zPthmmD1jU43LCDmSWZLN4JhflbdPXj3yDO4lxM1O9hLDgIOXDw==}
+
+  libsodium@0.8.4:
+    resolution: {integrity: sha512-lMcYaRi0zcs7tarATsQUYC7rstliIXZuoq0c6zXSgNtSNtdvBgkSegjWhpMJAXzKX3SUSwIp7+zEsob+j3LuRw==}
+
   ox@0.14.44:
     resolution: {integrity: sha512-O54qXXHEk4ySamMSyBpI0AeBegS5frxU6+LA6Jb9Sf6kMOxcTNaxYmwZfpOu22DIQsdKfgQxHq8EsAGaoBQScA==}
     peerDependencies:
@@ -332,6 +338,12 @@ snapshots:
   isows@1.0.7(ws@8.21.0):
     dependencies:
       ws: 8.21.0
+
+  libsodium-wrappers@0.8.4:
+    dependencies:
+      libsodium: 0.8.4
+
+  libsodium@0.8.4: {}
 
   ox@0.14.44(typescript@7.0.2):
     dependencies:

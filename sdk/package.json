@@ -1,0 +1,31 @@
+{
+    "name": "@rewall/sdk",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@9.12.2",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc -b",
+        "test": "node --experimental-strip-types --test src/*.test.ts",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "dependencies": {
+        "libsodium-wrappers": "^0.8.4",
+        "viem": "^2.56.3"
+    },
+    "devDependencies": {
+        "@types/node": "^22.20.2",
+        "prettier": "^3.9.6",
+        "typescript": "^7.0.2"
+    }
+}

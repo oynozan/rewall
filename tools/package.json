@@ -1,20 +1,27 @@
 {
-  "name": "@rewall/tools",
-  "private": true,
-  "type": "module",
-  "packageManager": "pnpm@9.12.2",
-  "scripts": {
-    "wallets": "node --env-file=.env --experimental-strip-types wallets.ts",
-    "bootstrap": "node --env-file=.env --experimental-strip-types bootstrap.ts",
-    "deploy": "node --env-file=.env --experimental-strip-types deploy.ts",
-    "verify": "node --env-file=.env --experimental-strip-types verify.ts",
-    "status": "node --env-file=.env --experimental-strip-types status.ts"
-  },
-  "dependencies": {
-    "viem": "2.56.3"
-  },
-  "devDependencies": {
-    "@types/node": "22.15.14",
-    "typescript": "5.9.3"
-  }
+    "name": "@rewall/tools",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@9.12.2",
+    "scripts": {
+        "wallets": "node --env-file=.env --experimental-strip-types wallets.ts",
+        "bootstrap": "node --env-file=.env --experimental-strip-types bootstrap.ts",
+        "deploy": "node --env-file=.env --experimental-strip-types deploy.ts",
+        "verify": "node --env-file=.env --experimental-strip-types verify.ts",
+        "status": "node --env-file=.env --experimental-strip-types status.ts",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "identity": "node --env-file=.env --experimental-strip-types identity.ts",
+        "secret": "node --env-file=.env --experimental-strip-types secret.ts",
+        "delegate": "node --env-file=.env --experimental-strip-types delegate.ts"
+    },
+    "dependencies": {
+        "@rewall/sdk": "link:../sdk",
+        "viem": "^2.56.3"
+    },
+    "devDependencies": {
+        "@types/node": "^22.20.2",
+        "prettier": "^3.9.6",
+        "typescript": "^7.0.2"
+    }
 }

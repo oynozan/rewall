@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "target": "ES2022",
+        "lib": ["ES2023", "DOM"],
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "strict": true,
+        "declaration": true,
+        "skipLibCheck": true,
+        "verbatimModuleSyntax": true,
+        "isolatedModules": true,
+        "noUncheckedIndexedAccess": true,
+        "outDir": "dist",
+        "rootDir": "src",
+        "noEmitOnError": true,
+        "allowImportingTsExtensions": true,
+        "rewriteRelativeImportExtensions": true
+    },
+    "include": ["src"],
+    "exclude": ["src/**/*.test.ts"]
+}

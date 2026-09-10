@@ -6,6 +6,9 @@ Permissionless secret infrastructure on ENSv2 Sepolia. `SPEC.md` is the source o
 
 - Origin `https://github.com/oynozan/rewall`.
 - Each component owns its folder and its dependencies. No workspace, no root `package.json`, no root `node_modules`.
+- Every component folder gets its own `.prettierrc` and `.prettierignore`, plus `format` and `format:check` scripts. Indentation is 4 spaces, never 2. Copy the config from `tools/` when adding a folder.
+- Never write a version into `package.json` by hand. Run `pnpm add <pkg>` and take whatever latest stable resolves to. To change an existing pin, `pnpm remove` it first, otherwise `pnpm add` keeps the old specifier.
+- `sdk/` is shared by relative link, `"@rewall/sdk": "link:../sdk"`. It must be built before a consumer runs, since consumers import `dist`.
 - `tools/` holds the setup and inspection scripts. `web/` is the Next.js dApp. `sdk/` does not exist yet.
 - Clients per SPEC: TypeScript SDK (core, everything builds on it), CLI, MCP server, browser extension.
 - Design docs and TODO live outside the repo, in this project's Claude storage under `docs/`. Never add them here.
