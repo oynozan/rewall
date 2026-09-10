@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { TYPE_LABELS, TEST_OWNER, type SecretType } from "@/src/lib/vault";
 import { FadeDots, FadeIn } from "./amicro";
@@ -53,6 +53,17 @@ export function SecretsTable({ compact = false, initialType = "all" }: { compact
     const [sort, setSort] = useState("newest");
     const [selected, setSelected] = useState<string[]>([]);
     const [status, setStatus] = useState("");
+    const searchInput = useRef<HTMLInputElement>(null);
+    useEffect(() => {
+        const focusSearch = (event: KeyboardEvent) => {
+            const target = event.target as HTMLElement;
+            if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey || target.matches("input, textarea, select, [contenteditable='true']") || document.querySelector("dialog[open]")) return;
+            event.preventDefault();
+            searchInput.current?.focus();
+        };
+        document.addEventListener("keydown", focusSearch);
+        return () => document.removeEventListener("keydown", focusSearch);
+    }, []);
     const secrets = (vault?.secrets ?? [])
         .filter(
             (secret) =>
@@ -87,6 +98,7 @@ export function SecretsTable({ compact = false, initialType = "all" }: { compact
                     <Icon name="folder_search" size={18} />
                     <span className="sr-only">Search secrets</span>
                     <input
+                        ref={searchInput}
                         placeholder="Search secrets…"
                         value={query}
                         onChange={(event) => setQuery(event.target.value)}

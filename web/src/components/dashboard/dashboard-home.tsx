@@ -150,6 +150,7 @@ export function DashboardHome() {
                         <Image
                             src="/illustrations/quiet-key.png"
                             className="peace-illustration"
+                            loading="eager"
                             width={208}
                             height={208}
                             alt="A small dithered key resting on a folded envelope"

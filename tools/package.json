@@ -14,7 +14,8 @@
         "identity": "node --env-file=.env --experimental-strip-types identity.ts",
         "secret": "node --env-file=.env --experimental-strip-types secret.ts",
         "delegate": "node --env-file=.env --experimental-strip-types delegate.ts",
-        "rotate": "node --env-file=.env --experimental-strip-types rotate.ts"
+        "rotate": "node --env-file=.env --experimental-strip-types rotate.ts",
+        "subtree": "node --env-file=.env --experimental-strip-types subtree.ts"
     },
     "dependencies": {
         "@rewall/sdk": "link:../sdk",

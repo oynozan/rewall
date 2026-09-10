@@ -6,12 +6,13 @@ export type Grantee = { fingerprint: string; publicKey: Uint8Array };
 
 // Distinguishable from a broken lookup, because an unset ENS text record reads as an empty string
 export class NoWrapError extends Error {
-    readonly fingerprint: string;
+    readonly fingerprints: string[];
 
-    constructor(fingerprint: string, secretName?: string) {
-        super(`no ${RECORD.wrap(fingerprint)} record${secretName ? ` on ${secretName}` : ""}`);
+    constructor(fingerprints: string[], secretName?: string) {
+        const tried = fingerprints.map((fp) => RECORD.wrap(fp)).join(", ");
+        super(`no wrap for ${tried}${secretName ? ` on ${secretName}` : ""}`);
         this.name = "NoWrapError";
-        this.fingerprint = fingerprint;
+        this.fingerprints = fingerprints;
     }
 }
 
@@ -72,25 +73,34 @@ export async function planSecret(input: {
 
 /* Read */
 
+// Accepts several identities so a subname can present its own key and any subtree key it holds
 export async function recoverDek(
     records: Record<string, string>,
-    identity: Identity,
+    holder: Identity | Identity[],
     secretName?: string,
 ): Promise<Uint8Array> {
-    const wrapped = records[RECORD.wrap(identity.fingerprint)];
-    if (!wrapped) throw new NoWrapError(identity.fingerprint, secretName);
-    return unseal(fromBase64(wrapped), identity.publicKey, identity.secretKey);
+    const candidates = Array.isArray(holder) ? holder : [holder];
+
+    for (const candidate of candidates) {
+        const wrapped = records[RECORD.wrap(candidate.fingerprint)];
+        if (wrapped) return unseal(fromBase64(wrapped), candidate.publicKey, candidate.secretKey);
+    }
+
+    throw new NoWrapError(
+        candidates.map((c) => c.fingerprint),
+        secretName,
+    );
 }
 
 export async function openSecret(
     records: Record<string, string>,
-    identity: Identity,
+    holder: Identity | Identity[],
     secretName?: string,
 ): Promise<Uint8Array> {
     const blob = records[RECORD.blob];
     if (!blob) throw new MissingBlobError(secretName);
 
-    const dek = await recoverDek(records, identity, secretName);
+    const dek = await recoverDek(records, holder, secretName);
     try {
         return await decrypt(fromBase64(blob), dek);
     } finally {
@@ -102,10 +112,10 @@ export async function openSecret(
 
 export async function planGrant(
     records: Record<string, string>,
-    identity: Identity,
+    holder: Identity | Identity[],
     grantee: Grantee,
 ): Promise<SecretRecords> {
-    const dek = await recoverDek(records, identity);
+    const dek = await recoverDek(records, holder);
     try {
         return [{ key: RECORD.wrap(grantee.fingerprint), value: toBase64(await seal(dek, grantee.publicKey)) }];
     } finally {

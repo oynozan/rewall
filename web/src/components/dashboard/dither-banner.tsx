@@ -36,7 +36,7 @@ export function DitherBanner() {
                         Math.sin(u * 13 + v * 6 + bend + time * 0.12) +
                         Math.cos(v * 9 - u * 4 + time * 0.18) * 0.62 +
                         Math.sin(u * 23 - v * 12 + time * 0.08) * 0.3;
-                    const quiet = Math.min(1, Math.max(0, (u - 0.14) * 1.45 + (0.45 - v) * 0.5));
+                    const quiet = Math.min(1, Math.max(0, (u - 0.28) * 2.1 + (0.3 - v) * 0.8));
                     const intensity = Math.max(0, Math.min(0.87, (field + 0.65) * 0.32)) * quiet;
                     const on = intensity > (BAYER[(y % 8) * 8 + (x % 8)] + 0.5) / 64;
                     const offset = (y * width + x) * 4;

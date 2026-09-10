@@ -68,7 +68,7 @@ test("NoWrapError names the fingerprint and the secret", async () => {
         () => openSecret(records, stranger, "openai.rewall.alice.eth"),
         (e: NoWrapError) => {
             assert.equal(e.name, "NoWrapError");
-            assert.equal(e.fingerprint, stranger.fingerprint);
+            assert.deepEqual(e.fingerprints, [stranger.fingerprint]);
             assert.match(e.message, /openai\.rewall\.alice\.eth/);
             return true;
         },

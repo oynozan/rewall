@@ -5,7 +5,8 @@
     "namespaceRegistry": "0xC2aF679BAC5d8314543aA1672e3730634Ab059cD"
   },
   "rewall-test-2": {
-    "resolver": "0x49dCD834318F1B546cd4cfffa5466362caD8eBC5"
+    "resolver": "0x49dCD834318F1B546cd4cfffa5466362caD8eBC5",
+    "registry": "0xc00b88f844d081e82b16496d98de9ca65ee7ae05"
   },
   "rewall-test-3": {
     "resolver": "0x0f2CE311d2f0eD7AFc521568AcD4f82AEee828A8"

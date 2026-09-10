@@ -13,6 +13,13 @@ export const PARTICIPANTS = [
     { role: "recovery", index: 3, label: "rewall-test-3" },
 ];
 
+// Members of the grantee's subtree, funded by nobody because the parent writes both of their records
+export const SUBTREE_PARENT_ROLE = "grantee";
+export const SUBTREE_MEMBERS = [
+    { label: "ci", index: 4 },
+    { label: "deploy", index: 5 },
+];
+
 // Reserves the Rewall subtree so a participant keeps <secret>.<their name>.eth for their own use
 export const NAMESPACE_LABEL = "rewall";
 
