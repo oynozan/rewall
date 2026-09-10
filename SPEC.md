@@ -34,7 +34,7 @@ Key fingerprint: the first 8 bytes of `keccak256(pubkey)`, rendered as 16 lowerc
 
 ## 2. Storage layout
 
-One secret is one ENSv2 subname under the owner's namespace, for example `openai.rewall.acme.eth`, deployed on ENSv2 Sepolia with its own permissioned resolver to store an OpenAI API key.
+One secret is one ENSv2 subname under the owner's namespace, for example `openai.rewall.alice.eth`, deployed on ENSv2 Sepolia with its own permissioned resolver to store an OpenAI API key.
 
 Records on the secret subname:
 
@@ -101,9 +101,9 @@ Document clearly: a revoked party may already have read the old value. Rotate th
 
 ## 4. Subtree grants
 
-1. The owner of `acme.eth` generates a subtree X25519 keypair and publishes the public half as `rewall.subtree.pubkey` on `acme.eth`.
-2. When a subname is created under `acme.eth`, the parent seals the subtree private key to that subname's `rewall.pubkey` and writes it on the subname as `rewall.subtree.key`.
-3. Granting a secret to "acme.eth and all subnames" means wrapping `DEK` to the subtree public key, stored as `rewall.key.<subtree-fp>`.
+1. The owner of `alice.eth` generates a subtree X25519 keypair and publishes the public half as `rewall.subtree.pubkey` on `alice.eth`.
+2. When a subname is created under `alice.eth`, the parent seals the subtree private key to that subname's `rewall.pubkey` and writes it on the subname as `rewall.subtree.key`.
+3. Granting a secret to "alice.eth and all subnames" means wrapping `DEK` to the subtree public key, stored as `rewall.key.<subtree-fp>`.
 4. Every current subname unseals `rewall.subtree.key` to get the subtree private key, then unseals the secret's wrap.
 5. Future subnames receive the subtree key when the parent creates them.
 6. Removing one subname: rotate the subtree key and re-distribute to the remaining subnames.
@@ -135,25 +135,25 @@ const rewall = await Rewall.fromSigner(signer, { chain: "sepolia" });
 
 await rewall.publishIdentity();                       // writes rewall.pubkey on caller's name
 
-await rewall.create("openai.rewall.acme.eth", plaintext, {
+await rewall.create("openai.rewall.alice.eth", plaintext, {
   type: "apikey",
-  grantees: ["ci.acme.eth"],
-  recovery: ["vault.acme.eth"],                       // required, at least one
+  grantees: ["ci.alice.eth"],
+  recovery: ["vault.alice.eth"],                       // required, at least one
   allow: ["api.openai.com"],
 });
 
-const value = await rewall.get("openai.rewall.acme.eth");   // Uint8Array, memory only
+const value = await rewall.get("openai.rewall.alice.eth");   // Uint8Array, memory only
 
-await rewall.grant("openai.rewall.acme.eth", "bob.eth");
-await rewall.grant("openai.rewall.acme.eth", "acme.eth", { subtree: true });
-await rewall.revoke("openai.rewall.acme.eth", "bob.eth");   // rotates
-await rewall.rotate("openai.rewall.acme.eth", newPlaintext?);
+await rewall.grant("openai.rewall.alice.eth", "bob.eth");
+await rewall.grant("openai.rewall.alice.eth", "alice.eth", { subtree: true });
+await rewall.revoke("openai.rewall.alice.eth", "bob.eth");   // rotates
+await rewall.rotate("openai.rewall.alice.eth", newPlaintext?);
 
-await rewall.subtree.init("acme.eth");                 // parent publishes subtree pubkey
-await rewall.subtree.distribute("acme.eth");           // seals subtree key to each subname
-await rewall.subtree.rotate("acme.eth");
+await rewall.subtree.init("alice.eth");                 // parent publishes subtree pubkey
+await rewall.subtree.distribute("alice.eth");           // seals subtree key to each subname
+await rewall.subtree.rotate("alice.eth");
 
-await rewall.list("acme.eth");                          // secrets under a namespace
+await rewall.list("alice.eth");                          // secrets under a namespace
 ```
 
 CLI mirrors the SDK. `rewall run -- <cmd>` injects secrets into a child process environment only.

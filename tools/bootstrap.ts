@@ -1,16 +1,10 @@
 // Separate from the product loop because commit-reveal costs MIN_COMMITMENT_AGE of real wall clock
 
-import { createPublicClient, createWalletClient, http, parseAbi, formatUnits, formatEther, toHex } from "viem";
+import { createPublicClient, createWalletClient, http, parseAbi, formatUnits, toHex } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
+import { ETH_REGISTRAR, MOCK_USDC, ZERO_ADDRESS, ZERO_BYTES32, PARTICIPANTS } from "./participants.ts";
 
-const ETH_REGISTRAR = "0xa88553f454b77203b0d036a05c894d555eaaa2cc";
-const ETH_REGISTRY = "0xbdc85dd5b15d7ecb354cd7cb6f2c50b4f2c4f0e2";
-const MOCK_USDC = "0x768f42455a2d082e23ceef7d51e5787c82d67a39";
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-const ZERO_BYTES32 = "0x0000000000000000000000000000000000000000000000000000000000000000";
-
-const LABEL = process.env.REWALL_ORG_LABEL ?? "rewall";
 const DURATION = 31536000n;
 
 const registrarAbi = parseAbi([
@@ -40,80 +34,87 @@ const publicClient = createPublicClient({ chain: sepolia, transport: http(rpc) }
 const chainId = await publicClient.getChainId();
 if (chainId !== sepolia.id) throw new Error(`refusing to run against chain ${chainId}, expected Sepolia ${sepolia.id}`);
 
-const owner = mnemonicToAccount(mnemonic, { addressIndex: 0 });
-const wallet = createWalletClient({ account: owner, chain: sepolia, transport: http(rpc) });
-
-async function send(request: any) {
-  const hash = await wallet.writeContract({ account: owner, chain: sepolia, ...request });
-  const receipt = await publicClient.waitForTransactionReceipt({ hash });
-  if (receipt.status !== "success") throw new Error(`transaction reverted ${hash}`);
-  return receipt;
+function walletFor(index: number) {
+  const account = mnemonicToAccount(mnemonic!, { addressIndex: index });
+  const client = createWalletClient({ account, chain: sepolia, transport: http(rpc) });
+  return {
+    account,
+    async send(request: any) {
+      const hash = await client.writeContract({ account, chain: sepolia, ...request });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") throw new Error(`transaction reverted ${hash}`);
+      return receipt;
+    },
+  };
 }
 
-console.log(`owner ${owner.address}`);
-console.log(`label ${LABEL}.eth\n`);
+/* Commit */
 
-/* Availability */
+const pending = [];
 
-const available = await publicClient.readContract({
-  address: ETH_REGISTRAR, abi: registrarAbi, functionName: "isAvailable", args: [LABEL],
-});
+for (const p of PARTICIPANTS) {
+  if (!p.label) continue;
 
-if (!available) {
-  console.log(`${LABEL}.eth is already registered, nothing to do`);
+  const { account, send } = walletFor(p.index);
+  const available = await publicClient.readContract({
+    address: ETH_REGISTRAR, abi: registrarAbi, functionName: "isAvailable", args: [p.label],
+  });
+
+  if (!available) {
+    console.log(`${p.label}.eth already registered, skipping`);
+    continue;
+  }
+
+  const [base, premium] = await publicClient.readContract({
+    address: ETH_REGISTRAR, abi: registrarAbi, functionName: "getRegisterPrice", args: [p.label, DURATION, MOCK_USDC],
+  });
+  const price = base + premium;
+
+  const balance = await publicClient.readContract({
+    address: MOCK_USDC, abi: erc20Abi, functionName: "balanceOf", args: [account.address],
+  });
+  if (balance < price) {
+    await send({ address: MOCK_USDC, abi: erc20Abi, functionName: "mint", args: [account.address, price - balance] });
+  }
+
+  const allowance = await publicClient.readContract({
+    address: MOCK_USDC, abi: erc20Abi, functionName: "allowance", args: [account.address, ETH_REGISTRAR],
+  });
+  // Allowance from a fresh address is zero and register does safeTransferFrom, so this is not optional
+  if (allowance < price) {
+    await send({ address: MOCK_USDC, abi: erc20Abi, functionName: "approve", args: [ETH_REGISTRAR, price] });
+  }
+
+  const secret = toHex(crypto.getRandomValues(new Uint8Array(32)));
+  const fields = [p.label, account.address, secret, ZERO_ADDRESS, ZERO_ADDRESS, DURATION] as const;
+  const commitment = await publicClient.readContract({
+    address: ETH_REGISTRAR, abi: registrarAbi, functionName: "makeCommitment", args: [...fields, ZERO_BYTES32],
+  });
+
+  await send({ address: ETH_REGISTRAR, abi: registrarAbi, functionName: "commit", args: [commitment] });
+  console.log(`${p.role.padEnd(9)} ${p.label}.eth  committed  ${formatUnits(price, 6)} USDC`);
+  pending.push({ ...p, fields, send });
+}
+
+if (pending.length === 0) {
+  console.log("\nnothing to register");
   process.exit(0);
 }
 
-const [base, premium] = await publicClient.readContract({
-  address: ETH_REGISTRAR, abi: registrarAbi, functionName: "getRegisterPrice", args: [LABEL, DURATION, MOCK_USDC],
-});
-const price = base + premium;
-console.log(`price ${formatUnits(price, 6)} USDC for ${DURATION / 86400n} days`);
+/* Reveal */
 
-/* Payment */
-
-const balance = await publicClient.readContract({
-  address: MOCK_USDC, abi: erc20Abi, functionName: "balanceOf", args: [owner.address],
-});
-if (balance < price) {
-  console.log(`minting ${formatUnits(price - balance, 6)} USDC`);
-  await send({ address: MOCK_USDC, abi: erc20Abi, functionName: "mint", args: [owner.address, price - balance] });
-}
-
-const allowance = await publicClient.readContract({
-  address: MOCK_USDC, abi: erc20Abi, functionName: "allowance", args: [owner.address, ETH_REGISTRAR],
-});
-// Allowance from a fresh address is zero and register does safeTransferFrom, so this is not optional
-if (allowance < price) {
-  console.log("approving the registrar");
-  await send({ address: MOCK_USDC, abi: erc20Abi, functionName: "approve", args: [ETH_REGISTRAR, price] });
-}
-
-/* Commit and reveal */
-
-const secret = toHex(crypto.getRandomValues(new Uint8Array(32)));
-const fields = [LABEL, owner.address, secret, ZERO_ADDRESS, ZERO_ADDRESS, DURATION] as const;
-
-const commitment = await publicClient.readContract({
-  address: ETH_REGISTRAR, abi: registrarAbi, functionName: "makeCommitment", args: [...fields, ZERO_BYTES32],
-});
-
-console.log(`committing ${commitment}`);
-await send({ address: ETH_REGISTRAR, abi: registrarAbi, functionName: "commit", args: [commitment] });
-
+// Commitments stay valid for MAX_COMMITMENT_AGE, so all of them share one wait
 const minAge = await publicClient.readContract({ address: ETH_REGISTRAR, abi: registrarAbi, functionName: "MIN_COMMITMENT_AGE" });
 const waitMs = Number(minAge) * 1000 + 15000;
-console.log(`waiting ${waitMs / 1000}s for the commitment to mature`);
+console.log(`\nwaiting ${waitMs / 1000}s for ${pending.length} commitment(s) to mature`);
 await new Promise((r) => setTimeout(r, waitMs));
 
-// Every field must match the commitment or this reverts without saying which one differed
-console.log("registering");
-const receipt = await send({
-  address: ETH_REGISTRAR, abi: registrarAbi, functionName: "register",
-  args: [...fields, MOCK_USDC, ZERO_BYTES32],
-});
-
-console.log(`\nregistered in block ${receipt.blockNumber}`);
-console.log(`gas used ${receipt.gasUsed}`);
-console.log(`tx https://sepolia.etherscan.io/tx/${receipt.transactionHash}`);
-console.log(`owner ETH remaining ${formatEther(await publicClient.getBalance({ address: owner.address }))}`);
+for (const p of pending) {
+  // Every field must match the commitment or this reverts without saying which one differed
+  const receipt = await p.send({
+    address: ETH_REGISTRAR, abi: registrarAbi, functionName: "register",
+    args: [...p.fields, MOCK_USDC, ZERO_BYTES32],
+  });
+  console.log(`${p.role.padEnd(9)} ${p.label}.eth  registered  block ${receipt.blockNumber}  gas ${receipt.gasUsed}`);
+  console.log(`          https://sepolia.etherscan.io/tx/${receipt.transactionHash}`);
+}

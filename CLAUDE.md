@@ -4,8 +4,27 @@ Permissionless secret infrastructure on ENSv2 Sepolia. `SPEC.md` is the source o
 
 ## Repo
 
-- Monorepo. Origin `https://github.com/oynozan/rewall`.
+- Origin `https://github.com/oynozan/rewall`.
+- Each component owns its folder and its dependencies. No workspace, no root `package.json`, no root `node_modules`.
+- `tools/` holds the setup and inspection scripts. `web/` is the Next.js dApp. `sdk/` does not exist yet.
 - Clients per SPEC: TypeScript SDK (core, everything builds on it), CLI, MCP server, browser extension.
+- Design docs and TODO live outside the repo, in this project's Claude storage under `docs/`. Never add them here.
+
+## Names
+
+Every participant is their own org. A secret is `<secret>.rewall.<participant>.eth`, so `openai.rewall.alice.eth`. The `rewall` label reserves the subtree, leaving `openai.alice.eth` free for the participant's own use.
+
+Registered on ENSv2 Sepolia, all expiring 2027-09-10, each held by its own wallet at the given mnemonic index.
+
+```
+rewall.eth          project name, held, never used in tests
+rewall-test-1.eth   owner      index 0
+rewall-test-2.eth   grantee    index 1
+rewall-test-3.eth   recovery   index 3
+(no name)           stranger   index 2, read permission is cryptographic so it needs none
+```
+
+`tools/participants.ts` is the single source for these. Never invent placeholder org names.
 
 ## Rules
 
