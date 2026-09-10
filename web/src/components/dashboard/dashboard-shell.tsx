@@ -130,7 +130,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         const reader = new Rewall({
             publicClient: vaultClient,
             walletClient: wallet,
-            account: { signMessage: ({ message }: { message: string }) => wallet.signMessage({ message }) },
+            account: account as Address,
             name: vault.owner,
             universalResolver: UNIVERSAL_RESOLVER,
         });

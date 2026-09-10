@@ -30,7 +30,8 @@ export type Vault = { owner: string; namespace: string; identityPublished: boole
 
 export const vaultClient = createPublicClient({
     chain: sepolia,
-    transport: http("https://ethereum-sepolia-rpc.publicnode.com", { timeout: 15000, retryCount: 1 }),
+    // Batched because a single rotation read fans out to more than a dozen concurrent eth_calls
+    transport: http("https://ethereum-sepolia-rpc.publicnode.com", { timeout: 15000, retryCount: 1, batch: true }),
 });
 
 export function ownerName(input: string) {
@@ -78,7 +79,7 @@ export async function readSecret(input: string): Promise<Secret> {
         RECORD.grantees,
         RECORD.site,
     ]);
-    if (!["1", SCHEMA_VERSION].includes(records[RECORD.version]))
+    if (records[RECORD.version] !== SCHEMA_VERSION)
         throw new Error("No supported Rewall secret was found at this name.");
     const created = Number(records[RECORD.created]);
     return {

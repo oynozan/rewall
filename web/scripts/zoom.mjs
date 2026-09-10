@@ -9,7 +9,10 @@ await mkdir(".next/visual", { recursive: true });
 try {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 120000 });
     await page.waitForTimeout(9000);
-    await page.locator(selector).first().screenshot({ path: `.next/visual/${name}.png` });
+    await page
+        .locator(selector)
+        .first()
+        .screenshot({ path: `.next/visual/${name}.png` });
     console.log("ok");
 } finally {
     await browser.close();

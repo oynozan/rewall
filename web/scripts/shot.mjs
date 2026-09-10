@@ -16,7 +16,9 @@ try {
     await page.waitForTimeout(9000);
     await page.evaluate(() => document.fonts.ready);
     await page.screenshot({ path: `.next/visual/${name}.png`, fullPage: true });
-    console.log(JSON.stringify({ errors, scrollWidth: await page.evaluate(() => document.documentElement.scrollWidth), width }));
+    console.log(
+        JSON.stringify({ errors, scrollWidth: await page.evaluate(() => document.documentElement.scrollWidth), width }),
+    );
 } finally {
     await browser.close();
 }

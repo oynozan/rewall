@@ -138,7 +138,7 @@ try {
     await page.getByRole("checkbox", { name: "Select all visible secrets" }).check();
     await page.getByRole("button", { name: "Copy names", exact: true }).click();
     assert.match(await page.evaluate(() => navigator.clipboard.readText()), /\.rewall\.rewall-test-1\.eth/);
-    await page.getByRole("button", { name: "Clear", exact: true }).click();
+    await page.getByRole("button", { name: "Clear selection", exact: true }).click();
     await noAsciiIcons("The secrets page");
     await screenshot("secrets-desktop");
     await page.getByRole("button", { name: "Find a secret", exact: false }).click();
@@ -151,6 +151,7 @@ try {
         timeout: 60000,
     });
     await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).not.toBeVisible();
     checks.push("Secrets route, type filter, sort, selection, name validation, and live direct lookup work");
 
     await page.locator(".sidebar-account").click();

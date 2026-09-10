@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { TOTP } from "otpauth";
 import { parseOtp } from "@/src/lib/otp";
+import { explain } from "@/src/lib/errors";
 import { useWorkspace } from "./dashboard-shell";
 import { MOCKS_ENABLED, mockOtpAccounts, mockOtpBytes } from "../../../scripts/dashboard-mocks";
 
@@ -59,12 +60,9 @@ export function PrivateDataProvider({ children }: { children: React.ReactNode })
             keys.current.get(name)?.secret.bytes.fill(0);
             keys.current.set(name, otp);
             setAccounts(Object.fromEntries(keys.current));
-        } catch {
+        } catch (failure) {
             if (current === generation.current.value) {
-                setError({
-                    name,
-                    message: "Couldn’t unlock this account. Check wallet access and its TOTP configuration.",
-                });
+                setError({ name, message: explain(failure) });
             }
         } finally {
             if (current === generation.current.value) {

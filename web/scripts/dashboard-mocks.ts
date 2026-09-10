@@ -1,7 +1,9 @@
+import { SCHEMA_VERSION } from "@rewall/sdk";
 import type { Secret, Vault } from "../src/lib/vault";
 import type { TransferVolume } from "../src/components/dashboard/volume-chart";
 
-export const MOCKS_ENABLED = process.env.NODE_ENV === "development";
+const preference = process.env.NEXT_PUBLIC_REWALL_MOCKS;
+export const MOCKS_ENABLED = preference === "on" || (preference !== "off" && process.env.NODE_ENV === "development");
 const owner = "demo.eth";
 const created = Date.UTC(2026, 8, 10, 12) / 1000;
 
@@ -13,7 +15,7 @@ function secret(label: string, type: string, daysAgo = 0): Secret {
         encryption: "aes-256-gcm",
         created: created - daysAgo * 86400,
         allow: [],
-        version: "2",
+        version: SCHEMA_VERSION,
         owner,
         grantees: [],
         site: "",

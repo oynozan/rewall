@@ -12,7 +12,28 @@ try {
     await page.goto("http://127.0.0.1:3000/dashboard", { waitUntil: "networkidle", timeout: 120000 });
     await page.evaluate(() => document.fonts.ready);
     await page.screenshot({ path: ".next/visual/home-mobile.png", fullPage: true });
-    console.log(JSON.stringify(await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth, overflow: [...document.querySelectorAll("body *")].filter((element) => { const rect = element.getBoundingClientRect(); return rect.width > 0 && rect.right > innerWidth + 1; }).map((element) => ({ tag: element.tagName, class: element.className, width: element.getBoundingClientRect().width, right: element.getBoundingClientRect().right })).slice(0, 25) })), null, 2));
+    console.log(
+        JSON.stringify(
+            await page.evaluate(() => ({
+                width: innerWidth,
+                scrollWidth: document.documentElement.scrollWidth,
+                overflow: [...document.querySelectorAll("body *")]
+                    .filter((element) => {
+                        const rect = element.getBoundingClientRect();
+                        return rect.width > 0 && rect.right > innerWidth + 1;
+                    })
+                    .map((element) => ({
+                        tag: element.tagName,
+                        class: element.className,
+                        width: element.getBoundingClientRect().width,
+                        right: element.getBoundingClientRect().right,
+                    }))
+                    .slice(0, 25),
+            })),
+            null,
+            2,
+        ),
+    );
 } finally {
     await browser.close();
 }

@@ -8,7 +8,11 @@
         "start": "next start",
         "lint": "eslint",
         "format": "prettier --write .",
-        "format:check": "prettier --check ."
+        "format:check": "prettier --check .",
+        "check:wallet": "node --env-file=../tools/.env scripts/check-wallet.mjs",
+        "check:dashboard": "node scripts/check-dashboard.mjs",
+        "check:mock": "node scripts/check-mock-dashboard.mjs",
+        "check:otp": "node scripts/check-otp.mjs"
     },
     "dependencies": {
         "@rewall/sdk": "link:../sdk",
