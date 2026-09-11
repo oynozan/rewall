@@ -20,7 +20,8 @@
         "guardians": "node --env-file=.env --experimental-strip-types guardians.ts",
         "escalation": "node --env-file=.env --experimental-strip-types escalation.ts",
         "sponsor": "node --env-file=.env --experimental-strip-types sponsor.ts",
-        "sponsor-key": "node --env-file=.env --experimental-strip-types sponsor-key.ts"
+        "sponsor-key": "node --env-file=.env --experimental-strip-types sponsor-key.ts",
+        "totp": "node --env-file=.env --experimental-strip-types totp.ts"
     },
     "dependencies": {
         "@rewall/sdk": "link:../sdk",

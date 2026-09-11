@@ -70,7 +70,7 @@ rewall.recovery   comma-separated recovery entries, each a name or "guardians:<o
 rewall.holders    comma-separated fingerprints that currently have a wrap
 rewall.auth.n     authorization counter, incremented on every list change
 rewall.auth.sig   owner's signature over the lists, checked before any rotation
-rewall.site       hostname pattern, totp type only
+rewall.site       one exact lowercase hostname, totp type only, unauthenticated
 rewall.allow      comma-separated allowed hosts, enforced by the MCP tool process
 rewall.created    unix timestamp
 ```
@@ -79,7 +79,9 @@ rewall.created    unix timestamp
 
 `rewall.holders` exists for the opposite direction. A rotation must clear the wraps of everyone dropped, and it cannot enumerate them either. Re-deriving fingerprints from the names does not work, because a name whose key changed since the last write now resolves to a different fingerprint and the old wrap would be left behind, alive, on an unchanged data key.
 
-`rewall.owner` exists so a rotation performed by anyone other than the owner still keeps the owner as a holder. All of these are written on every create and every rotation, including when empty, so dropping the last grantee clears the list.
+`rewall.owner` exists so a rotation performed by anyone other than the owner still keeps the owner as a holder. All of these are written on every create and every rotation, including when empty, so dropping the last grantee clears the list. `rewall.site` and `rewall.allow` are written the same way, so replacing a secret cannot leave a predecessor's hostname or allowlist behind.
+
+`rewall.site` is **not covered by the owner's signature**, so a party with write delegation on that key can repoint it, and no reader can tell. Signing it would not close that today, because nothing on the read path verifies anything: `get` checks only `rewall.v` and `rewall.enc`, and the authorization check runs on grant and rotate, both writes. Closing it needs verification on read, which the encrypted `rewall.acl` work in "What is public" has to build anyway. Until then a client that acts on `rewall.site` treats it as a hint, and an empty value means never act rather than match anything.
 
 Records on a participant name:
 
@@ -222,10 +224,11 @@ Because every stored blob is encrypted, key loss can never cause a leak. The onl
 ```ts
 const rewall = new Rewall({
   publicClient,        // viem, reads
-  walletClient,        // viem, writes and signatures
-  account,             // the wallet, local or injected
+  walletClient,        // viem, optional, writes and signatures
+  account,             // the wallet, local or injected, optional with walletClient
   name: "alice.eth",   // which of the caller's names it acts as
   universalResolver,
+  identity,            // optional, a key derived elsewhere, never wiped by the SDK
 });
 
 await rewall.identity();                              // derives the X25519 key, memory only
@@ -237,8 +240,11 @@ await rewall.create("openai.rewall.alice.eth", plaintext, {
   subtreeGrantees: ["team.eth"],
   recovery: ["vault.alice.eth"],                      // required, at least one
   allow: ["api.openai.com"],
+  site: "github.com",                                 // totp only, one exact hostname
   overwrite: false,                                   // default, refuses to replace a live secret
 });
+
+await rewall.setSite("github.rewall.alice.eth", "accounts.github.com");  // corrects a typo without rotating
 
 const value = await rewall.get("openai.rewall.alice.eth");   // Uint8Array, memory only
 
@@ -291,10 +297,14 @@ The model never receives plaintext. The tool process enforces `rewall.allow` (ho
 
 ## 8. OTP extension
 
-- TOTP seeds are secrets of type `totp`, stored as the standard `otpauth://` URI, with `rewall.site` set to the hostname.
+- TOTP seeds are secrets of type `totp`, stored as the standard `otpauth://` URI, with `rewall.site` set to the hostname. Parsing lives in `@rewall/sdk/2fa`, a subpath deliberately outside the barrel so a consumer can import it without viem or libsodium.
 - The extension holds the user's identity key after one wallet connection, encrypted under a passphrase in extension storage, unlocked per session. This is the documented exception to section 1. Filling a code is a page action that cannot prompt for a wallet signature every time, so the extension trades the never-stored property for usability. Anyone who reads extension storage and knows the passphrase gets the identity key and every secret it can unseal.
+- **Hostname matching is exact.** `rewall.site` holds one lowercase hostname as visited, full subdomain kept, with no `www.` added or stripped, and it is compared by string equality against `new URL(url).hostname`, which is already punycode and already excludes port and path. `normalizeSite` in the SDK is the one place a hostname is canonicalized, and it refuses rather than guesses whenever the URL parser would silently rewrite a host. An empty `rewall.site` means never fill, never match anything.
+- The cost of exactness is that a site redirecting between its apex and `www` refuses to fill on one of them. That is the right trade for a control whose only job is refusing lookalikes, and the refusal opens the menu, where the code is one click away.
+- Filling a code hands it to whatever page receives it, and a TOTP is replayable inside its step. Because `rewall.site` is unauthenticated (section 2), a client that fills on a hostname match must treat a value that changed since the last unlock as something to confirm rather than act on silently.
 - Plan A: on click, read the active tab hostname, find the matching secret, compute the code, fill the field with `autocomplete="one-time-code"` or a six-digit input.
 - Plan B (build first): popup listing every decryptable TOTP secret with live codes and countdowns, one click to fill or copy.
+- Nothing auto-submits. Neither of the two password managers a user would compare this against does, and a filled code that submits itself turns one mistaken match into an irreversible authentication attempt.
 
 ---
 
