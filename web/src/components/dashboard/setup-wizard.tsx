@@ -9,6 +9,7 @@ import { explain } from "@/src/lib/errors";
 import { newRecoveryPhrase, phraseRows, recoveryIdentity } from "@/src/lib/recovery-kit";
 import { useIdentity } from "./identity";
 import { Glyph } from "./ui";
+import styles from "./setup-wizard.module.css";
 
 type Step = "gas" | "name" | "recovery" | "finishing" | "done";
 
@@ -20,9 +21,14 @@ async function post(path: string, body: unknown) {
         body: JSON.stringify(body),
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw Object.assign(new Error(payload.error || "That did not work."), payload);
+    if (!response.ok)
+        throw Object.assign(new Error(payload.error || "That did not work."), payload, { fromServer: true });
     return payload;
 }
+
+// The API already answers in sentences, so running those through explain would replace them with a shrug
+const say = (failure: unknown) =>
+    (failure as { fromServer?: boolean })?.fromServer ? (failure as Error).message : explain(failure);
 
 const cheer = () => {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -30,7 +36,7 @@ const cheer = () => {
 };
 
 export function SetupWizard({ address, onDone }: { address: string; onDone: (name: string) => void }) {
-    const { unlock, publicKey } = useIdentity();
+    const { unlock } = useIdentity();
     const [step, setStep] = useState<Step>("gas");
     const [busy, setBusy] = useState("");
     const [error, setError] = useState("");
@@ -50,7 +56,7 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
             if (!result.already) cheer();
             setStep("name");
         } catch (failure) {
-            setError(explain(failure));
+            setError(say(failure));
         } finally {
             setBusy("");
         }
@@ -63,7 +69,9 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
         setError("");
         setBusy("Waiting for your signature…");
         try {
-            if (!(await unlock())) throw new Error("Rewall needs one signature to derive your key.");
+            // Taken from the return value, because the state setter has not landed by the time this posts
+            const identityKey = await unlock();
+            if (!identityKey) throw new Error("Rewall needs one signature to derive your key.");
 
             setBusy("Making your recovery key…");
             const words = newRecoveryPhrase();
@@ -74,7 +82,7 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
                 phase: "start",
                 address,
                 label,
-                publicKey,
+                publicKey: identityKey,
                 recoveryPublicKey: toBase64(recovery.publicKey),
             });
 
@@ -82,7 +90,7 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
             setPhrase(words);
             setStep("recovery");
         } catch (failure) {
-            setError(explain(failure));
+            setError(say(failure));
         } finally {
             setBusy("");
         }
@@ -112,7 +120,7 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
             } catch (failure) {
                 const wait = (failure as { retryAfter?: number }).retryAfter;
                 if (!wait) {
-                    setError(explain(failure));
+                    setError(say(failure));
                     setStep("recovery");
                     return;
                 }
@@ -132,20 +140,24 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
     };
 
     return (
-        <section className="wizard" aria-label="Set up Rewall">
-            <header className="wizard-head">
+        <section className={styles.wizard} aria-label="Set up Rewall">
+            <header className={styles.head}>
                 <span className="tour-classifier">Getting started</span>
                 <span className="mono">{["gas", "name", "recovery"].indexOf(step) + 1 || 4} / 4</span>
             </header>
 
             {step === "gas" && (
-                <div className="wizard-step">
+                <div className={styles.step}>
                     <h2>Some Sepolia ETH, on us</h2>
                     <p>
                         Rewall stores secrets on a real test network, so every change costs a little gas. This is free
                         test money and has no value anywhere.
                     </p>
-                    <button className="button primary" onClick={() => void drip()} disabled={Boolean(busy)}>
+                    <button
+                        className={`button primary ${styles.cta}`}
+                        onClick={() => void drip()}
+                        disabled={Boolean(busy)}
+                    >
                         {busy || "Send me test ETH"}
                         {!busy && <Glyph name="chevron_right" size={16} />}
                     </button>
@@ -153,10 +165,10 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
             )}
 
             {step === "name" && (
-                <form className="wizard-step" onSubmit={claim}>
+                <form className={styles.step} onSubmit={claim}>
                     <h2>Pick your name</h2>
                     <p>This becomes your vault. Everything you store lives under it, as {label || "yourname"}.eth.</p>
-                    <div className="wizard-name">
+                    <div className={styles.name}>
                         <input
                             aria-label="Your ENS name"
                             value={label}
@@ -173,25 +185,25 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
                     <p className="field-help">
                         Five characters or more. We pay for the registration, so all you do is sign once.
                     </p>
-                    <button className="button primary" disabled={Boolean(busy) || label.length < 5}>
+                    <button className={`button primary ${styles.cta}`} disabled={Boolean(busy) || label.length < 5}>
                         {busy || "Claim it"}
                     </button>
                 </form>
             )}
 
             {(step === "recovery" || step === "finishing") && (
-                <div className="wizard-step">
+                <div className={styles.step}>
                     <h2>Your recovery phrase</h2>
                     <p>
                         Lose your wallet and these 24 words are the only way back into your secrets. Rewall never sees
                         them and cannot reset them for you.
                     </p>
-                    <ol className="recovery-phrase mono" aria-label="Recovery phrase">
+                    <ol className={`${styles.phrase} mono`} aria-label="Recovery phrase">
                         {phraseRows(phrase).map((row, index) => (
                             <li key={index}>{row.join(" ")}</li>
                         ))}
                     </ol>
-                    <div className="wizard-actions">
+                    <div className={styles.actions}>
                         <button
                             className="button"
                             type="button"
@@ -203,12 +215,12 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
                             Download
                         </button>
                     </div>
-                    <label className="wizard-confirm">
+                    <label className={styles.confirm}>
                         <input type="checkbox" checked={saved} onChange={(event) => setSaved(event.target.checked)} />I
                         have saved it somewhere safe
                     </label>
                     <button
-                        className="button primary"
+                        className={`button primary ${styles.cta}`}
                         onClick={() => void finish()}
                         disabled={!saved || step === "finishing"}
                     >
@@ -228,10 +240,10 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
             )}
 
             {step === "done" && (
-                <div className="wizard-step">
+                <div className={styles.step}>
                     <h2>{label}.eth is yours</h2>
                     <p>The name, its resolver and its registry are all held by your wallet. Nothing is held by us.</p>
-                    <button className="button primary" onClick={() => onDone(`${label}.eth`)}>
+                    <button className={`button primary ${styles.cta}`} onClick={() => onDone(`${label}.eth`)}>
                         Store your first secret
                     </button>
                 </div>

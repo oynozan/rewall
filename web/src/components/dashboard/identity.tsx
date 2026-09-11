@@ -26,7 +26,9 @@ type Session = {
     error: string;
     fingerprint: string;
     publicKey: string;
-    unlock: () => Promise<boolean>;
+    // Returns the base64 public key rather than a flag, because a caller that unlocks usually needs it
+    // in the same tick and the state setter below has not landed yet
+    unlock: () => Promise<string>;
     lock: () => void;
     decrypt: (secretName: string) => Promise<Uint8Array>;
     write: <T>(action: (client: Rewall) => Promise<T>) => Promise<T>;
@@ -106,7 +108,7 @@ export function IdentityProvider({
     }, [address, getProvider, name]);
 
     const unlock = useCallback(async () => {
-        if (client.current) return true;
+        if (identity.current) return toBase64(identity.current.publicKey);
         setUnlocking(true);
         setError("");
         try {
@@ -127,13 +129,14 @@ export function IdentityProvider({
 
             client.current = live;
             identity.current = derived;
+            const encoded = toBase64(derived.publicKey);
             setFingerprint(derived.fingerprint);
-            setPublicKey(toBase64(derived.publicKey));
+            setPublicKey(encoded);
             setUnlocked(true);
-            return true;
+            return encoded;
         } catch (failure) {
             setError(explain(failure));
-            return false;
+            return "";
         } finally {
             setUnlocking(false);
         }

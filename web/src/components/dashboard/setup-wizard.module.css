@@ -1,0 +1,133 @@
+/* Kept out of dashboard.css so onboarding can land without touching the shared stylesheet */
+
+.wizard {
+    width: 100%;
+    max-width: 520px;
+    margin: 48px auto;
+    border: 1px solid var(--border-hover);
+    border-radius: var(--radius);
+    background: var(--background);
+}
+
+.head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 22px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.step {
+    display: flex;
+    flex-direction: column;
+    padding: 28px 22px 26px;
+    animation: reveal 160ms ease-out;
+}
+
+.step h2 {
+    font-family: var(--font-lexend-deca), sans-serif;
+    font-size: 23px;
+    font-weight: 200;
+    margin-bottom: 14px;
+}
+
+.step > p {
+    font-size: 14px;
+    line-height: 1.75;
+    color: #a8a89c;
+    margin-bottom: 22px;
+}
+
+/* The look comes from the global button rule, this only places it */
+.cta {
+    align-self: flex-start;
+    gap: 6px;
+}
+
+/* Name */
+
+.name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 0 12px;
+}
+
+.name:focus-within {
+    border-color: #929288;
+}
+
+.name input {
+    flex: 1;
+    min-width: 0;
+    padding: 11px 0;
+    font-size: 15px;
+    border: 0;
+    background: none;
+    color: var(--foreground);
+}
+
+.name input:focus {
+    outline: none;
+}
+
+.name span {
+    color: var(--muted);
+    font-size: 15px;
+}
+
+/* Recovery phrase */
+
+.phrase {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 16px 18px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    line-height: 2;
+    overflow-wrap: anywhere;
+}
+
+.phrase li {
+    list-style: none;
+}
+
+.actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.confirm {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: #a8a89c;
+    margin-bottom: 22px;
+    cursor: pointer;
+}
+
+.confirm input {
+    accent-color: #e5e5de;
+    width: 15px;
+    height: 15px;
+}
+
+@media (max-width: 620px) {
+    .wizard {
+        margin: 20px auto;
+    }
+    .step {
+        padding: 22px 16px;
+    }
+}
