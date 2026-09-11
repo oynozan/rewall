@@ -11,6 +11,7 @@ Permissionless secret infrastructure on ENSv2 Sepolia. `SPEC.md` is the source o
 - `sdk/` is shared by relative link, `"@rewall/sdk": "link:../sdk"`. It must be built before a consumer runs, since consumers import `dist`.
 - `sdk/` is `@rewall/sdk`, the core. `tools/` holds the setup and inspection scripts and `.env`. `examples/` holds the runnable examples. `web/` is the Next.js dApp. `rail/` is an original reimplementation of the private transfer service for local testing only, never a Rewall component. The upstream it was written against is Chainlink's demo, cloned into the gitignored `sandbox/`.
 - Clients per SPEC: TypeScript SDK (core, everything builds on it), CLI, MCP server, browser extension.
+- `mcp/` is the SPEC section 7 MCP server. `ledger/` enrols an agent into a Ledger Key Ring over ENS, and is optional hardening rather than a dependency of anything.
 - Design docs and TODO live outside the repo, in this project's Claude storage under `docs/`. Never add them here.
 
 ## Names

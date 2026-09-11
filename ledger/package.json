@@ -1,0 +1,25 @@
+{
+    "name": "@rewall/ledger",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@9.12.2",
+    "scripts": {
+        "speculos": "docker start speculos",
+        "enroll": "node --env-file=../tools/.env --experimental-strip-types src/enroll.ts",
+        "agent": "node --env-file=../tools/.env --experimental-strip-types src/agent.ts",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "dependencies": {
+        "@ledgerhq/device-management-kit": "^1.9.0",
+        "@ledgerhq/device-transport-kit-speculos": "^1.2.1",
+        "@ledgerhq/device-trusted-app-kit-ledger-keyring-protocol": "^0.5.0",
+        "@rewall/sdk": "link:..\\sdk",
+        "reflect-metadata": "^0.2.2",
+        "rxjs": "^7.8.2",
+        "viem": "^2.56.3"
+    },
+    "devDependencies": {
+        "prettier": "^3.9.6"
+    }
+}
