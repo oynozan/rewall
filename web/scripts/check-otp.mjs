@@ -2,6 +2,7 @@
 import { build } from "esbuild";
 import { chromium, expect } from "@playwright/test";
 import { artifacts } from "./lib/artifacts.mjs";
+import { skipTour } from "./lib/tour.mjs";
 import { writeFile } from "node:fs/promises";
 
 const origin = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
@@ -40,6 +41,7 @@ const browser = await chromium.launch({
 const context = await browser.newContext({ viewport: { width: 980, height: 560 } });
 await context.grantPermissions(["clipboard-read", "clipboard-write"]);
 const page = await context.newPage();
+await skipTour(page);
 const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
 try {

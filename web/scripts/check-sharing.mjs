@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { artifacts } from "./lib/artifacts.mjs";
+import { skipTour } from "./lib/tour.mjs";
 import { headlessWallet, attachWallet } from "./lib/wallet.mjs";
 
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
@@ -22,6 +23,7 @@ const browser = await chromium.launch({ headless: true, ...(executablePath ? { e
 async function open(addressIndex, expectAddress) {
     const context = await browser.newContext({ viewport: { width: 1512, height: 1100 } });
     const page = await context.newPage();
+    await skipTour(page);
     const wallet = headlessWallet({ mnemonic: process.env.REWALL_TEST_MNEMONIC, addressIndex });
     await attachWallet(page, wallet);
 
@@ -47,10 +49,10 @@ try {
     /* The owner grants */
 
     const owner = await open(0, "0xD2F8");
-    await owner.page.locator(".workspace-switcher").click();
+    await owner.page.locator(".workspace-switcher, .sidebar-vault").click();
     await owner.page.getByLabel("Your own ENS name").fill(OWNER);
     await owner.page.getByRole("button", { name: "This one is mine", exact: true }).click();
-    await expect(owner.page.locator(".workspace-switcher small")).toHaveText("Yours", { timeout: 60000 });
+    await expect(owner.page.locator(".workspace-switcher small, .sidebar-vault small")).toHaveText("Yours", { timeout: 60000 });
 
     await openSecret(owner.page);
     const people = owner.page.locator(".access-group").filter({ hasText: "People" });

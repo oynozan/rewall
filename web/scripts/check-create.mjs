@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { artifacts } from "./lib/artifacts.mjs";
+import { skipTour } from "./lib/tour.mjs";
 import { createPublicClient, http, parseAbi } from "viem";
 import { sepolia } from "viem/chains";
 import { dnsEncode, registryLookupAbi } from "@rewall/sdk";
@@ -46,6 +47,7 @@ const pass = (message) => checks.push(message);
 
 const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
 const page = await browser.newPage({ viewport: { width: 1512, height: 1100 } });
+await skipTour(page);
 const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
 
@@ -79,10 +81,10 @@ try {
     await dialog().getByText("Rewall Test Wallet").first().click();
     await expect(page.locator(".sidebar-account")).toContainText("0xD2F8", { timeout: 60000 });
 
-    await page.locator(".workspace-switcher").click();
+    await page.locator(".workspace-switcher, .sidebar-vault").click();
     await page.getByLabel("Your own ENS name").fill(OWNER);
     await page.getByRole("button", { name: "This one is mine", exact: true }).click();
-    await expect(page.locator(".workspace-switcher small")).toHaveText("Yours", { timeout: 60000 });
+    await expect(page.locator(".workspace-switcher small, .sidebar-vault small")).toHaveText("Yours", { timeout: 60000 });
     pass("the owner adopts their vault and the store action appears");
 
     /* Store a real secret */
@@ -94,6 +96,10 @@ try {
     await page.getByLabel("Name", { exact: true }).fill(LABEL);
     await expect(page.locator(".create-target")).toHaveText(`${LABEL}.rewall.${OWNER}`);
     await page.getByLabel("Value", { exact: true }).fill(VALUE);
+
+    // Name, value and type are the whole form, so naming a different recovery holder is behind a disclosure
+    await expect(page.getByLabel("Recovery name", { exact: true })).toBeHidden();
+    await page.getByRole("button", { name: "Recovery and sharing" }).click();
     await page.getByLabel("Recovery name", { exact: true }).fill(RECOVERY);
     await shot("create-1-form");
 

@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { artifacts } from "./lib/artifacts.mjs";
+import { skipTour } from "./lib/tour.mjs";
 import { headlessWallet, attachWallet } from "./lib/wallet.mjs";
 
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
@@ -25,6 +26,7 @@ async function open(addressIndex, expectAddress, path = "/dashboard/recovery") {
     const context = await browser.newContext({ viewport: { width: 1512, height: 1100 } });
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     const page = await context.newPage();
+    await skipTour(page);
     const wallet = headlessWallet({ mnemonic: process.env.REWALL_TEST_MNEMONIC, addressIndex });
     await attachWallet(page, wallet);
 

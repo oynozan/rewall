@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { artifacts } from "./lib/artifacts.mjs";
+import { skipTour } from "./lib/tour.mjs";
 import { headlessWallet, attachWallet } from "./lib/wallet.mjs";
 
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
@@ -14,6 +15,7 @@ const pass = (message) => checks.push(message);
 
 const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
 const page = await browser.newPage({ viewport: { width: 1512, height: 1100 } });
+await skipTour(page);
 const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
 
@@ -116,9 +118,9 @@ try {
     /* No reverse record is set, so the vault is someone else's until the registry says otherwise */
 
     await closePanel();
-    await expect(page.locator(".workspace-switcher small")).toHaveText("Read only");
+    await expect(page.locator(".workspace-switcher small, .sidebar-vault small")).toHaveText("Read only");
 
-    await page.locator(".workspace-switcher").click();
+    await page.locator(".workspace-switcher, .sidebar-vault").click();
     await page.getByLabel("Your own ENS name").fill("rewall-test-2.eth");
     await page.getByRole("button", { name: "This one is mine", exact: true }).click();
     await expect(page.getByText("That name is not held by the connected wallet.")).toBeVisible({ timeout: 60000 });
@@ -126,8 +128,8 @@ try {
 
     await page.getByLabel("Your own ENS name").fill("rewall-test-1.eth");
     await page.getByRole("button", { name: "This one is mine", exact: true }).click();
-    await expect(page.locator(".workspace-switcher small")).toHaveText("Yours", { timeout: 60000 });
-    await expect(page.locator(".workspace-switcher strong")).toHaveText("rewall-test-1.eth");
+    await expect(page.locator(".workspace-switcher small, .sidebar-vault small")).toHaveText("Yours", { timeout: 60000 });
+    await expect(page.locator(".workspace-switcher strong, .sidebar-vault strong")).toHaveText("rewall-test-1.eth");
     await shot("unlock-3-own-vault");
     pass("a name the wallet does hold is adopted and the vault is marked as theirs");
 

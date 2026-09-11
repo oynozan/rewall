@@ -7,6 +7,7 @@ import { createPublicClient, http, keccak256, toBytes } from "viem";
 import { sepolia } from "viem/chains";
 import { ownerAddressOf, readTexts, RECORD } from "@rewall/sdk";
 import { artifacts } from "./lib/artifacts.mjs";
+import { skipTour } from "./lib/tour.mjs";
 import { headlessWallet, attachWallet } from "./lib/wallet.mjs";
 
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
@@ -23,6 +24,7 @@ const pass = (message) => checks.push(message);
 
 const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
 const page = await browser.newPage({ viewport: { width: 1280, height: 1100 } });
+await skipTour(page);
 const errors = [];
 const sent = [];
 page.on("pageerror", (error) => errors.push(error.message));
