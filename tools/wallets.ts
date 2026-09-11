@@ -7,10 +7,10 @@ const ENV_PATH = new URL(".env", import.meta.url);
 
 // The owner sends nearly every transaction, so it carries most of the balance
 const ROLES = [
-    { index: 0, name: "owner", target: parseEther("0.01") },
-    { index: 1, name: "grantee", target: parseEther("0.002") },
+    { index: 0, name: "owner", target: parseEther("0.08") },
+    { index: 1, name: "grantee", target: parseEther("0.02") },
     { index: 2, name: "stranger", target: 0n },
-    { index: 3, name: "recovery", target: parseEther("0.001") },
+    { index: 3, name: "recovery", target: parseEther("0.01") },
 ];
 
 /* Mnemonic */

@@ -29,7 +29,17 @@ async function open(addressIndex, expectAddress, path = "/dashboard/recovery") {
     await attachWallet(page, wallet);
 
     await page.goto(`${baseURL}${path}`, { waitUntil: "domcontentloaded", timeout: 120000 });
-    await page.locator(".sidebar-account").click();
+
+    // The sidebar is in the static HTML, so a click lands before React attaches and is simply lost.
+    // Retry until the drawer actually opens, which is the only reliable signal that hydration is done
+    await expect(page.getByRole("heading", { name: "Recovery", exact: true })).toBeVisible({ timeout: 90000 });
+    const drawer = page.locator("dialog.workspace-dialog[open]");
+    for (let attempt = 0; attempt < 30; attempt++) {
+        await page.locator(".sidebar-account").click();
+        if (await drawer.count()) break;
+        await page.waitForTimeout(1000);
+    }
+    await expect(drawer).toHaveCount(1, { timeout: 30000 });
     await page
         .getByRole("dialog")
         .getByRole("button", { name: /Connect a wallet/i })
