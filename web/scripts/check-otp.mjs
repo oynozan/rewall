@@ -1,11 +1,11 @@
 ﻿import assert from "node:assert/strict";
 import { build } from "esbuild";
 import { chromium, expect } from "@playwright/test";
-import { mkdir, writeFile } from "node:fs/promises";
+import { artifacts } from "./lib/artifacts.mjs";
+import { writeFile } from "node:fs/promises";
 
 const origin = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
-const output = "artifacts/dashboard";
-await mkdir(output, { recursive: true });
+const output = await artifacts();
 const bundled = await build({
     stdin: {
         contents: `

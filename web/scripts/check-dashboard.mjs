@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
+import { artifacts } from "./lib/artifacts.mjs";
 
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
@@ -10,8 +11,7 @@ await context.grantPermissions(["clipboard-read", "clipboard-write"]);
 const page = await context.newPage();
 const errors = [];
 const checks = [];
-const output = "artifacts/dashboard";
-await mkdir(output, { recursive: true });
+const output = await artifacts();
 page.on("pageerror", (error) => errors.push(error.message));
 
 /* Icon controls */

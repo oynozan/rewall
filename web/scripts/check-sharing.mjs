@@ -1,14 +1,13 @@
 // Grants and revokes a real secret across two wallets, against real Sepolia
 
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
+import { artifacts } from "./lib/artifacts.mjs";
 import { headlessWallet, attachWallet } from "./lib/wallet.mjs";
 
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
-const output = "artifacts/dashboard";
-await mkdir(output, { recursive: true });
+const output = await artifacts();
 
 const OWNER = "rewall-test-1.eth";
 const GRANTEE = "rewall-test-2.eth";
