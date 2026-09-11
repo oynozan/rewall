@@ -4,7 +4,6 @@ import { useWorkspace } from "./dashboard-shell";
 import { usePrivateData } from "./private-data";
 import { SegmentedProgress } from "./ui";
 import { VolumeChart } from "./volume-chart";
-import { MOCKS_ENABLED, mockTransfers, mockVolume } from "../../../scripts/dashboard-mocks";
 
 export function TerminalOverview() {
     const { vault, busy, error } = useWorkspace();
@@ -62,13 +61,11 @@ export function TerminalOverview() {
                     </div>
                     <div>
                         <span className="mono">Shared</span>
-                        <strong className="mono">
-                            {MOCKS_ENABLED ? mockTransfers.shared.length.toString().padStart(2, "0") : "—"}
-                        </strong>
+                        <strong className="mono">—</strong>
                     </div>
                 </div>
             </section>
-            <VolumeChart volume={MOCKS_ENABLED ? mockVolume : null} />
+            <VolumeChart volume={null} />
         </div>
     );
 }

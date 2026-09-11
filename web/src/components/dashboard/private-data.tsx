@@ -5,7 +5,6 @@ import type { TOTP } from "otpauth";
 import { parseOtp } from "@/src/lib/otp";
 import { explain } from "@/src/lib/errors";
 import { useIdentity } from "./identity";
-import { MOCKS_ENABLED, mockOtpAccounts, mockOtpBytes } from "../../../scripts/dashboard-mocks";
 
 type PrivateData = {
     accounts: Record<string, TOTP>;
@@ -25,19 +24,11 @@ export function PrivateDataProvider({ children }: { children: React.ReactNode })
     const generation = useRef({ value: 0 });
     const inFlight = useRef(false);
 
+    // Decrypted seeds die with the provider, which remounts on any wallet or vault change
     useEffect(() => {
         const retained = keys.current;
         const lifecycle = generation.current;
-        const preview = MOCKS_ENABLED
-            ? window.setTimeout(() => {
-                  mockOtpAccounts.forEach(({ secret }) =>
-                      retained.set(secret.name, parseOtp(mockOtpBytes(secret.name))),
-                  );
-                  setAccounts(Object.fromEntries(retained));
-              }, 0)
-            : undefined;
         return () => {
-            clearTimeout(preview);
             lifecycle.value++;
             retained.forEach((otp) => otp.secret.bytes.fill(0));
             retained.clear();
@@ -51,7 +42,7 @@ export function PrivateDataProvider({ children }: { children: React.ReactNode })
         setPending(name);
         setError(null);
         try {
-            const bytes = MOCKS_ENABLED ? mockOtpBytes(name) : await decrypt(name);
+            const bytes = await decrypt(name);
             if (current !== generation.current.value) {
                 bytes.fill(0);
                 return;

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useWorkspace } from "./dashboard-shell";
 import { usePrivateData } from "./private-data";
 import { OtpCells } from "./otp-code";
-import { Icon } from "./ui";
+import { Icon, TableColumns } from "./ui";
 import { FadeIn } from "./amicro";
 
 export function TwoFactorTable({ compact = false, query = "" }: { compact?: boolean; query?: string }) {
@@ -18,15 +18,12 @@ export function TwoFactorTable({ compact = false, query = "" }: { compact?: bool
         <div className="secrets-browser otp-browser" aria-busy={busy}>
             <div className="table-scroll">
                 <table className="otp-table">
-                    <colgroup>
-                        <col className="otp-account-col" />
-                        <col className="otp-code-col" />
-                        <col className="otp-expiry-col" />
-                        <col className="otp-action-col" />
-                    </colgroup>
+                    <TableColumns />
                     <thead>
                         <tr>
-                            <th scope="col">Account</th>
+                            <th scope="col" colSpan={2}>
+                                Account
+                            </th>
                             <th scope="col">Code</th>
                             <th scope="col">Expires in</th>
                             <th scope="col">
@@ -37,7 +34,7 @@ export function TwoFactorTable({ compact = false, query = "" }: { compact?: bool
                     <tbody>
                         {entries.map((secret) => (
                             <tr key={secret.name}>
-                                <td>
+                                <td colSpan={2}>
                                     <div className="secret-name">
                                         <span className="secret-icon">
                                             <Icon name="authenticator" />

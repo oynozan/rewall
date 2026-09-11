@@ -2,7 +2,6 @@ import { createPublicClient, decodeFunctionResult, encodeFunctionData, http, nam
 import { normalize } from "viem/ens";
 import { sepolia } from "viem/chains";
 import { dnsEncode, RECORD, resolverAbi, universalResolverAbi, SCHEMA_VERSION } from "@rewall/sdk";
-import { MOCKS_ENABLED, mockVault, mockTransfers } from "../../scripts/dashboard-mocks";
 
 export const TEST_OWNER = "rewall-test-1.eth";
 export const UNIVERSAL_RESOLVER = "0x4a1817d13e9cf196f471725176355c1234b63c70";
@@ -64,13 +63,6 @@ async function readRecords(name: string, keys: string[]) {
 
 export async function readSecret(input: string): Promise<Secret> {
     const name = ownerName(input);
-    if (MOCKS_ENABLED) {
-        const entry = [...mockVault.secrets, ...mockTransfers.shared.map((row) => row.secret)].find(
-            (secret) => secret.name === name,
-        );
-        if (!entry) throw new Error("No secret at this name in the mock preview.");
-        return entry;
-    }
     const records = await readRecords(name, [
         RECORD.version,
         RECORD.type,
@@ -99,11 +91,6 @@ export async function readSecret(input: string): Promise<Secret> {
 }
 
 export async function readVault(input: string): Promise<Vault> {
-    if (MOCKS_ENABLED) {
-        if (![TEST_OWNER, mockVault.owner].includes(ownerName(input)))
-            throw new Error(`Open ${TEST_OWNER} in the mock preview.`);
-        return mockVault;
-    }
     const owner = ownerName(input);
     const namespace = `rewall.${owner}`;
     const [index, identity] = await Promise.all([

@@ -6,7 +6,6 @@ import { sepolia } from "viem/chains";
 import { Rewall, ownerAddressOf, wipe, type Identity } from "@rewall/sdk";
 import { UNIVERSAL_RESOLVER, vaultClient } from "@/src/lib/vault";
 import { explain } from "@/src/lib/errors";
-import { MOCKS_ENABLED } from "../../../scripts/dashboard-mocks";
 
 const IDLE_LOCK_MS = 15 * 60 * 1000;
 const verifiedKey = (address: string) => `rewall.signer-verified.${address.toLowerCase()}`;
@@ -155,8 +154,7 @@ export function useCapabilities(vaultOwner: string | undefined, address: string)
 
     useEffect(() => {
         let active = true;
-        // The mock preview is a layout fixture, and reaching the chain here would break its no-RPC guarantee
-        if (!vaultOwner || !address || MOCKS_ENABLED) return;
+        if (!vaultOwner || !address) return;
 
         void ownerAddressOf(vaultClient, UNIVERSAL_RESOLVER, vaultOwner)
             .then((owner) => {

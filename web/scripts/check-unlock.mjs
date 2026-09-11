@@ -64,7 +64,7 @@ try {
     /* One deliberate unlock */
 
     await page.locator(".sidebar-account").click();
-    await page.getByRole("button", { name: "Unlock", exact: true }).click();
+    await page.getByRole("button", { name: "Unlock to read", exact: true }).click();
     await expect(rail("Decrypt values")).toHaveClass(/granted/, { timeout: 60000 });
 
     // Two, because a wallet unseen before is asked to sign twice to prove it signs the same way each time
@@ -74,20 +74,30 @@ try {
 
     /* Everything after is free */
 
-    for (let i = 0; i < 3; i++) {
+    const openPanel = async () => {
+        await expect(page.locator("dialog.workspace-dialog[open]")).toHaveCount(0);
         await page.locator(".sidebar-account").click();
-        await expect(page.getByRole("button", { name: "Lock", exact: true })).toBeVisible();
+        await expect(page.locator("dialog.workspace-dialog[open]")).toHaveCount(1);
+    };
+    const closePanel = async () => {
         await page.keyboard.press("Escape");
+        await expect(page.locator("dialog.workspace-dialog[open]")).toHaveCount(0);
+    };
+
+    for (let i = 0; i < 3; i++) {
+        await openPanel();
+        await expect(page.getByRole("button", { name: "Lock", exact: true })).toBeVisible();
+        await closePanel();
     }
     assert.equal(wallet.calls.typedData, 2, "A live session must not re-sign");
     pass("the session stays unlocked with no further signatures");
 
     /* Locking forgets the key, and the proof is remembered so the next unlock is one signature */
 
-    await page.locator(".sidebar-account").click();
+    await openPanel();
     await page.getByRole("button", { name: "Lock", exact: true }).click();
     await expect(rail("Decrypt values")).not.toHaveClass(/granted/);
-    await page.getByRole("button", { name: "Unlock", exact: true }).click();
+    await page.getByRole("button", { name: "Unlock to read", exact: true }).click();
     await expect(rail("Decrypt values")).toHaveClass(/granted/, { timeout: 60000 });
     assert.equal(wallet.calls.typedData, 3, "A re-unlock costs one signature, not two");
     pass("locking clears the key and re-unlocking costs a single signature");

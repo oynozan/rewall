@@ -9,7 +9,6 @@ import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { type EIP1193Provider } from "viem";
 import { PrivateDataProvider } from "./private-data";
 import { IdentityProvider, useIdentity } from "./identity";
-import { MOCKS_ENABLED } from "../../../scripts/dashboard-mocks";
 import {
     ownerName,
     readSecret,
@@ -173,7 +172,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                             </span>
                             <span>
                                 <strong className={vault ? "mono" : ""}>{vault?.owner || "No vault open"}</strong>
-                                {MOCKS_ENABLED && <small>Mock preview</small>}
                             </span>
                         </button>
                         <nav>
@@ -278,7 +276,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 }
 
 function WorkspacePanel() {
-    const { panel, setPanel, vault, loadVault, busy, error, account, ready, connect, disconnect } = useWorkspace();
+    const { panel, setPanel, vault, loadVault, busy, error, account, walletLabel, ready, connect, disconnect } =
+        useWorkspace();
     const identity = useIdentity();
     const dialog = useRef<HTMLDialogElement>(null);
     const drawerMotion = useRef<Animation | null>(null);
@@ -433,50 +432,62 @@ function WorkspacePanel() {
                             <>
                                 {account ? (
                                     <>
-                                        <div className="detail-block">
-                                            <span className="muted">Connected address</span>
-                                            <p className="mono address">{account}</p>
-                                            <CopyButton value={account} label="Copy wallet address" />
-                                        </div>
-                                        <div className="detail-block">
-                                            <span className="muted">Secret key</span>
+                                        <dl className="detail-list wallet-list">
+                                            <div>
+                                                <dt>Address</dt>
+                                                <dd className="wallet-address">
+                                                    <span className="mono">
+                                                        {account.slice(0, 6)}…{account.slice(-4)}
+                                                    </span>
+                                                    <CopyButton value={account} label="Copy wallet address" />
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt>Wallet</dt>
+                                                <dd>{walletLabel || "Connected"}</dd>
+                                            </div>
+                                            <div>
+                                                <dt>Secret key</dt>
+                                                <dd className={identity.unlocked ? "key-state is-open" : "key-state"}>
+                                                    {identity.unlocked ? "Unlocked for this tab" : "Locked"}
+                                                </dd>
+                                            </div>
+                                            {identity.unlocked && (
+                                                <div>
+                                                    <dt>Fingerprint</dt>
+                                                    <dd className="mono">{identity.fingerprint}</dd>
+                                                </div>
+                                            )}
+                                        </dl>
+                                        {identity.unlocked ? (
+                                            <button className="button full-width" onClick={identity.lock}>
+                                                Lock
+                                            </button>
+                                        ) : (
+                                            <button
+                                                className="button primary full-width"
+                                                onClick={() => {
+                                                    setPanel(null);
+                                                    void identity.unlock();
+                                                }}
+                                                disabled={identity.unlocking}
+                                            >
+                                                {identity.unlocking ? "Waiting for your wallet…" : "Unlock to read"}
+                                            </button>
+                                        )}
+                                        {identity.error && (
+                                            <p className="form-error" role="alert">
+                                                {identity.error}
+                                            </p>
+                                        )}
+                                        <div className="notice">
+                                            <Icon name="shield" size={17} />
                                             <p>
-                                                {identity.unlocked ? (
-                                                    <>
-                                                        Unlocked in this tab,{" "}
-                                                        <span className="mono">{identity.fingerprint}</span>
-                                                    </>
-                                                ) : (
-                                                    "Locked"
-                                                )}
+                                                One signature derives your key. It stays in memory for this tab, never
+                                                reaches disk, and never leaves this device.
                                             </p>
-                                            {identity.unlocked ? (
-                                                <button className="button" onClick={identity.lock}>
-                                                    Lock
-                                                </button>
-                                            ) : (
-                                                <button
-                                                    className="button"
-                                                    onClick={() => {
-                                                        setPanel(null);
-                                                        void identity.unlock();
-                                                    }}
-                                                    disabled={identity.unlocking}
-                                                >
-                                                    {identity.unlocking ? "Waiting for your wallet…" : "Unlock"}
-                                                </button>
-                                            )}
-                                            <p className="field-help">
-                                                Your key is derived from one signature and held in memory for this tab
-                                                only. It is never written to disk and never leaves this device.
-                                            </p>
-                                            {identity.error && (
-                                                <p className="form-error" role="alert">
-                                                    {identity.error}
-                                                </p>
-                                            )}
                                         </div>
-                                        <button className="button" onClick={disconnect}>
+                                        <button className="text-button wallet-disconnect" onClick={disconnect}>
                                             Disconnect
                                         </button>
                                     </>

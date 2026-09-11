@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { TYPE_LABELS, type SecretType } from "@/src/lib/vault";
 import { FadeDots, FadeIn } from "./amicro";
 import { useWorkspace } from "./dashboard-shell";
-import { Glyph, Icon } from "./ui";
+import { Glyph, Icon, TableColumns } from "./ui";
 
 export function SecretsPage() {
     const params = useSearchParams();
@@ -199,7 +199,8 @@ export function SecretsTable({ compact = false, initialType = "all" }: { compact
                 )}
             </div>
             <div className="table-scroll">
-                <table>
+                <table className="secrets-table">
+                    <TableColumns />
                     <thead>
                         <tr>
                             <th className="checkbox-cell">

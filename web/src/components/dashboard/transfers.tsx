@@ -2,34 +2,35 @@
 
 import { useWorkspace } from "./dashboard-shell";
 import { FadeIn } from "./amicro";
-import { Icon } from "./ui";
-
-import { MOCKS_ENABLED, mockTransfers } from "../../../scripts/dashboard-mocks";
+import { Icon, TableColumns } from "./ui";
 
 export function TransfersTable({ direction, compact = false }: { direction: "sent" | "shared"; compact?: boolean }) {
     const { vault, busy, error, setPanel } = useWorkspace();
     const receipts = (vault?.secrets || []).filter((secret) => secret.type === "receipt");
-    const rows = MOCKS_ENABLED
-        ? mockTransfers[direction]
-        : direction === "sent"
-          ? receipts.map((secret) => ({ secret, counterparty: secret.grantees.join(", ") || "Only you", amount: null }))
-          : [];
+    const rows =
+        direction === "sent"
+            ? receipts.map((secret) => ({
+                  secret,
+                  counterparty: secret.grantees.join(", ") || "Only you",
+                  amount: null,
+              }))
+            : [];
     const shown = compact ? rows.slice(0, 4) : rows;
-    const unavailable = !MOCKS_ENABLED && direction === "shared";
+    const unavailable = direction === "shared";
     return (
         <div className="secrets-browser transfer-browser" aria-busy={busy}>
             <div className="table-scroll">
                 <table className="transfer-table">
-                    <colgroup>
-                        <col className="transfer-receipt-col" />
-                        <col className="transfer-party-col" />
-                        <col className="transfer-amount-col" />
-                    </colgroup>
+                    <TableColumns />
                     <thead>
                         <tr>
-                            <th scope="col">Receipt</th>
+                            <th scope="col" colSpan={2}>
+                                Receipt
+                            </th>
                             <th scope="col">{direction === "sent" ? "Shared with" : "From"}</th>
-                            <th scope="col">Amount</th>
+                            <th scope="col" colSpan={2}>
+                                Amount
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -37,7 +38,7 @@ export function TransfersTable({ direction, compact = false }: { direction: "sen
                             !error &&
                             shown.map(({ secret, counterparty, amount }) => (
                                 <tr key={secret.name}>
-                                    <td>
+                                    <td colSpan={2}>
                                         <button className="secret-name" onClick={() => setPanel(secret)}>
                                             <span className="secret-icon">
                                                 <Icon name="wallet" />
@@ -57,7 +58,7 @@ export function TransfersTable({ direction, compact = false }: { direction: "sen
                                         </button>
                                     </td>
                                     <td className="transfer-recipient">{counterparty}</td>
-                                    <td>
+                                    <td colSpan={2}>
                                         {amount ? (
                                             <span className="mono">{amount}</span>
                                         ) : (

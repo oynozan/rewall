@@ -103,3 +103,15 @@ export function CopyButton({ value, label = "Copy name" }: { value: string; labe
         </button>
     );
 }
+
+export function TableColumns() {
+    return (
+        <colgroup>
+            <col className="table-select-col" />
+            <col className="table-name-col" />
+            <col className="table-data-col" />
+            <col className="table-status-col" />
+            <col className="table-end-col" />
+        </colgroup>
+    );
+}

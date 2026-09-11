@@ -1628,36 +1628,30 @@ input[type="checkbox"]:indeterminate::after {
 }
 
 /* Shared table geometry */
-.transfer-table,
-.otp-table {
+.dashboard-app .secrets-browser table {
     table-layout: fixed;
-}
-.transfer-table,
-.secrets-page .transfer-table {
-    min-width: 480px;
-}
-.transfer-receipt-col {
-    width: 50%;
-}
-.transfer-party-col,
-.transfer-amount-col {
-    width: 25%;
-}
-.otp-table,
-.secrets-page .otp-table {
     min-width: 680px;
 }
-.otp-account-col {
-    width: calc(100% - 432px);
+.table-select-col {
+    width: 44px;
 }
-.otp-code-col {
-    width: 152px;
+.table-name-col {
+    width: auto;
 }
-.otp-expiry-col {
+.table-data-col {
+    width: 25%;
+}
+.table-status-col {
     width: 184px;
 }
-.otp-action-col {
+.table-end-col {
     width: 96px;
+}
+.otp-table th:first-child,
+.otp-table td:first-child,
+.transfer-table th:first-child,
+.transfer-table td:first-child {
+    padding-left: 54px;
 }
 .otp-table .row-action {
     width: auto;
@@ -1673,17 +1667,21 @@ input[type="checkbox"]:indeterminate::after {
     display: inline-block;
     text-align: left;
 }
+.secrets-table .secret-name,
 .transfer-table .secret-name,
 .otp-table .secret-name {
     width: 100%;
     min-width: 0;
 }
+.secrets-table .secret-name > span:last-child,
 .transfer-table .secret-name > span:last-child,
 .otp-table .secret-name > span:last-child {
     min-width: 0;
     display: inline-flex;
     flex-direction: column;
 }
+.secrets-table .secret-name strong,
+.secrets-table .secret-name small,
 .transfer-table .secret-name strong,
 .otp-table .secret-name strong,
 .transfer-table .secret-name small,
@@ -1763,4 +1761,35 @@ input[type="checkbox"]:indeterminate::after {
     .selection-actions {
         height: 34px;
     }
+}
+
+/* Wallet panel */
+
+.wallet-list {
+    margin-top: 26px;
+}
+.wallet-address {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+}
+.key-state {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.key-state::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border: 1px solid #6c6c66;
+    background: transparent;
+}
+.key-state.is-open::before {
+    background: #70b58c;
+    border-color: #70b58c;
+}
+.wallet-disconnect {
+    margin-top: 26px;
 }
