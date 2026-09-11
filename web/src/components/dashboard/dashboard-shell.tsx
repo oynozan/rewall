@@ -9,6 +9,7 @@ import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { type EIP1193Provider } from "viem";
 import { PrivateDataProvider } from "./private-data";
 import { IdentityProvider, useIdentity } from "./identity";
+import { ownsName, rememberName, resolveOwnName } from "@/src/lib/account";
 import {
     ownerName,
     readSecret,
@@ -30,6 +31,9 @@ type Workspace = {
     account: string;
     walletLabel: string;
     ready: boolean;
+    ownName: string;
+    isOwnVault: boolean;
+    claimName: (name: string) => Promise<boolean>;
     panel: Panel;
     setPanel: (panel: Panel) => void;
     loadVault: (name: string) => Promise<boolean>;
@@ -62,6 +66,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     const [error, setError] = useState("");
     const [panel, setPanel] = useState<Panel>(null);
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [resolvedName, setResolvedName] = useState<{ address: string; name: string } | null>(null);
     const request = useRef(0);
 
     const { ready, authenticated, login, logout } = usePrivy();
@@ -109,11 +114,43 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
+    // A connected wallet opens its own vault, once the registry confirms the name really is theirs
+    useEffect(() => {
+        let active = true;
+        if (!account) return;
+
+        void resolveOwnName(account).then((found) => {
+            if (!active) return;
+            setResolvedName({ address: account, name: found });
+            if (found && request.current === 0) void loadVault(found);
+        });
+        return () => {
+            active = false;
+        };
+    }, [account, loadVault]);
+
+    // Tied to the address it was resolved for, so disconnecting drops it without a second render
+    const ownName = resolvedName?.address === account ? resolvedName.name : "";
+
+    const claimName = useCallback(
+        async (input: string) => {
+            const name = ownerName(input);
+            if (!(await ownsName(name, account))) return false;
+            rememberName(account, name);
+            setResolvedName({ address: account, name });
+            await loadVault(name);
+            return true;
+        },
+        [account, loadVault],
+    );
+
     // Privy hands the provider over asynchronously, so the identity session asks for it when it needs it
     const getProvider = useCallback(
         async () => (wallet ? ((await wallet.getEthereumProvider()) as EIP1193Provider) : null),
         [wallet],
     );
+
+    const isOwnVault = Boolean(ownName) && vault?.owner === ownName;
 
     const workspace: Workspace = {
         vault,
@@ -122,6 +159,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         account,
         walletLabel,
         ready,
+        ownName,
+        isOwnVault,
+        claimName,
         panel,
         setPanel,
         loadVault,
@@ -137,7 +177,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
     return (
         <WorkspaceContext value={workspace}>
-            <IdentityProvider address={account} getProvider={getProvider} name={vault?.owner || ""}>
+            <IdentityProvider address={account} getProvider={getProvider} name={ownName}>
                 <div className="dashboard-app">
                     <a className="skip-link" href="#workspace-content">
                         Skip to content
@@ -172,6 +212,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                             </span>
                             <span>
                                 <strong className={vault ? "mono" : ""}>{vault?.owner || "No vault open"}</strong>
+                                {vault && <small>{isOwnVault ? "Yours" : "Read only"}</small>}
                             </span>
                         </button>
                         <nav>
@@ -276,13 +317,27 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 }
 
 function WorkspacePanel() {
-    const { panel, setPanel, vault, loadVault, busy, error, account, walletLabel, ready, connect, disconnect } =
-        useWorkspace();
+    const {
+        panel,
+        setPanel,
+        vault,
+        loadVault,
+        busy,
+        error,
+        account,
+        walletLabel,
+        ready,
+        ownName,
+        claimName,
+        connect,
+        disconnect,
+    } = useWorkspace();
     const identity = useIdentity();
     const dialog = useRef<HTMLDialogElement>(null);
     const drawerMotion = useRef<Animation | null>(null);
     const [localError, setLocalError] = useState("");
     const [working, setWorking] = useState(false);
+    const [claiming, setClaiming] = useState(false);
     useEffect(() => {
         const node = dialog.current;
         if (!node) return;
@@ -336,6 +391,21 @@ function WorkspacePanel() {
             : panel === "find"
               ? "Find a secret"
               : "How Rewall works";
+
+    async function claim(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        setLocalError("");
+        const input = String(new FormData(event.currentTarget).get("own"));
+        setClaiming(true);
+        try {
+            if (await claimName(input)) close();
+            else setLocalError("That name is not held by the connected wallet.");
+        } catch {
+            setLocalError("Enter a complete ENS name ending in .eth.");
+        } finally {
+            setClaiming(false);
+        }
+    }
 
     async function submit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -421,6 +491,26 @@ function WorkspacePanel() {
                                     >
                                         Open the Sepolia test vault
                                     </button>
+                                )}
+                                {panel === "vault" && account && !ownName && (
+                                    <form onSubmit={claim} className="panel-form claim-form">
+                                        <label htmlFor="own-name">Your own ENS name</label>
+                                        <input
+                                            id="own-name"
+                                            name="own"
+                                            placeholder="name.eth"
+                                            autoComplete="off"
+                                            autoCapitalize="none"
+                                            spellCheck={false}
+                                            required
+                                        />
+                                        <button className="button" disabled={claiming}>
+                                            {claiming ? "Checking the registry…" : "This one is mine"}
+                                        </button>
+                                        <p className="field-help">
+                                            Checked against the registry, so a name you do not hold will be refused.
+                                        </p>
+                                    </form>
                                 )}
                                 <div className="notice">
                                     <Icon name="lock" />

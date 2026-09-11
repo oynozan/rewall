@@ -101,7 +101,11 @@ export class Rewall {
     // Every key this caller can decrypt with, its own plus any subtree key sealed to its name
     async heldKeys(): Promise<Identity[]> {
         const identity = await this.identity();
-        const held = await this.read(this.name, [RECORD.subtreeKey]);
+
+        // A reader who holds no name of their own still has their own key, so this is a miss and not a failure
+        if (!this.name) return [identity];
+        const held = await this.read(this.name, [RECORD.subtreeKey]).catch(() => ({}) as Record<string, string>);
+
         const sealed = held[RECORD.subtreeKey];
         if (!sealed) return [identity];
 

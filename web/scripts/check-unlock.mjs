@@ -114,6 +114,24 @@ try {
     assert.deepEqual(suspicious, [], "No Rewall key material may reach browser storage");
     pass("no derived key material is written to local or session storage");
 
+    /* No reverse record is set, so the vault is someone else's until the registry says otherwise */
+
+    await closePanel();
+    await expect(page.locator(".workspace-switcher small")).toHaveText("Read only");
+
+    await page.locator(".workspace-switcher").click();
+    await page.getByLabel("Your own ENS name").fill("rewall-test-2.eth");
+    await page.getByRole("button", { name: "This one is mine", exact: true }).click();
+    await expect(page.getByText("That name is not held by the connected wallet.")).toBeVisible({ timeout: 60000 });
+    pass("a name the wallet does not hold is refused, so a claim cannot be asserted");
+
+    await page.getByLabel("Your own ENS name").fill("rewall-test-1.eth");
+    await page.getByRole("button", { name: "This one is mine", exact: true }).click();
+    await expect(page.locator(".workspace-switcher small")).toHaveText("Yours", { timeout: 60000 });
+    await expect(page.locator(".workspace-switcher strong")).toHaveText("rewall-test-1.eth");
+    await shot("unlock-3-own-vault");
+    pass("a name the wallet does hold is adopted and the vault is marked as theirs");
+
     assert.deepEqual(errors, [], "The page must not throw");
     console.log(JSON.stringify({ passed: checks.length, checks, screenshots: output }, null, 2));
 } finally {

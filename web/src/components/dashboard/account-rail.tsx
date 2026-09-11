@@ -1,13 +1,38 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useWorkspace } from "./dashboard-shell";
 import { useCapabilities } from "./identity";
+import { vaultSetup, type VaultSetup } from "@/src/lib/account";
 import { Glyph, SegmentedProgress } from "./ui";
 import { SidebarFade, SidebarSection } from "./amicro";
 
+// Keyed by the name it describes, so a reply for a vault you have left is ignored
+function useVaultSetup(name: string, address: string) {
+    const [resolved, setResolved] = useState<{ question: string; setup: VaultSetup } | null>(null);
+    const question = `${name}|${address}`;
+
+    useEffect(() => {
+        let active = true;
+        if (!name || !address) return;
+
+        void vaultSetup(name, address)
+            .then((setup) => {
+                if (active) setResolved({ question, setup });
+            })
+            .catch(() => {});
+        return () => {
+            active = false;
+        };
+    }, [question, name, address]);
+
+    return resolved?.question === question ? resolved.setup : null;
+}
+
 export function AccountRail() {
-    const { vault, account, walletLabel, setPanel } = useWorkspace();
+    const { vault, account, walletLabel, ownName, isOwnVault, setPanel } = useWorkspace();
     const { canRead, canDecrypt, canWrite } = useCapabilities(vault?.owner, account);
+    const setup = useVaultSetup(isOwnVault ? ownName : "", account);
     const entries = vault?.secrets ?? [];
     const encrypted = entries.filter((secret) => secret.encryption === "aes-256-gcm").length;
     return (
@@ -50,6 +75,17 @@ export function AccountRail() {
                     <span>Identity key</span>
                     <span>{vault?.identityPublished ? "Published" : "Not published"}</span>
                 </div>
+                {setup && !setup.ready && (
+                    <>
+                        <p className="rail-setup-note">This name cannot hold secrets yet.</p>
+                        <ul className="rail-access rail-setup">
+                            <li className={setup.resolver ? "granted" : ""}>Resolver</li>
+                            <li className={setup.registry ? "granted" : ""}>Registry</li>
+                            <li className={setup.namespace ? "granted" : ""}>Rewall namespace</li>
+                            <li className={setup.identity ? "granted" : ""}>Identity key</li>
+                        </ul>
+                    </>
+                )}
             </SidebarSection>
             <SidebarSection delay={0.16}>
                 <h2>Access</h2>
