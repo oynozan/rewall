@@ -1,0 +1,23 @@
+{
+    "name": "@rewall/mcp",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@9.12.2",
+    "scripts": {
+        "start": "node --env-file=.env --experimental-strip-types src/index.ts",
+        "check": "node --env-file=.env check.mjs",
+        "check:allow": "node --experimental-strip-types src/allow.ts",
+        "check:scrub": "node --experimental-strip-types src/scrub.ts",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.30.0",
+        "@rewall/sdk": "link:../sdk",
+        "viem": "^2.56.3",
+        "zod": "^4.6.2"
+    },
+    "devDependencies": {
+        "prettier": "^3.9.6"
+    }
+}
