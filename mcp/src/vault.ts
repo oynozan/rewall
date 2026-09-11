@@ -24,8 +24,10 @@ export type Meta = {
 
 export type Vault = {
     rewall: Rewall;
+    publicClient: any;
     name: string;
     fingerprint: string;
+    identityAddress: string;
     list(): Promise<string[]>;
     metaOf(label: string): Promise<Meta>;
 };
@@ -56,8 +58,11 @@ export async function openVault(): Promise<Vault> {
 
     return {
         rewall,
+        publicClient,
         name,
         fingerprint: identity.fingerprint,
+        // Held so a signing tool can refuse to sign with the key backing this host's own identity
+        identityAddress: account.address,
         list: () => rewall.list(),
         async metaOf(label: string): Promise<Meta> {
             const secretName = `${label}.${namespace}`;

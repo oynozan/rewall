@@ -10,9 +10,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { wipe } from "@rewall/sdk";
 import { parseOtp, otpSnapshot } from "@rewall/sdk/2fa";
+import { privateKeyToAccount } from "viem/accounts";
 import { openVault, type Vault } from "./vault.ts";
 import { checkUrl, HostRefused } from "./allow.ts";
 import { needlesFor, scrub } from "./scrub.ts";
+import { buildTransfer, policyFor, SignRefused } from "./sign.ts";
 
 const MAX_BODY = 256 * 1024;
 const CALLS_PER_MINUTE = 30;
@@ -157,6 +159,77 @@ function register(server: McpServer, vault: Vault) {
                 return say(`${response.status} from ${host}\n\n${cleaned.text}${alarm}`);
             } catch (error) {
                 if (error instanceof HostRefused) return fail(error.message);
+                return fail((error as Error).message);
+            }
+        },
+    );
+
+    server.registerTool(
+        "sign_with_secret",
+        {
+            title: "Sign a token transfer with a stored key",
+            description:
+                "Signs an ERC-20 transfer using a private key held as a Rewall secret, within that secret's signing policy. Returns the signed transaction, never the key. The tool builds the calldata, so only the token, recipient and amount can be chosen.",
+            inputSchema: {
+                secret: z.string().describe("The secret's label, as shown by list_secrets"),
+                token: z.string().describe("ERC-20 contract address, must be in the secret's policy"),
+                to: z.string().describe("Recipient address, must be in the secret's policy"),
+                amount: z.string().describe("Whole number of base units, must be under the policy cap"),
+            },
+        },
+        async ({ secret, token, to, amount }) => {
+            try {
+                rateLimit(secret);
+                const meta = await vault.metaOf(secret);
+                if (!meta.readable) return fail(`this agent holds no key for ${secret}`);
+                if (meta.type !== "privkey") return fail(`${secret} is a ${meta.type}, not a signing key`);
+
+                // Checked before the key is fetched, so a refused request never decrypts anything
+                const policy = policyFor(secret);
+                const built = buildTransfer({ token, to, amount }, policy);
+
+                const value = await vault.rewall.get(meta.name);
+                let signed: string;
+                let signer: string;
+                try {
+                    const text = new TextDecoder().decode(value).trim();
+                    if (!/^0x[0-9a-fA-F]{64}$/.test(text)) return fail(`${secret} does not hold a private key`);
+
+                    const account = privateKeyToAccount(text as `0x${string}`);
+                    signer = account.address;
+
+                    // The host's own identity key must never be reachable through a signing tool
+                    if (signer.toLowerCase() === vault.identityAddress.toLowerCase()) {
+                        return fail("refusing to sign with the key backing this agent's own Rewall identity");
+                    }
+
+                    const [nonce, fees] = await Promise.all([
+                        vault.publicClient.getTransactionCount({ address: signer }),
+                        vault.publicClient.estimateFeesPerGas(),
+                    ]);
+
+                    signed = await account.signTransaction({
+                        chainId: built.chainId,
+                        to: built.token,
+                        data: built.data,
+                        value: BigInt(0),
+                        gas: BigInt(100000),
+                        maxFeePerGas: fees.maxFeePerGas,
+                        maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
+                        nonce,
+                        type: "eip1559",
+                    });
+                } finally {
+                    await wipe(value);
+                }
+
+                return say(
+                    `Signed by ${signer}\n` +
+                        `transfer ${built.amount} base units of ${built.token} to ${built.to} on chain ${built.chainId}\n\n` +
+                        `${signed}\n\nNot broadcast, submit it yourself if this is what you wanted.`,
+                );
+            } catch (error) {
+                if (error instanceof SignRefused) return fail(error.message);
                 return fail((error as Error).message);
             }
         },

@@ -58,6 +58,27 @@ Register it with an MCP client, for example `.mcp.json`:
 | `list_secrets`     | Label, type, allowed hosts, and whether this agent holds a key. Metadata only. |
 | `http_with_secret` | The response, redacted. Never the secret.                                      |
 | `otp_code`         | Six digits and the seconds left. Never the seed.                               |
+| `sign_with_secret` | A signed ERC-20 transfer, unbroadcast. Never the key.                          |
+
+## Signing
+
+`sign_with_secret` exists because an agent that holds a treasury key but can do nothing with it is
+half a feature. It is also the most dangerous tool here, so the model chooses parameters and the tool
+chooses structure.
+
+The model may name a token, a recipient and an amount. It may not supply calldata, a message, typed
+data, or a hash. The transfer calldata is built by `sign.ts`, so `approve`, `setApprovalForAll` and
+`permit` are unreachable rather than denied. Each secret needs an entry in `policy.json` naming its
+chain, its allowed tokens, its allowed recipients and a cap, and a secret with no entry cannot sign at
+all. Nothing is broadcast.
+
+**The reason there is no general signing tool.** `identity.ts` derives the X25519 key from the
+signature over `IDENTITY_TYPED_DATA`. A tool that signs a payload the model chose would be asked for
+that payload, and would hand over the identity of the wallet, permanently, across every secret ever
+shared with it, archived blobs included. The same applies to the `Rewall authorization v1` prefix in
+`authorization.ts`, which would let a model forge the grantee list a rotation rebuilds from. Neither
+is reachable here, because no free-form signing path exists. The server also refuses to sign with the
+key backing its own identity.
 
 ## How a request is refused
 
@@ -94,10 +115,8 @@ allowlist. Redaction is defence in depth behind it.
 
 ## Not built yet
 
-- `sign_with_secret`. Deliberately absent. `identity.ts` derives the X25519 key from the signature
-  over `IDENTITY_TYPED_DATA`, so a tool that signs a model-chosen payload hands over the whole
-  identity in one call, permanently and unrevocably. It ships only as one structured payload kind the
-  tool builds itself, with the Rewall identity and authorization payloads hard-denied.
+- More signing kinds. Only ERC-20 transfer is built today. Each new kind is a new builder in
+  `sign.ts`, never a widening of what the model may pass.
 - A live `otp_code`. The tool and its type gate are in, but no `totp` secret exists on chain yet, so
   `pnpm run check` says the live path is unproven rather than quietly skipping it.
 - Seed-only provisioning. The host should hold the 32-byte X25519 seed and no Ethereum key, which
