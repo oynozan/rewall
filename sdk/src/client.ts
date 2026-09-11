@@ -1,4 +1,4 @@
-import { namehash, type Address, type Hash, type Hex } from "viem";
+import { keccak256, namehash, parseAbi, toBytes, type Address, type Hash, type Hex } from "viem";
 import { deriveIdentity, fingerprintOf, IDENTITY_TYPED_DATA, type Identity } from "./identity.ts";
 import { toBase64, fromBase64, wipe } from "./crypto.ts";
 import {
@@ -12,10 +12,12 @@ import {
     SCHEMA_VERSION,
     ENCRYPTION,
     ownerAddressOf,
+    registryLookupAbi,
     addToIndex,
     GUARDIAN_RECOVERY_PREFIX,
     guardianRecoveryEntry,
     removeFromIndex,
+    dnsEncode,
     WRAP_PREFIX,
     type SecretRecords,
 } from "./records.ts";
@@ -56,6 +58,17 @@ export type CreateOptions = {
 };
 
 export const NAMESPACE_LABEL = "rewall";
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+// SET_RESOLVER plus its admin variant, which is what a secret subname needs and nothing more
+const SET_RESOLVER_ROLES = (1n << 24n) | ((1n << 24n) << 128n);
+
+const subnameAbi = parseAbi([
+    "function register(string label, address owner, address registry, address resolver, uint256 roleBitmap, uint64 expiry) returns (uint256)",
+    "function getResolver(string label) view returns (address)",
+    "function getExpiry(uint256 anyId) view returns (uint64)",
+]);
 
 export class Rewall {
     readonly name: string;
@@ -163,6 +176,9 @@ export class Rewall {
         const existing = await this.read(secretName, [RECORD.holders, RECORD.blob]);
         if (existing[RECORD.blob] && !options.overwrite) throw new SecretExistsError(secretName);
 
+        // Registered before anything is written, or ownerOf stays empty and the secret can never be rotated
+        await this.ensureSecretName(secretName);
+
         const records = await planSecret({
             secretName,
             type: options.type ?? "generic",
@@ -202,6 +218,61 @@ export class Rewall {
             { name: secretName, records: [...records, ...cleared, ...authorization] },
             { name: parent, records: updated === listed[RECORD.index] ? [] : [{ key: RECORD.index, value: updated }] },
         ]);
+    }
+
+    // Records under an unregistered subname read back fine but leave ownerOf empty, so nothing can rotate
+    async ensureSecretName(secretName: string): Promise<Hash | null> {
+        const label = secretName.split(".")[0]!;
+        const parent = secretName.split(".").slice(1).join(".");
+
+        const registry = await this.parentRegistryOf(secretName);
+        const configured = await this.publicClient.readContract({
+            address: registry,
+            abi: subnameAbi,
+            functionName: "getResolver",
+            args: [label],
+        });
+        if (configured !== ZERO_ADDRESS) return null;
+
+        const resolver = await resolverFor(this.publicClient, this.universalResolver, parent);
+        if (!resolver) throw new Error(`no resolver configured for ${parent}`);
+
+        // The subname inherits the parent's expiry, because a secret outliving its namespace is unreachable
+        const parentLabel = parent.split(".")[0]!;
+        const expiry = await this.publicClient.readContract({
+            address: await this.parentRegistryOf(parent),
+            abi: subnameAbi,
+            functionName: "getExpiry",
+            args: [BigInt(keccak256(toBytes(parentLabel)))],
+        });
+
+        const hash = await this.walletClient.writeContract({
+            address: registry,
+            abi: subnameAbi,
+            functionName: "register",
+            args: [label, this.address(), ZERO_ADDRESS, resolver, SET_RESOLVER_ROLES, expiry],
+            account: this.account,
+            chain: this.walletClient.chain,
+        });
+
+        const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
+        if (receipt.status !== "success") throw new Error(`registering ${secretName} reverted, ${hash}`);
+        return hash;
+    }
+
+    private address(): Address {
+        return (typeof this.account === "string" ? this.account : this.account.address) as Address;
+    }
+
+    private async parentRegistryOf(name: string): Promise<Address> {
+        const registry = (await this.publicClient.readContract({
+            address: this.universalResolver,
+            abi: registryLookupAbi,
+            functionName: "findParentRegistry",
+            args: [dnsEncode(name)],
+        })) as Address;
+        if (!registry || registry === ZERO_ADDRESS) throw new Error(`no registry holds ${name}`);
+        return registry;
     }
 
     async get(secretName: string): Promise<Uint8Array> {

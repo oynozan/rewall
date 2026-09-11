@@ -1802,3 +1802,63 @@ input[type="checkbox"]:indeterminate::after {
 .rail-setup {
     margin: 0;
 }
+
+.revealed-value {
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    margin: 24px 0 28px;
+    padding: 18px 15px 15px;
+    background: var(--surface);
+}
+.revealed-value p {
+    margin: 0 0 14px;
+    font-size: 13px;
+    color: #dcdcd4;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+.revealed-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.page-actions {
+    display: flex;
+    gap: 8px;
+}
+.create-target {
+    margin: -10px 0 20px;
+    font-family: var(--font-ubuntu-mono), monospace;
+    color: #7e7e76;
+}
+.panel-form textarea {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-family: var(--font-ubuntu-mono), monospace;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--foreground);
+    margin-bottom: 18px;
+    resize: vertical;
+}
+.panel-form textarea:focus-within {
+    border-color: #929288;
+}
+.create-select {
+    padding: 10px 12px;
+    font-size: 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--foreground);
+    margin-bottom: 18px;
+}
+
+.replace-open {
+    margin-bottom: 8px;
+}
+.replace-form {
+    margin-top: 6px;
+}

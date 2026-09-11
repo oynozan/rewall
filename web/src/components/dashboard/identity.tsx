@@ -28,6 +28,7 @@ type Session = {
     unlock: () => Promise<boolean>;
     lock: () => void;
     decrypt: (secretName: string) => Promise<Uint8Array>;
+    write: <T>(action: (client: Rewall) => Promise<T>) => Promise<T>;
 };
 
 const IdentityContext = createContext<Session | null>(null);
@@ -142,7 +143,16 @@ export function IdentityProvider({
         [unlock, error],
     );
 
-    const session: Session = { unlocked, unlocking, error, fingerprint, unlock, lock, decrypt };
+    // Every mutation needs the identity too, because the data key is sealed to it
+    const write = useCallback(
+        async <T,>(action: (live: Rewall) => Promise<T>): Promise<T> => {
+            if (!client.current && !(await unlock())) throw new Error(error || "Unlock to change this vault.");
+            return action(client.current!);
+        },
+        [unlock, error],
+    );
+
+    const session: Session = { unlocked, unlocking, error, fingerprint, unlock, lock, decrypt, write };
     return <IdentityContext value={session}>{children}</IdentityContext>;
 }
 

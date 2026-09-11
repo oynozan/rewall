@@ -45,6 +45,8 @@ export const RECORD = {
     guardian: (fingerprint: string) => `rewall.guardian.${fingerprint}`,
     recoveryPubkey: "rewall.recovery.pubkey",
     recoveryThreshold: "rewall.recovery.k",
+    // Published on the participant's own name so a payer can resolve a name and pay it privately
+    shielded: "rewall.shielded",
     site: "rewall.site",
     allow: "rewall.allow",
     wrap: (fingerprint: string) => `rewall.key.${fingerprint}`,
@@ -195,11 +197,7 @@ export const registryLookupAbi = parseAbi([
 ]);
 
 // The address holding a name is the one thing about it a write delegate cannot rewrite
-export async function ownerAddressOf(
-    client: ReadClient,
-    universalResolver: Address,
-    name: string,
-): Promise<Address> {
+export async function ownerAddressOf(client: ReadClient, universalResolver: Address, name: string): Promise<Address> {
     const registry = await client.readContract({
         address: universalResolver,
         abi: registryLookupAbi,

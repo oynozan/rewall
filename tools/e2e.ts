@@ -80,6 +80,13 @@ const spent = (await publicClient.getTransactionCount({ address: ownerAddress })
 if (spent !== 1) fail(`create sent ${spent} transactions, expected 1`);
 pass("create wrote the secret and its index entry in a single transaction");
 
+// Records under an unregistered subname read back fine but leave ownerOf empty, so nothing can rotate
+const registered = await ownerClient.ownerAddressOf(secretName);
+if (registered.toLowerCase() !== ownerAddress.toLowerCase()) {
+    fail(`${secretName} is owned by ${registered}, expected ${ownerAddress}`);
+}
+pass("the secret's subname is registered to the owner, so its signed list can verify");
+
 if (text(await ownerClient.get(secretName)) !== SECRET) fail("owner cannot read what it created");
 pass("owner reads its own secret");
 

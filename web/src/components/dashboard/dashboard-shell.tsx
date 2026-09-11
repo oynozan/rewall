@@ -9,6 +9,8 @@ import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { type EIP1193Provider } from "viem";
 import { PrivateDataProvider } from "./private-data";
 import { IdentityProvider, useIdentity } from "./identity";
+import { SecretValue } from "./secret-value";
+import { CreateSecret } from "./create-secret";
 import { ownsName, rememberName, resolveOwnName } from "@/src/lib/account";
 import {
     ownerName,
@@ -23,7 +25,7 @@ import {
 import { FadeDots, FadeIn, SidebarFade } from "./amicro";
 import { CopyButton, Glyph, Icon, type IconName } from "./ui";
 
-type Panel = "vault" | "wallet" | "help" | "find" | Secret | null;
+type Panel = "vault" | "wallet" | "help" | "find" | "create" | Secret | null;
 type Workspace = {
     vault: Vault | null;
     busy: boolean;
@@ -390,7 +392,9 @@ function WorkspacePanel() {
             ? "Your wallet"
             : panel === "find"
               ? "Find a secret"
-              : "How Rewall works";
+              : panel === "create"
+                ? "Store a secret"
+                : "How Rewall works";
 
     async function claim(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -518,6 +522,7 @@ function WorkspacePanel() {
                                 </div>
                             </>
                         )}
+                        {panel === "create" && <CreateSecret onDone={close} />}
                         {panel === "wallet" && (
                             <>
                                 {account ? (
@@ -631,10 +636,7 @@ function WorkspacePanel() {
                                     <span className="mono">{secret.name}</span>
                                     <CopyButton value={secret.name} />
                                 </div>
-                                <div className="sealed-value">
-                                    <Icon name="lock" size={22} />
-                                    <span className="mono">•••• •••• •••• ••••</span>
-                                </div>
+                                <SecretValue secret={secret} />
                                 <dl className="detail-list">
                                     <div>
                                         <dt>Type</dt>

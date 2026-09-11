@@ -15,14 +15,21 @@ export function SecretsPage() {
         Object.hasOwn(TYPE_LABELS, requestedType) && !["totp", "receipt"].includes(requestedType)
             ? requestedType
             : "all";
-    const { setPanel } = useWorkspace();
+    const { setPanel, isOwnVault } = useWorkspace();
     return (
         <FadeIn className="secrets-page">
             <div className="page-heading">
                 <h1>{TYPE_LABELS[type as SecretType] || "Secrets"}</h1>
-                <button className="button primary" onClick={() => setPanel("find")}>
-                    Find a secret
-                </button>
+                <div className="page-actions">
+                    <button className="button" onClick={() => setPanel("find")}>
+                        Find a secret
+                    </button>
+                    {isOwnVault && (
+                        <button className="button primary" onClick={() => setPanel("create")}>
+                            Store a secret
+                        </button>
+                    )}
+                </div>
             </div>
             <SecretsTable key={type} initialType={type} />
         </FadeIn>

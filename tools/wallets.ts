@@ -7,10 +7,10 @@ const ENV_PATH = new URL(".env", import.meta.url);
 
 // The owner sends nearly every transaction, so it carries most of the balance
 const ROLES = [
-    { index: 0, name: "owner", target: parseEther("0.025") },
-    { index: 1, name: "grantee", target: parseEther("0.008") },
+    { index: 0, name: "owner", target: parseEther("0.02") },
+    { index: 1, name: "grantee", target: parseEther("0.005") },
     { index: 2, name: "stranger", target: 0n },
-    { index: 3, name: "recovery", target: parseEther("0.005") },
+    { index: 3, name: "recovery", target: parseEther("0.003") },
 ];
 
 /* Mnemonic */
@@ -53,11 +53,29 @@ const accounts = ROLES.map((r) => ({ ...r, account: mnemonicToAccount(mnemonic, 
 const funderBalance = await publicClient.getBalance({ address: funder.address });
 console.log(`\nfunder   ${funder.address}  ${formatEther(funderBalance)} ETH\n`);
 
+// Testnet ETH is finite in practice, so a role sitting well above its target hands the surplus back first
+const gasPrice = await publicClient.getGasPrice();
+const sendCost = gasPrice * 21000n * 2n;
+
+for (const a of accounts) {
+    const balance = await publicClient.getBalance({ address: a.account.address });
+    const surplus = balance > a.target * 2n ? balance - a.target - sendCost : 0n;
+    if (surplus <= 0n) continue;
+
+    const role = createWalletClient({ account: a.account, chain: sepolia, transport: http(rpc) });
+    const hash = await role.sendTransaction({ to: funder.address, value: surplus });
+    await publicClient.waitForTransactionReceipt({ hash });
+    console.log(`${a.name.padEnd(9)}returned ${formatEther(surplus)} ETH  ${hash}`);
+}
+
 // What is actually short, not the sum of targets, or a rerun refuses over balances already funded
+const available = await publicClient.getBalance({ address: funder.address });
 const balances = await Promise.all(accounts.map((a) => publicClient.getBalance({ address: a.account.address })));
 const needed = accounts.reduce((sum, a, i) => sum + (a.target > balances[i]! ? a.target - balances[i]! : 0n), 0n);
-if (funderBalance < needed) {
-    throw new Error(`funder holds ${formatEther(funderBalance)} ETH but ${formatEther(needed)} ETH is short`);
+if (available < needed) {
+    throw new Error(
+        `funder holds ${formatEther(available)} ETH but ${formatEther(needed)} ETH is short, top it up from a faucet`,
+    );
 }
 
 for (const [index, a] of accounts.entries()) {
