@@ -64,6 +64,7 @@ export async function planSecret(input: {
     grantees?: Grantee[];
     createdAt: number;
     allow?: string[];
+    site?: string;
 }): Promise<SecretRecords> {
     assertRecovery(input.recovery);
 
@@ -83,6 +84,7 @@ export async function planSecret(input: {
             wraps,
             createdAt: input.createdAt,
             allow: input.allow,
+            site: input.site,
             owner: input.owner.name,
             recovery: named(input.recovery),
             grantees: named(grantees.filter((g) => !g.subtree)),
@@ -165,6 +167,7 @@ export async function planRotate(input: {
     previousFingerprints: string[];
     createdAt: number;
     allow?: string[];
+    site?: string;
 }): Promise<{ records: SecretRecords; cleared: string[] }> {
     const records = await planSecret(input);
 

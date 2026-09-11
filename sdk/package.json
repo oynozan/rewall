@@ -8,6 +8,10 @@
         ".": {
             "types": "./dist/index.d.ts",
             "default": "./dist/index.js"
+        },
+        "./2fa": {
+            "types": "./dist/2fa.d.ts",
+            "default": "./dist/2fa.js"
         }
     },
     "files": [
@@ -21,6 +25,7 @@
     },
     "dependencies": {
         "libsodium-wrappers": "^0.8.4",
+        "otpauth": "^9.5.2",
         "shamir-secret-sharing": "^0.0.4",
         "viem": "^2.56.3"
     },

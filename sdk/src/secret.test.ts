@@ -227,6 +227,24 @@ test("nothing is cleared when no fingerprint disappears", async () => {
     assert.deepEqual(cleared, []);
 });
 
+test("a rotation carries the site through when it is read back", async () => {
+    const first = toMap(await planSecret({ ...baseInput, type: "totp", site: "github.com" }));
+    assert.equal(first[RECORD.site], "github.com");
+
+    const { records } = await planRotate({
+        ...baseInput,
+        type: "totp",
+        site: first[RECORD.site],
+        previousFingerprints: wrapFingerprints(first),
+    });
+    assert.equal(toMap(records)[RECORD.site], "github.com");
+});
+
+test("a rotation that is given no site clears the old one rather than leaving it", async () => {
+    const { records } = await planRotate({ ...baseInput, previousFingerprints: [] });
+    assert.equal(toMap(records)[RECORD.site], "");
+});
+
 /* Helpers */
 
 test("wrapFingerprints ignores cleared wraps and unrelated keys", () => {

@@ -7,6 +7,8 @@ import {
     dnsEncode,
     resolverAbi,
     RECORD,
+    ROTATE_KEYS,
+    WRAP_PREFIX,
     SCHEMA_VERSION,
     ENCRYPTION,
 } from "./records.ts";
@@ -65,10 +67,28 @@ test("a fingerprint of the wrong length or charset is refused", () => {
     }
 });
 
-test("allow joins hosts with commas and is omitted when empty", () => {
+test("allow joins hosts with commas and is omitted when empty, so it survives a rotation but cannot be cleared", () => {
     assert.equal(asMap(buildSecretRecords({ ...base, allow: [] }))[RECORD.allow], undefined);
     assert.equal(asMap(buildSecretRecords({ ...base, allow: ["a.com"] }))[RECORD.allow], "a.com");
     assert.equal(asMap(buildSecretRecords({ ...base, allow: ["a.com", "b.com"] }))[RECORD.allow], "a.com,b.com");
+});
+
+test("site is always written, including empty, so overwriting a secret clears a stale hostname", () => {
+    assert.equal(asMap(buildSecretRecords(base))[RECORD.site], "");
+    assert.equal(asMap(buildSecretRecords({ ...base, site: "github.com" }))[RECORD.site], "github.com");
+});
+
+// Regenerated from the clock on every write, so a rotation deliberately does not carry it across
+const REGENERATED = new Set<string>([RECORD.created]);
+
+test("every record a create writes is read back before a rotation", () => {
+    const written = buildSecretRecords({ ...base, site: "github.com", allow: ["a.com"] })
+        .map((r) => r.key)
+        .filter((key) => !key.startsWith(WRAP_PREFIX) && !REGENERATED.has(key));
+
+    for (const key of written) {
+        assert.ok(ROTATE_KEYS.includes(key), `${key} is written on create but never read back for a rotation`);
+    }
 });
 
 test("every wrap becomes its own record", () => {

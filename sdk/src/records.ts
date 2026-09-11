@@ -49,10 +49,28 @@ export const RECORD = {
     reshare: (fingerprint: string) => `rewall.reshare.${fingerprint}`,
     // Published on the participant's own name so a payer can resolve a name and pay it privately
     shielded: "rewall.shielded",
+    // Outside the owner's signature, so a write delegate can repoint it and no reader can detect that
     site: "rewall.site",
     allow: "rewall.allow",
     wrap: (fingerprint: string) => `rewall.key.${fingerprint}`,
 } as const;
+
+// Every record a rotation reads back before rewriting the set, held here so records.test.ts can check it
+export const ROTATE_KEYS = [
+    RECORD.blob,
+    RECORD.version,
+    RECORD.encryption,
+    RECORD.type,
+    RECORD.allow,
+    RECORD.site,
+    RECORD.owner,
+    RECORD.grantees,
+    RECORD.subtrees,
+    RECORD.recovery,
+    RECORD.holders,
+    RECORD.authCounter,
+    RECORD.authSig,
+];
 
 export const WRAP_PREFIX = "rewall.key.";
 
@@ -92,6 +110,7 @@ export function buildSecretRecords(input: {
     wraps: { fingerprint: string; wrapped: string }[];
     createdAt: number;
     allow?: string[];
+    site?: string;
     owner?: string;
     grantees?: string[];
     subtrees?: string[];
@@ -121,6 +140,7 @@ export function buildSecretRecords(input: {
     if (input.allow?.length) records.push({ key: RECORD.allow, value: input.allow.join(",") });
 
     // Always written, including empty, so a rotation that drops the last grantee clears the old list
+    records.push({ key: RECORD.site, value: input.site ?? "" });
     records.push({ key: RECORD.owner, value: input.owner ?? "" });
     records.push({ key: RECORD.recovery, value: joinNames(input.recovery ?? []) });
     records.push({ key: RECORD.grantees, value: joinNames(input.grantees ?? []) });

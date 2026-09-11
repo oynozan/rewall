@@ -1,8 +1,10 @@
 import { isAddress, keccak256, namehash, parseAbi, toBytes, type Address, type Hash, type Hex } from "viem";
 import { deriveIdentity, fingerprintOf, IDENTITY_TYPED_DATA, type Identity } from "./identity.ts";
 import { toBase64, fromBase64, wipe } from "./crypto.ts";
+import { normalizeSite } from "./site.ts";
 import {
     RECORD,
+    ROTATE_KEYS,
     resolverAbi,
     encodeSetTextCalls,
     readTexts,
@@ -40,12 +42,21 @@ import {
     type Authorization,
 } from "./authorization.ts";
 
+export class ReadOnlyError extends Error {
+    constructor(operation: string) {
+        super(`${operation} needs a walletClient and an account, this Rewall was built for reading only`);
+        this.name = "ReadOnlyError";
+    }
+}
+
 export type RewallOptions = {
     publicClient: any;
-    walletClient: any;
-    account: any;
+    walletClient?: any;
+    account?: any;
     name: string;
     universalResolver: Address;
+    // Never wiped by the SDK, so a caller holding a key for a whole session keeps it until the caller drops it
+    identity?: Identity;
 };
 
 export type CreateOptions = {
@@ -54,6 +65,7 @@ export type CreateOptions = {
     subtreeGrantees?: string[];
     recovery: string[];
     allow?: string[];
+    site?: string;
     overwrite?: boolean;
 };
 
@@ -84,6 +96,13 @@ export class Rewall {
         this.walletClient = options.walletClient;
         this.account = options.account;
         this.universalResolver = options.universalResolver;
+        this.cachedIdentity = options.identity ?? null;
+    }
+
+    // The absence of a wallet is what makes a client read only, so every write and both signatures stop here
+    private signer(operation: string): { walletClient: any; account: any } {
+        if (!this.walletClient || !this.account) throw new ReadOnlyError(operation);
+        return { walletClient: this.walletClient, account: this.account };
     }
 
     /* Identity */
@@ -91,11 +110,10 @@ export class Rewall {
     // Cached for the life of the process only, never written to disk, and re-derived on the next run
     async identity(): Promise<Identity> {
         if (!this.cachedIdentity) {
+            const { walletClient, account } = this.signer("deriving an identity");
+
             // Through the wallet client, so an injected wallet works the same as a local key
-            const signature = await this.walletClient.signTypedData({
-                account: this.account,
-                ...IDENTITY_TYPED_DATA,
-            });
+            const signature = await walletClient.signTypedData({ account, ...IDENTITY_TYPED_DATA });
             this.cachedIdentity = await deriveIdentity(signature);
         }
         return this.cachedIdentity;
@@ -206,6 +224,8 @@ export class Rewall {
             grantees,
             createdAt: Math.floor(Date.now() / 1000),
             allow: options.allow,
+            // Normalized here, where a user typed it and can still be told what is wrong with it
+            site: options.site ? normalizeSite(options.site) : "",
         });
 
         // A stale wrap from a previous secret here turns a clean denial into a decryption failure
@@ -240,6 +260,9 @@ export class Rewall {
 
     // Records under an unregistered subname read back fine but leave ownerOf empty, so nothing can rotate
     async ensureSecretName(secretName: string): Promise<Hash | null> {
+        // Checked before the registry lookups, so a read only client fails clearly instead of after a round trip
+        const { walletClient, account } = this.signer("registering a subname");
+
         const label = secretName.split(".")[0]!;
         const parent = secretName.split(".").slice(1).join(".");
 
@@ -264,13 +287,13 @@ export class Rewall {
             args: [BigInt(keccak256(toBytes(parentLabel)))],
         });
 
-        const hash = await this.walletClient.writeContract({
+        const hash = await walletClient.writeContract({
             address: registry,
             abi: subnameAbi,
             functionName: "register",
             args: [label, this.address(), ZERO_ADDRESS, resolver, SET_RESOLVER_ROLES, expiry],
-            account: this.account,
-            chain: this.walletClient.chain,
+            account,
+            chain: walletClient.chain,
         });
 
         const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
@@ -279,7 +302,8 @@ export class Rewall {
     }
 
     private address(): Address {
-        return (typeof this.account === "string" ? this.account : this.account.address) as Address;
+        const { account } = this.signer("reading the caller's address");
+        return (typeof account === "string" ? account : account.address) as Address;
     }
 
     private async parentRegistryOf(name: string): Promise<Address> {
@@ -397,6 +421,11 @@ export class Rewall {
             subtrees: splitNames(current[RECORD.subtrees]),
             plaintext,
         });
+    }
+
+    // A hostname is typed by hand and gets typed wrong, and correcting it should not cost a whole rotation
+    async setSite(secretName: string, site?: string): Promise<Hash> {
+        return this.write(secretName, [{ key: RECORD.site, value: site ? normalizeSite(site) : "" }]);
     }
 
     // Only the owner signature verifies, so this deliberately does not verify before writing
@@ -583,21 +612,7 @@ export class Rewall {
 
     private async readForRotate(secretName: string): Promise<Record<string, string>> {
         const keys = await this.heldKeys();
-        return this.read(secretName, [
-            RECORD.blob,
-            RECORD.version,
-            RECORD.encryption,
-            RECORD.type,
-            RECORD.allow,
-            RECORD.owner,
-            RECORD.grantees,
-            RECORD.subtrees,
-            RECORD.recovery,
-            RECORD.holders,
-            RECORD.authCounter,
-            RECORD.authSig,
-            ...keys.map((k) => RECORD.wrap(k.fingerprint)),
-        ]);
+        return this.read(secretName, [...ROTATE_KEYS, ...keys.map((k) => RECORD.wrap(k.fingerprint))]);
     }
 
     private async rotateTo(
@@ -639,6 +654,8 @@ export class Rewall {
             previousFingerprints: previous,
             createdAt: Math.floor(Date.now() / 1000),
             allow: splitNames(current[RECORD.allow]),
+            // Carried as stored, because normalizing chain data would let one bad hostname block the rotation
+            site: current[RECORD.site],
         });
 
         const auth = this.authorizationOf(secretName, current);
@@ -696,8 +713,9 @@ export class Rewall {
     }
 
     private async signAuthorization(auth: Authorization): Promise<SecretRecords> {
-        const signature = await this.walletClient.signMessage({
-            account: this.account,
+        const { walletClient, account } = this.signer("signing an authorization");
+        const signature = await walletClient.signMessage({
+            account,
             message: authorizationPayload(auth),
         });
         return [
@@ -716,6 +734,9 @@ export class Rewall {
 
     // Records for several names share one transaction when they share a resolver, which by design they do
     private async writeAcross(groups: { name: string; records: SecretRecords }[]): Promise<Hash> {
+        // Checked before the resolver lookups, so a read only client fails clearly instead of after a round trip
+        this.signer("writing records");
+
         const pending = groups.filter((group) => group.records.length);
         if (!pending.length) throw new Error("no records to write");
 
@@ -742,13 +763,14 @@ export class Rewall {
     }
 
     private async send(resolver: Address, calls: Hex[]): Promise<Hash> {
-        const hash = await this.walletClient.writeContract({
+        const { walletClient, account } = this.signer("sending a transaction");
+        const hash = await walletClient.writeContract({
             address: resolver,
             abi: resolverAbi,
             functionName: "multicall",
             args: [calls],
-            account: this.account,
-            chain: this.walletClient.chain,
+            account,
+            chain: walletClient.chain,
         });
 
         const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
