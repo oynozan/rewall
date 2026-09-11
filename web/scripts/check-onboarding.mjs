@@ -33,7 +33,9 @@ page.on("request", (request) => {
     if (body) sent.push(body);
 });
 
-const wallet = headlessWallet({ mnemonic: process.env.REWALL_TEST_MNEMONIC, addressIndex: 2 });
+// A fresh derivation index each run, because a wallet is only ever handed one sponsored vault
+const walletIndex = 100 + (Number(BigInt(keccak256(toBytes(String(Date.now())))) % 800n) | 0);
+const wallet = headlessWallet({ mnemonic: process.env.REWALL_TEST_MNEMONIC, addressIndex: walletIndex });
 await attachWallet(page, wallet);
 
 const shot = async (name) => {
@@ -58,7 +60,7 @@ try {
     await expect(walletRow).toBeVisible({ timeout: 30000 });
     await walletRow.click();
     await page.getByText("Rewall Test Wallet").first().click();
-    await expect(page.locator(".sidebar-account")).toContainText("0xd459", { timeout: 60000 });
+    await expect(page.locator(".sidebar-account")).toContainText(wallet.address.slice(0, 6), { timeout: 60000 });
     pass("a wallet that owns nothing connects and lands on the wizard");
 
     /* Gas */

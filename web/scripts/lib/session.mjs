@@ -5,7 +5,7 @@ import { expect } from "@playwright/test";
 // Privy is not listening until it has loaded, so the click is retried rather than waited on once
 export async function connectWallet(page) {
     const walletRow = page.getByText("Continue with a wallet");
-    const gate = page.getByRole("dialog", { name: "Connect to Rewall" });
+    const gate = page.getByRole("complementary", { name: "Connect to Rewall" });
 
     // Disconnected always means the gate, so waiting for it beats racing the sidebar drawer for the top layer
     await expect(gate).toBeVisible({ timeout: 90000 });
@@ -41,5 +41,5 @@ export async function openOwnVault(page, { url, address, name }) {
     await expect(page.locator(".sidebar-vault strong, .workspace-switcher strong")).toHaveText(name, {
         timeout: 90000,
     });
-    await expect(page.getByRole("dialog", { name: "Set up your vault" })).toHaveCount(0);
+    await expect(page.getByRole("complementary", { name: "Set up your vault" })).toHaveCount(0);
 }

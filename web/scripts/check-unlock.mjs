@@ -33,7 +33,7 @@ async function shot(name) {
 
 try {
     await page.goto(`${baseURL}/dashboard`, { waitUntil: "domcontentloaded", timeout: 120000 });
-    await expect(page.getByRole("dialog", { name: "Connect to Rewall" })).toBeVisible({ timeout: 90000 });
+    await expect(page.getByRole("complementary", { name: "Connect to Rewall" })).toBeVisible({ timeout: 90000 });
 
     /* Nothing is asked of a visitor who has not said who they are */
 

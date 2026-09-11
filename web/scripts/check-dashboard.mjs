@@ -46,7 +46,7 @@ try {
     /* The dashboard belongs to whoever is connected, so the gate comes first */
 
     await page.goto(`${baseURL}/dashboard`, { waitUntil: "domcontentloaded", timeout: 120000 });
-    await expect(page.getByRole("dialog", { name: "Connect to Rewall" })).toBeVisible({ timeout: 90000 });
+    await expect(page.getByRole("complementary", { name: "Connect to Rewall" })).toBeVisible({ timeout: 90000 });
     await openOwnVault(page, { url: `${baseURL}/dashboard`, address: "0xD2F8", name: "rewall-test-1.eth" });
     await expect(page.locator(".secrets-browser button.secret-name").first()).toBeVisible({ timeout: 90000 });
     const firstName = await page.locator(".secrets-browser .secret-name small").first().innerText();
@@ -97,8 +97,10 @@ try {
     );
     assert(delays.length >= 10, "Every sidebar row takes part in the reveal");
     assert(delays.at(-1) > delays[0], "Sidebar rows must reveal in sequence");
-    /* The logo is inline artwork, its own transforms place the glyphs and are not dashboard chrome */
-    const transformed = await page.locator(".dashboard-app *:not(.brand-logo, .brand-logo *)").evaluateAll((elements) =>
+    /* The logo and the shader button are artwork, their transforms place their own layers and are not chrome */
+    const transformed = await page
+        .locator(".dashboard-app *:not(.brand-logo, .brand-logo *, .liquid-metal, .liquid-metal *)")
+        .evaluateAll((elements) =>
         elements
             .filter((element) => {
                 const { transform, scale } = getComputedStyle(element);
@@ -108,14 +110,19 @@ try {
                 );
             })
             .map((element) => element.className),
-    );
+        );
     assert.deepEqual(transformed, [], "The dashboard must not scale or transform anything");
     checks.push("Sidebar reveals as a staggered cascade and nothing is scaled or transformed");
 
     const frame = () => page.locator(".welcome-banner canvas").evaluate((canvas) => canvas.toDataURL());
     const before = await frame();
-    await page.waitForTimeout(350);
-    assert.notEqual(await frame(), before, "Dither should animate");
+    // Sampled until it moves rather than once, because one animation frame can land either side of a fixed wait
+    let moved = false;
+    for (let waited = 0; waited < 12 && !moved; waited++) {
+        await page.waitForTimeout(250);
+        moved = (await frame()) !== before;
+    }
+    assert.ok(moved, "Dither should animate");
     await expect(page.getByRole("button", { name: /banner animation/ })).toHaveCount(0);
     const logo = page.locator(".brand-logo");
     const half = page.locator(".brand-logo .from-top");
@@ -268,8 +275,9 @@ try {
         await page.locator(".brand-logo .from-top").evaluate((element) => getComputedStyle(element).animationName),
         "none",
     );
+    /* The shader button stacks its own depth, everything else in the dashboard stays flat */
     const shadows = await page
-        .locator(".dashboard-app *")
+        .locator(".dashboard-app *:not(.liquid-metal, .liquid-metal *)")
         .evaluateAll((elements) =>
             elements
                 .filter((element) => getComputedStyle(element).boxShadow !== "none")

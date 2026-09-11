@@ -11,8 +11,8 @@ const ROLES = [
     { index: 1, name: "grantee", target: parseEther("0.02") },
     { index: 2, name: "stranger", target: 0n },
     { index: 3, name: "recovery", target: parseEther("0.01") },
-    // Pays the dashboard faucet and every sponsored setup, and is the only key the web server holds
-    { index: 4, name: "sponsor", target: parseEther("0.02") },
+    // Pays the dashboard faucet and every sponsored setup, so it carries enough for a room full of testers
+    { index: 4, name: "sponsor", target: parseEther("0.05") },
 ];
 
 /* Mnemonic */
@@ -56,13 +56,15 @@ const funderBalance = await publicClient.getBalance({ address: funder.address })
 console.log(`\nfunder   ${funder.address}  ${formatEther(funderBalance)} ETH\n`);
 
 // Testnet ETH is finite in practice, so a role sitting well above its target hands the surplus back first
-const gasPrice = await publicClient.getGasPrice();
-const sendCost = gasPrice * 21000n * 2n;
+// The send is priced off maxFeePerGas rather than the current gas price, because that is what is actually
+// deducted, and a return worth less than its own fee is not worth making
+const { maxFeePerGas } = await publicClient.estimateFeesPerGas();
+const sendCost = (maxFeePerGas ?? (await publicClient.getGasPrice())) * 21000n * 3n;
 
 for (const a of accounts) {
     const balance = await publicClient.getBalance({ address: a.account.address });
     const surplus = balance > a.target * 2n ? balance - a.target - sendCost : 0n;
-    if (surplus <= 0n) continue;
+    if (surplus <= sendCost) continue;
 
     const role = createWalletClient({ account: a.account, chain: sepolia, transport: http(rpc) });
     const hash = await role.sendTransaction({ to: funder.address, value: surplus });

@@ -3,10 +3,55 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { TYPE_LABELS, type SecretType } from "@/src/lib/vault";
+import { GUARDIAN_RECOVERY_PREFIX } from "@rewall/sdk";
+import { TYPE_LABELS, type Secret, type SecretType } from "@/src/lib/vault";
 import { FadeDots, FadeIn } from "./amicro";
 import { useWorkspace } from "./dashboard-shell";
-import { Glyph, Icon, TableColumns } from "./ui";
+import { Glyph, Icon, type IconName } from "./ui";
+
+// A fixed locale and zone so the server and the browser print the same string
+const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const MOMENT = new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeStyle: "short", timeZone: "UTC" });
+
+const TYPE_ICONS: Record<string, IconName | undefined> = {
+    totp: "authenticator",
+    generic: "documents",
+    envvar: "documents",
+    dburl: "documents",
+    webhook: "documents",
+    cert: "shield",
+    seed: "wallet",
+};
+
+const count = (total: number, one: string, many: string) => `${total} ${total === 1 ? one : many}`;
+
+// People and teams are different kinds of access, so the tooltip keeps them apart the way the cell does
+function sharedTitle(secret: Secret) {
+    const parts: string[] = [];
+    if (secret.grantees.length) parts.push(`People ${secret.grantees.join(", ")}`);
+    if (secret.subtrees.length) parts.push(`Teams ${secret.subtrees.join(", ")}`);
+    return parts.join("\n") || undefined;
+}
+
+function sharedWith(secret: Secret) {
+    const parts: string[] = [];
+    if (secret.grantees.length) parts.push(count(secret.grantees.length, "person", "people"));
+    if (secret.subtrees.length) parts.push(count(secret.subtrees.length, "team", "teams"));
+    return parts.join(", ");
+}
+
+// A prefixed entry resolves to a recovery key on that name, which is the owner's own phrase when it is their name
+// Anything else is a plain ENS name holding a wrap of its own, so it is shown as the name it is
+function recoveryOf(secret: Secret, ownName: string) {
+    const guarded = secret.recovery.filter((entry) => entry.startsWith(GUARDIAN_RECOVERY_PREFIX));
+    const named = secret.recovery.filter((entry) => !entry.startsWith(GUARDIAN_RECOVERY_PREFIX));
+
+    if (guarded.some((entry) => entry.slice(GUARDIAN_RECOVERY_PREFIX.length) === ownName)) return "Your phrase";
+    if (guarded.length) return "Guardians";
+    // Dropped because every name here ends in it, and the suffix is what pushes the cell into an ellipsis
+    if (named.length === 1) return named[0]!.replace(/\.eth$/, "");
+    return count(named.length, "holder", "holders");
+}
 
 export function SecretsPage() {
     const params = useSearchParams();
@@ -37,7 +82,7 @@ export function SecretsPage() {
 }
 
 export function SecretsTable({ compact = false, initialType = "all" }: { compact?: boolean; initialType?: string }) {
-    const { vault, busy, error, refresh, setPanel } = useWorkspace();
+    const { vault, busy, error, refresh, setPanel, ownName } = useWorkspace();
     const [query, setQuery] = useState("");
     const [type, setType] = useState(initialType);
     const [sort, setSort] = useState("newest");
@@ -207,7 +252,14 @@ export function SecretsTable({ compact = false, initialType = "all" }: { compact
             </div>
             <div className="table-scroll">
                 <table className="secrets-table">
-                    <TableColumns />
+                    <colgroup>
+                        <col className="table-select-col" />
+                        <col className="table-name-col" />
+                        <col className="table-data-col" />
+                        <col className="secrets-access-col" />
+                        <col className="secrets-recovery-col" />
+                        <col className="secrets-date-col" />
+                    </colgroup>
                     <thead>
                         <tr>
                             <th className="checkbox-cell">
@@ -224,7 +276,8 @@ export function SecretsTable({ compact = false, initialType = "all" }: { compact
                             </th>
                             <th scope="col">Secret</th>
                             <th scope="col">Type</th>
-                            <th scope="col">Protection</th>
+                            <th scope="col">Shared with</th>
+                            <th scope="col">Recovery</th>
                             <th scope="col">Created</th>
                         </tr>
                     </thead>
@@ -257,16 +310,7 @@ export function SecretsTable({ compact = false, initialType = "all" }: { compact
                                             aria-label={`View ${secret.label} details`}
                                         >
                                             <span className="secret-icon">
-                                                <Icon
-                                                    name={
-                                                        secret.type === "totp"
-                                                            ? "authenticator"
-                                                            : secret.type === "generic"
-                                                              ? "documents"
-                                                              : "key"
-                                                    }
-                                                    size={20}
-                                                />
+                                                <Icon name={TYPE_ICONS[secret.type] ?? "key"} size={20} />
                                             </span>
                                             <span>
                                                 <strong>{secret.label}</strong>
@@ -279,20 +323,34 @@ export function SecretsTable({ compact = false, initialType = "all" }: { compact
                                             {TYPE_LABELS[secret.type as SecretType] || secret.type}
                                         </span>
                                     </td>
-                                    <td>
-                                        <span className="protection-label">
-                                            <Icon name="lock" size={14} />
-                                            {secret.encryption === "aes-256-gcm" ? "Encrypted" : "Unverified"}
-                                        </span>
+                                    <td className="access-cell" title={sharedTitle(secret)}>
+                                        {sharedWith(secret) || <span className="unset">Only you</span>}
+                                    </td>
+                                    <td
+                                        className="recovery-cell"
+                                        title={
+                                            secret.recovery
+                                                .map((entry) => entry.replace(GUARDIAN_RECOVERY_PREFIX, ""))
+                                                .join(", ") || undefined
+                                        }
+                                    >
+                                        {secret.recovery.length ? (
+                                            recoveryOf(secret, ownName)
+                                        ) : (
+                                            <span className="unset">Not set</span>
+                                        )}
                                     </td>
                                     <td className="date-cell">
-                                        {secret.created
-                                            ? new Date(secret.created * 1000).toLocaleDateString("en-GB", {
-                                                  month: "short",
-                                                  day: "numeric",
-                                                  timeZone: "UTC",
-                                              })
-                                            : "—"}
+                                        {secret.created ? (
+                                            <time
+                                                dateTime={new Date(secret.created * 1000).toISOString()}
+                                                title={MOMENT.format(secret.created * 1000)}
+                                            >
+                                                {DAY.format(secret.created * 1000)}
+                                            </time>
+                                        ) : (
+                                            "—"
+                                        )}
                                     </td>
                                 </tr>
                             ))}

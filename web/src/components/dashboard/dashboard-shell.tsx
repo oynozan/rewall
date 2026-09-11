@@ -2,7 +2,7 @@
 
 import { Toaster } from "sonner";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { type EIP1193Provider } from "viem";
@@ -13,6 +13,7 @@ import { SecretAccess } from "./secret-access";
 import { CreateSecret } from "./create-secret";
 import { ConnectGate } from "./connect-gate";
 import { AddSecret } from "./add-secret";
+import { LiquidMetalButton } from "./liquid-metal-button";
 import { ownsName, rememberName, resolveOwnName } from "@/src/lib/account";
 import {
     ownerName,
@@ -181,9 +182,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                                 <Logo />
                             </Link>
                         </div>
-                        <div className="sidebar-action" style={step(1)}>
-                            <AddSecret />
-                        </div>
                         <nav>
                             <div className="nav-group">
                                 {(
@@ -210,6 +208,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                             </div>
                         </nav>
                         <div className="sidebar-bottom">
+                            <div className="sidebar-action" style={step(7)}>
+                                <AddSecret fullWidth />
+                            </div>
                             <nav aria-label="Resources">
                                 <div className="nav-group">
                                     <span className="nav-caption" style={step(6)}>
@@ -250,7 +251,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                                 </span>
                                 <span className="sidebar-control-label">
                                     <strong className={ownName ? "mono" : ""}>{ownName || "No vault yet"}</strong>
-                                    <small>{ownName ? "Yours" : "Set one up"}</small>
+                                    {!ownName && <small>Set one up</small>}
                                 </span>
                                 <span className="wallet-chevron">
                                     <Glyph name="chevron_right" size={18} />
@@ -313,6 +314,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 }
 
 function WorkspacePanel() {
+    const router = useRouter();
     const {
         panel,
         setPanel,
@@ -505,13 +507,14 @@ function WorkspacePanel() {
                                             Rewall has to know which name is yours before it can store anything under
                                             it.
                                         </p>
-                                        <Link
-                                            href="/dashboard/setup"
-                                            className="button primary full-width"
-                                            onClick={close}
-                                        >
-                                            Set up a new vault
-                                        </Link>
+                                        <LiquidMetalButton
+                                            fullWidth
+                                            label="Set up a new vault"
+                                            onClick={() => {
+                                                close();
+                                                router.push("/dashboard/setup");
+                                            }}
+                                        />
                                         <form onSubmit={claim} className="panel-form claim-form">
                                             <label htmlFor="own-name">Or name one you already own</label>
                                             <input
@@ -523,9 +526,12 @@ function WorkspacePanel() {
                                                 spellCheck={false}
                                                 required
                                             />
-                                            <button className="button" disabled={claiming}>
-                                                {claiming ? "Checking the registry…" : "This one is mine"}
-                                            </button>
+                                            <LiquidMetalButton
+                                                fullWidth
+                                                type="submit"
+                                                disabled={claiming}
+                                                label={claiming ? "Checking the registry…" : "This one is mine"}
+                                            />
                                             <p className="field-help">
                                                 Checked against the registry, so a name you do not hold will be refused.
                                             </p>
@@ -600,13 +606,12 @@ function WorkspacePanel() {
                                     </>
                                 ) : (
                                     <>
-                                        <button
-                                            className="button primary full-width"
+                                        <LiquidMetalButton
+                                            fullWidth
                                             onClick={connect}
                                             disabled={!ready}
-                                        >
-                                            {ready ? "Connect a wallet" : "Loading…"}
-                                        </button>
+                                            label={ready ? "Connect a wallet" : "Loading…"}
+                                        />
                                         <p className="field-help">
                                             Bring your own wallet or have one made for you from an email address.
                                             Connecting reads your public address and signs nothing.

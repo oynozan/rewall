@@ -51,11 +51,11 @@ try {
     pass("a wallet holding nothing still reaches recovery, it only has to derive its own key");
 
     await fresh.page.getByLabel("Vault ENS name").fill(LOST);
-    await expect(fresh.page.locator(".recovery-count")).toBeVisible({ timeout: 120000 });
-    const before = await fresh.page.locator(".recovery-count").innerText();
-    assert.match(before, /^\d+ of \d+ approved$/);
+    await expect(fresh.page.locator(".recovery-progress .mono")).toBeVisible({ timeout: 120000 });
+    const before = await fresh.page.locator(".recovery-progress .mono").innerText();
+    assert.match(before, /^\d+ \/ \d+$/);
     await fresh.page.screenshot({ path: `${output}/recovery-1-waiting.png`, animations: "disabled" });
-    pass(`the guardian policy is read from chain, showing ${before.toLowerCase()}`);
+    pass(`the guardian policy is read from chain, showing ${before} approvals`);
 
     const link = await fresh.page.evaluate(async () => {
         const button = [...document.querySelectorAll("button")].find((b) =>
@@ -79,7 +79,7 @@ try {
         });
         const spent = session.wallet.calls.transactions;
         await session.page.getByRole("button", { name: "Approve this recovery" }).click();
-        await expect(session.page.getByRole("button", { name: "Approved, your share is published" })).toBeVisible({
+        await expect(session.page.getByText("Approved, your share is published")).toBeVisible({
             timeout: 180000,
         });
         assert.equal(session.wallet.calls.transactions - spent, 1, "Approving costs one transaction");
@@ -89,11 +89,11 @@ try {
     /* The count climbs without anything being passed by hand */
 
     await fresh.page.bringToFront();
-    await expect(fresh.page.locator(".recovery-count")).toBeVisible({ timeout: 120000 });
+    await expect(fresh.page.locator(".recovery-progress .mono")).toBeVisible({ timeout: 120000 });
 
     // Reads real chain state, so a quorum may already have approved from an earlier run
-    const [, approvals, threshold] = (await fresh.page.locator(".recovery-count").innerText()).match(
-        /^(\d+) of (\d+) approved$/,
+    const [, approvals, threshold] = (await fresh.page.locator(".recovery-progress .mono").innerText()).match(
+        /^(\d+) \/ (\d+)$/,
     );
     assert.ok(
         Number(approvals) >= SELF_OWNED_GUARDIANS.length,
@@ -104,16 +104,17 @@ try {
 
     /* Below the threshold it refuses to pretend, at it the vault comes back */
 
-    const action = fresh.page.locator(".recovery-block button.primary").last();
+    const action = fresh.page.locator(".recovery-card button.primary").last();
     if (Number(approvals) < Number(threshold)) {
         assert.equal(await action.isDisabled(), true);
         assert.match(await action.innerText(), /^Waiting for \d+ more$/);
         pass("below the threshold the action names how many are missing and stays disabled");
     } else {
         await action.click();
-        await expect(fresh.page.getByText(/Rebuilt the recovery key/)).toBeVisible({ timeout: 180000 });
+        await expect(fresh.page.locator(".recovery-result")).toBeVisible({ timeout: 180000 });
+        await expect(fresh.page.getByRole("heading", { name: "Access recovered" })).toBeVisible();
         await fresh.page.screenshot({ path: `${output}/recovery-3-recovered.png`, animations: "disabled" });
-        pass("at the threshold the vault is recovered and the rebuilt key is named");
+        pass("at the threshold the vault is recovered and the rebuilt key fingerprint is shown");
     }
 
     console.log(JSON.stringify({ passed: checks.length, checks }, null, 2));

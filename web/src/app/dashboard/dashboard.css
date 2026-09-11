@@ -592,15 +592,18 @@ input[type="checkbox"]:checked::after {
     background: var(--hover);
     white-space: nowrap;
 }
-.protection-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+.access-cell,
+.recovery-cell {
     font-size: 12px;
     color: #a2a29a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
-.protection-label .arc-icon {
-    opacity: 0.5;
+/* Dimmer than the cell it sits in, because an absence has to read as one rather than as another value */
+.access-cell .unset,
+.recovery-cell .unset {
+    color: #6e6e66;
 }
 .date-cell {
     font-size: 12px;
@@ -1653,6 +1656,17 @@ input[type="checkbox"]:indeterminate::after {
 .table-end-col {
     width: 96px;
 }
+/* The secrets table splits the same 280px tail into three, so every table still breaks at the same offsets */
+/* Sized off the longest real values, "2 people, 1 team" and a full ENS name, with room for a fallback font */
+.secrets-access-col {
+    width: 126px;
+}
+.secrets-recovery-col {
+    width: 112px;
+}
+.secrets-date-col {
+    width: 94px;
+}
 .otp-table th:first-child,
 .otp-table td:first-child,
 .transfer-table th:first-child,
@@ -2407,10 +2421,17 @@ body[data-home-tour="active"] .tour-restart {
     }
 }
 
-/* The primary action sits above the nav, so storing a secret is reachable from every page */
+/* Sidebar primary action */
 .sidebar-action {
-    padding: 0 14px 14px;
+    display: flex;
+    padding: 0 12px 24px;
 }
-.sidebar-action .button {
+/* Plain primary action */
+.add-secret-plain {
+    width: 142px;
+    min-height: 46px;
+}
+
+.sidebar-action > .add-secret-plain {
     width: 100%;
 }

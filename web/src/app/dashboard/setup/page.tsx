@@ -6,7 +6,17 @@ import { useWorkspace } from "@/src/components/dashboard/dashboard-shell";
 
 export default function SetupPage() {
     const router = useRouter();
-    const { account, connect } = useWorkspace();
+    const { account, connect, claimName } = useWorkspace();
+
+    // Adopted on the way out rather than inside the wizard, because it changes the vault the shell keys on
+    // The name was registered seconds ago, so one lagging read is expected and worth waiting out
+    async function leave(name: string) {
+        for (let attempt = 0; attempt < 5; attempt++) {
+            if (attempt) await new Promise((resolve) => setTimeout(resolve, 2000));
+            if (await claimName(name).catch(() => false)) break;
+        }
+        router.push("/dashboard/secrets");
+    }
 
     if (!account) {
         return (
@@ -19,5 +29,5 @@ export default function SetupPage() {
         );
     }
 
-    return <SetupWizard address={account} onDone={() => router.push("/dashboard/secrets")} />;
+    return <SetupWizard address={account} onDone={leave} />;
 }

@@ -1,9 +1,12 @@
 // Checks the sponsored endpoints refuse strangers, since both of them spend project funds
 
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
+import { getAddress } from "viem";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
-const SOMEONE = "0x52b99aD42CEf23382580b131742F17B34c4A06fE";
+// Fresh every run, because any fixed address stops being new the first time someone onboards with it
+const SOMEONE = getAddress(`0x${randomBytes(20).toString("hex")}`);
 
 const checks = [];
 const pass = (message) => checks.push(message);

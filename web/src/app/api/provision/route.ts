@@ -31,7 +31,9 @@ export async function POST(request: Request) {
     }
 
     const existing = await accountFor(address);
-    if (existing?.completedAt) return Response.json({ done: true, name: existing.name });
+    // One sponsored vault per wallet, and the name that comes back is the one they actually hold
+    // Saying done for a label nobody registered would send them to a vault that does not exist
+    if (existing?.completedAt) return Response.json({ done: true, already: true, name: existing.name });
 
     // A sponsored deploy costs the project real money, so the ledger caps how many can ever run
     if (

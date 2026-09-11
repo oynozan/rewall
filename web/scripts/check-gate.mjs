@@ -31,7 +31,7 @@ try {
     /* Nobody else's vault is on screen before a wallet says who you are */
 
     await page.goto(`${baseURL}/dashboard`, { waitUntil: "domcontentloaded", timeout: 120000 });
-    await expect(page.getByRole("dialog", { name: "Connect to Rewall" })).toBeVisible({ timeout: 90000 });
+    await expect(page.getByRole("complementary", { name: "Connect to Rewall" })).toBeVisible({ timeout: 90000 });
     await shot("gate-1-locked");
 
     const body = await page.locator(".dashboard-app").innerText();
@@ -39,20 +39,27 @@ try {
     assert.equal(await page.locator(".secrets-browser button.secret-name").count(), 0, "No secrets belong to nobody");
     pass("a visitor with no wallet is shown no vault at all, not a stranger's");
 
-    /* The glass is real, and the banner is the one thing allowed through it */
+    /* Each panel frosts on its own rather than one sheet over the page */
 
     const layers = await page.evaluate(() => {
-        const scrim = document.querySelector('[class*="scrim"]');
-        const banner = document.querySelector(".welcome-banner");
+        const filterOf = (selector) => {
+            const element = document.querySelector(selector);
+            return element ? getComputedStyle(element).filter : "missing";
+        };
         return {
-            backdrop: scrim ? getComputedStyle(scrim).backdropFilter : "",
-            scrimZ: scrim ? Number(getComputedStyle(scrim).zIndex) : 0,
-            bannerZ: banner ? Number(getComputedStyle(banner).zIndex) : 0,
+            overview: filterOf(".terminal-overview"),
+            table: filterOf(".secrets-browser"),
+            welcome: filterOf(".welcome-banner"),
+            heading: filterOf(".section-heading"),
         };
     });
-    assert.match(layers.backdrop, /blur/, "The locked dashboard is blurred");
-    assert.ok(layers.bannerZ > layers.scrimZ, "The welcome banner paints above the blur, so it stays readable");
-    pass("everything is blurred except the welcome banner, which sits above the scrim");
+    assert.match(layers.overview, /blur/, "The cards frost while locked");
+    assert.match(layers.table, /blur/, "The tables frost while locked");
+    assert.equal(layers.welcome, "none", "The welcome banner is never blurred");
+
+    // A blurred heading beside a sharp one on the same row is the rendering fault this replaced
+    assert.equal(layers.heading, "none", "Headings stay sharp so the page still says what each panel is");
+    pass("each panel frosts on its own and the headings and welcome banner stay sharp");
 
     /* Nothing behind the glass can be reached */
 
@@ -66,7 +73,7 @@ try {
 
     /* Connecting lifts the glass and opens the wallet's own vault */
 
-    const connect = page.getByRole("dialog", { name: "Connect to Rewall" }).getByRole("button");
+    const connect = page.getByRole("complementary", { name: "Connect to Rewall" }).getByRole("button");
     const walletRow = page.getByText("Continue with a wallet");
     for (let attempt = 0; attempt < 10; attempt++) {
         await connect.click({ timeout: 15000 }).catch(() => {});
@@ -76,10 +83,10 @@ try {
     await page.getByText("Rewall Test Wallet").first().click();
     await expect(page.locator(".sidebar-account")).toContainText("0xD2F8", { timeout: 60000 });
 
-    await expect(page.getByRole("dialog", { name: "Connect to Rewall" })).toHaveCount(0, { timeout: 90000 });
+    await expect(page.getByRole("complementary", { name: "Connect to Rewall" })).toHaveCount(0, { timeout: 90000 });
 
     // Reverse resolution is empty on Sepolia, so an owner on a fresh browser is asked which name is theirs
-    await expect(page.getByRole("dialog", { name: "Set up your vault" })).toBeVisible({ timeout: 90000 });
+    await expect(page.getByRole("complementary", { name: "Set up your vault" })).toBeVisible({ timeout: 90000 });
     await shot("gate-2-needs-vault");
     pass("a connected wallet with nothing linked is offered a vault rather than shown an empty dashboard");
 

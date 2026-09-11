@@ -6,6 +6,7 @@ import { usePrivateData } from "./private-data";
 import { OtpCells } from "./otp-code";
 import { Icon, TableColumns } from "./ui";
 import { FadeIn } from "./amicro";
+import { ExtensionBanner } from "./extension-banner";
 
 export function TwoFactorTable({ compact = false, query = "" }: { compact?: boolean; query?: string }) {
     const { vault, busy, error: vaultError } = useWorkspace();
@@ -106,6 +107,7 @@ export function TwoFactorPage() {
             <div className="page-heading">
                 <h1>2FA</h1>
             </div>
+            <ExtensionBanner />
             <div className="table-toolbar page-search">
                 <label className="search-field">
                     <Icon name="folder_search" size={17} />

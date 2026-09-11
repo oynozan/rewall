@@ -22,8 +22,9 @@
         "check:onboarding": "node --env-file=../tools/.env --env-file=.env.local scripts/check-onboarding.mjs"
     },
     "dependencies": {
+        "@paper-design/shaders": "^0.0.80",
+        "@privy-io/node": "^0.34.0",
         "@privy-io/react-auth": "^3.42.0",
-        "@privy-io/server-auth": "^1.32.5",
         "@rewall/sdk": "link:../sdk",
         "canvas-confetti": "^1.9.4",
         "mongodb": "^7.6.0",

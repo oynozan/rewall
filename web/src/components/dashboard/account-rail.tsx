@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useWorkspace } from "./dashboard-shell";
 import { useCapabilities } from "./identity";
 import { vaultSetup, type VaultSetup } from "@/src/lib/account";
-import { Glyph, SegmentedProgress } from "./ui";
+import { SegmentedProgress } from "./ui";
+import { LiquidMetalButton } from "./liquid-metal-button";
 import { SidebarFade, SidebarSection } from "./amicro";
 
 // Keyed by the name it describes, so a reply for a vault you have left is ignored
@@ -48,10 +49,7 @@ export function AccountRail() {
                         </div>
                     </>
                 ) : (
-                    <button className="button small wallet-connect" onClick={() => setPanel("wallet")}>
-                        Connect wallet
-                        <Glyph name="chevron_right" size={18} />
-                    </button>
+                    <LiquidMetalButton fullWidth label="Connect wallet" onClick={() => setPanel("wallet")} />
                 )}
             </SidebarSection>
             <SidebarSection delay={0.08}>

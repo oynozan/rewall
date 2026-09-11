@@ -5,10 +5,19 @@ import { dnsEncode, RECORD, resolverAbi, splitNames, universalResolverAbi, SCHEM
 
 export const TEST_OWNER = "rewall-test-1.eth";
 export const UNIVERSAL_RESOLVER = "0x4a1817d13e9cf196f471725176355c1234b63c70";
+// Keys are written to chain as rewall.type, so a rename orphans every secret already carrying the old one
 export const TYPE_LABELS = {
-    apikey: "API key",
     generic: "Secure note",
+    apikey: "API key",
+    password: "Password",
+    dburl: "Database URL",
+    sshkey: "SSH key",
+    cert: "Certificate",
     privkey: "Private key",
+    seed: "Seed phrase",
+    oauth: "OAuth token",
+    webhook: "Webhook",
+    envvar: "Env variable",
     totp: "Authenticator",
     receipt: "Receipt",
 } as const;

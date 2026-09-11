@@ -32,7 +32,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 // An embedded wallet is a plain EOA, which is the only kind Rewall can derive a key from
                 embeddedWallets: { ethereum: { createOnLogin: "users-without-wallets" } },
                 appearance: {
-                    theme: "dark",
+                    // Rewall's surface tone, because Privy's own dark theme is blue tinted
+                    theme: "#1c1c1c",
                     accentColor: "#e5e5de",
                     logo: "/logo.svg",
                     walletChainType: "ethereum-only",

@@ -67,7 +67,7 @@ try {
     /* A visitor with no wallet is shown nothing at all, let alone somewhere to store */
 
     await page.goto(`${baseURL}/dashboard/secrets`, { waitUntil: "domcontentloaded", timeout: 120000 });
-    await expect(page.getByRole("dialog", { name: "Connect to Rewall" })).toBeVisible({ timeout: 90000 });
+    await expect(page.getByRole("complementary", { name: "Connect to Rewall" })).toBeVisible({ timeout: 90000 });
     await expect(page.getByRole("button", { name: "Store a secret" })).toHaveCount(0);
     pass("a visitor who owns nothing is not offered a place to store");
 
@@ -75,7 +75,9 @@ try {
 
     await openOwnVault(page, { url: `${baseURL}/dashboard/secrets`, address: "0xD2F8", name: OWNER });
     await expect(page.locator(".secrets-browser button.secret-name").first()).toBeVisible({ timeout: 90000 });
-    await expect(page.locator(".workspace-switcher small, .sidebar-vault small")).toHaveText("Yours", { timeout: 60000 });
+    await expect(page.locator(".workspace-switcher strong, .sidebar-vault strong")).toHaveText(OWNER, {
+        timeout: 60000,
+    });
     pass("the owner adopts their vault and the store action appears");
 
     /* Store a real secret */

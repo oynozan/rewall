@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { fromBase64, readTexts, RECORD, splitNames } from "@rewall/sdk";
 import { explain } from "@/src/lib/errors";
@@ -9,7 +9,7 @@ import { ownsName } from "@/src/lib/account";
 import { useIdentity } from "./identity";
 import { useWorkspace } from "./dashboard-shell";
 import { FadeIn } from "./amicro";
-import { CopyButton } from "./ui";
+import { CopyButton, Glyph, Icon, SegmentedProgress } from "./ui";
 
 type Policy = { names: string[]; threshold: number; approvals: string[] };
 
@@ -71,8 +71,7 @@ export function RecoveryPage() {
             const requester = params.get("key");
             if (!requester) throw new Error("This link is missing the replacement key.");
 
-            // Keyed by identity, so the name to publish under is the one that published this key, and
-            // owning a name is not enough because a parent owns its subnames too
+            // Match the published key because owning a parent name does not make it a guardian
             const target = ownerName(approveFor);
             const listed = await readTexts(vaultClient, UNIVERSAL_RESOLVER, target, [RECORD.guardians]);
             const matches = await Promise.all(
@@ -117,132 +116,219 @@ export function RecoveryPage() {
         }
     }
 
-    if (!account) {
-        return (
-            <FadeIn className="recovery-page">
-                <div className="page-heading">
-                    <h1>Recovery</h1>
-                </div>
-                <p className="field-help">
-                    Connect the wallet you want to recover into, or the one a friend named as a guardian.
-                </p>
-                <button className="button primary" onClick={() => setPanel("wallet")}>
-                    Connect a wallet
-                </button>
-            </FadeIn>
-        );
-    }
-
-    if (!unlocked) {
-        return (
-            <FadeIn className="recovery-page">
-                <div className="page-heading">
-                    <h1>Recovery</h1>
-                </div>
-                <p className="field-help">
-                    Recovery works on your Rewall key, so this wallet has to derive it first. One signature.
-                </p>
-                <button className="button primary" onClick={() => void unlock()}>
-                    Unlock to continue
-                </button>
-            </FadeIn>
-        );
-    }
-
+    const guardianRequest = Boolean(approveFor);
+    const approved = Boolean(policy?.threshold) && (policy?.approvals.length ?? 0) >= (policy?.threshold ?? 0);
+    const stage = recovered ? 3 : !account || !unlocked ? 0 : approved ? 2 : 1;
     const guardianLink = `${origin()}/dashboard/recovery?approve=${encodeURIComponent(lost)}&key=${encodeURIComponent(publicKey)}`;
 
     return (
-        <FadeIn className="recovery-page">
+        <RecoveryLayout stage={stage} guardianRequest={guardianRequest}>
+            {!account || !unlocked ? (
+                <section className="recovery-card">
+                    <header>
+                        <Icon name={guardianRequest ? "shield" : "lock"} size={20} />
+                        <h2>{guardianRequest ? "Approve a recovery" : "Recover a vault"}</h2>
+                    </header>
+                    <div className="recovery-card-body">
+                        {approveFor && <p className="recovery-name mono">{approveFor}</p>}
+                        <p className="recovery-description">
+                            {!account
+                                ? guardianRequest
+                                    ? "Connect the wallet registered as a guardian for this vault."
+                                    : "Connect the replacement wallet you want to recover access with."
+                                : "Unlock this wallet with one signature to continue."}
+                        </p>
+                        <button
+                            className="button primary"
+                            onClick={() =>
+                                !account
+                                    ? setPanel("wallet")
+                                    : void unlock().catch((failure) => setError(explain(failure)))
+                            }
+                        >
+                            {!account ? "Connect a wallet" : "Unlock to continue"}
+                            <Glyph name="chevron_right" size={16} />
+                        </button>
+                        {error && (
+                            <p className="form-error" role="alert">
+                                {error}
+                            </p>
+                        )}
+                    </div>
+                </section>
+            ) : guardianRequest ? (
+                <section className="recovery-card">
+                    <header>
+                        <Icon name="shield" size={20} />
+                        <h2>Guardian request</h2>
+                    </header>
+                    <div className="recovery-card-body">
+                        <p className="recovery-name mono">{approveFor}</p>
+                        <p className="recovery-description">
+                            Approve only after confirming the request with the owner. Your encrypted recovery share will
+                            be published for their replacement wallet.
+                        </p>
+                        <button className="button primary" onClick={() => void approve()} disabled={Boolean(approving)}>
+                            Approve this recovery
+                        </button>
+                        {approving && (
+                            <p className="field-help" role="status">
+                                {approving}
+                            </p>
+                        )}
+                        {error && (
+                            <p className="form-error" role="alert">
+                                {error}
+                            </p>
+                        )}
+                    </div>
+                </section>
+            ) : (
+                <section className="recovery-card">
+                    <header>
+                        <Icon name="shield" size={20} />
+                        <h2>Recover a vault</h2>
+                    </header>
+                    <div className="recovery-card-body">
+                        <label className="recovery-field" htmlFor="lost-name">
+                            <span>Vault ENS name</span>
+                            <input
+                                id="lost-name"
+                                value={lost}
+                                onChange={(event) => setLost(event.target.value)}
+                                placeholder="alice.eth"
+                                autoComplete="off"
+                                autoCapitalize="none"
+                                spellCheck={false}
+                            />
+                        </label>
+                        {policy && !policy.names.length && (
+                            <p className="field-help">No guardians are registered for this vault.</p>
+                        )}
+                        {policy && policy.names.length > 0 && (
+                            <>
+                                <div className="recovery-progress">
+                                    <div>
+                                        <h3>Guardian approvals</h3>
+                                        <span className="mono">
+                                            {policy.approvals.length} / {policy.threshold}
+                                        </span>
+                                    </div>
+                                    <SegmentedProgress
+                                        value={policy.approvals.length}
+                                        max={policy.threshold}
+                                        label="Guardian approvals"
+                                    />
+                                </div>
+                                <ul className="recovery-guardians">
+                                    {policy.names.map((guardian) => (
+                                        <li key={guardian}>
+                                            <span className="mono">{guardian}</span>
+                                            <span
+                                                className={
+                                                    policy.approvals.includes(guardian)
+                                                        ? "guardian-state approved"
+                                                        : "guardian-state"
+                                                }
+                                            >
+                                                {policy.approvals.includes(guardian) ? "Approved" : "Waiting"}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                                <div className="recovery-share">
+                                    <div>
+                                        <h3>Request approval</h3>
+                                        <p>Share this link with your guardians.</p>
+                                    </div>
+                                    <CopyButton value={guardianLink} label="Copy the guardian link" />
+                                </div>
+                                <div className="recovery-submit">
+                                    <button
+                                        className="button primary"
+                                        onClick={() => void recover()}
+                                        disabled={!approved || Boolean(status) || Boolean(recovered)}
+                                    >
+                                        Recover this vault
+                                    </button>
+                                    <span className="field-help" role="status">
+                                        {status ||
+                                            (!approved
+                                                ? `Waiting for ${policy.threshold - policy.approvals.length} more`
+                                                : recovered
+                                                  ? "Recovery complete"
+                                                  : "Ready to recover")}
+                                    </span>
+                                </div>
+                            </>
+                        )}
+                        {recovered && (
+                            <div className="recovery-result" role="status">
+                                <h3>Access recovered</h3>
+                                <p className="mono">{recovered}</p>
+                                <p>
+                                    Publish a new identity key and rotate your secrets to finish securing this wallet.
+                                </p>
+                            </div>
+                        )}
+                        {error && (
+                            <p className="form-error" role="alert">
+                                {error}
+                            </p>
+                        )}
+                    </div>
+                </section>
+            )}
+        </RecoveryLayout>
+    );
+}
+
+function RecoveryLayout({
+    children,
+    stage,
+    guardianRequest,
+}: {
+    children: ReactNode;
+    stage: number;
+    guardianRequest: boolean;
+}) {
+    const steps = guardianRequest
+        ? [
+              ["Connect your wallet", "Use the wallet named as a guardian."],
+              ["Verify the request", "Confirm it with the owner directly."],
+              ["Approve recovery", "Send your encrypted recovery share."],
+          ]
+        : [
+              ["Connect a replacement wallet", "Unlock it to create a new recovery request."],
+              ["Ask your guardians", "Share the request link and wait for approvals."],
+              ["Recover access", "Restore access once enough guardians approve."],
+          ];
+    return (
+        <FadeIn className="recovery-page secrets-page">
             <div className="page-heading">
                 <h1>Recovery</h1>
             </div>
-
-            {approveFor && (
-                <section className="recovery-block">
-                    <h2>A guardian request</h2>
-                    <p>
-                        Somebody is recovering <span className="mono">{approveFor}</span> and named you as a guardian.
-                        Approving re-seals your share to their new key and publishes it on your own name.
-                    </p>
-                    <p className="field-help">
-                        Your share is already encrypted to them, so publishing it tells nobody else anything. Only do
-                        this if you are sure the request is theirs.
-                    </p>
-                    <button className="button primary" onClick={() => void approve()} disabled={Boolean(approving)}>
-                        {approving || "Approve this recovery"}
-                    </button>
-                </section>
-            )}
-
-            <section className="recovery-block">
-                <h2>Recover a vault</h2>
-                <label htmlFor="lost-name">The ENS name you are recovering</label>
-                <input
-                    id="lost-name"
-                    value={lost}
-                    onChange={(event) => setLost(event.target.value)}
-                    placeholder="alice.eth"
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                />
-
-                {policy && policy.names.length === 0 && (
-                    <p className="field-help">That name has published no guardians, so there is nothing to recover.</p>
-                )}
-
-                {policy && policy.names.length > 0 && (
-                    <>
-                        <p className="recovery-count mono">
-                            {policy.approvals.length} of {policy.threshold} approved
-                        </p>
-                        <ul className="access-list">
-                            {policy.names.map((guardian) => (
-                                <li key={guardian}>
-                                    <span className="mono">{guardian}</span>
-                                    <span className={policy.approvals.includes(guardian) ? "" : "muted"}>
-                                        {policy.approvals.includes(guardian) ? "Approved" : "Waiting"}
-                                    </span>
-                                </li>
-                            ))}
-                        </ul>
-
-                        <div className="detail-block">
-                            <span className="muted">Send this to your guardians</span>
-                            <p className="field-help">
-                                It carries the key they seal your share to, which is public and safe to send.
-                            </p>
-                            <CopyButton value={guardianLink} label="Copy the guardian link" />
-                        </div>
-
-                        <button
-                            className="button primary"
-                            onClick={() => void recover()}
-                            disabled={policy.approvals.length < policy.threshold || Boolean(status)}
-                        >
-                            {status ||
-                                (policy.approvals.length < policy.threshold
-                                    ? `Waiting for ${policy.threshold - policy.approvals.length} more`
-                                    : "Recover this vault")}
-                        </button>
-                    </>
-                )}
-
-                {recovered && (
-                    <div className="notice">
-                        <p>
-                            Rebuilt the recovery key <span className="mono">{recovered}</span>. It opens every secret
-                            the lost wallet could. Publish a new identity key and rotate them all.
-                        </p>
-                    </div>
-                )}
-
-                {error && (
-                    <p className="form-error" role="alert">
-                        {error}
-                    </p>
-                )}
-            </section>
+            <div className="recovery-layout">
+                {children}
+                <aside className="recovery-guide" aria-label="Recovery steps">
+                    <h2>{guardianRequest ? "Approving a request" : "How recovery works"}</h2>
+                    <ol>
+                        {steps.map(([title, description], index) => (
+                            <li
+                                key={title}
+                                className={index === stage ? "is-current" : index < stage ? "is-complete" : ""}
+                                aria-current={index === stage ? "step" : undefined}
+                            >
+                                <span className="recovery-step-number mono">{String(index + 1).padStart(2, "0")}</span>
+                                <div>
+                                    <h3>{title}</h3>
+                                    <p>{description}</p>
+                                </div>
+                            </li>
+                        ))}
+                    </ol>
+                </aside>
+            </div>
         </FadeIn>
     );
 }

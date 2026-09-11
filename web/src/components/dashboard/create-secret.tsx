@@ -143,7 +143,7 @@ export function CreateSecret({ onDone }: { onDone: () => void }) {
             />
 
             <label htmlFor="secret-type">Type</label>
-            <select id="secret-type" name="type" defaultValue="apikey" className="create-select">
+            <select id="secret-type" name="type" defaultValue="generic" className="create-select">
                 {TYPES.map(([type, name]) => (
                     <option key={type} value={type}>
                         {name}
