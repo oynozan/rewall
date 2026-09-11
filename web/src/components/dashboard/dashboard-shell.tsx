@@ -10,6 +10,7 @@ import { type EIP1193Provider } from "viem";
 import { PrivateDataProvider } from "./private-data";
 import { IdentityProvider, useIdentity } from "./identity";
 import { SecretValue } from "./secret-value";
+import { SecretAccess } from "./secret-access";
 import { CreateSecret } from "./create-secret";
 import { ownsName, rememberName, resolveOwnName } from "@/src/lib/account";
 import {
@@ -383,7 +384,9 @@ function WorkspacePanel() {
             drawerMotion.current?.cancel();
         };
     };
-    const secret = typeof panel === "object" ? panel : null;
+    // Resolved from the vault rather than the snapshot the click captured, so a grant updates the panel
+    const opened = typeof panel === "object" ? panel : null;
+    const secret = opened ? (vault?.secrets.find((entry) => entry.name === opened.name) ?? opened) : null;
     const title = secret
         ? secret.label
         : panel === "vault"
@@ -637,6 +640,7 @@ function WorkspacePanel() {
                                     <CopyButton value={secret.name} />
                                 </div>
                                 <SecretValue secret={secret} />
+                                <SecretAccess secret={secret} />
                                 <dl className="detail-list">
                                     <div>
                                         <dt>Type</dt>

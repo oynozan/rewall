@@ -1,7 +1,7 @@
 import { createPublicClient, decodeFunctionResult, encodeFunctionData, http, namehash } from "viem";
 import { normalize } from "viem/ens";
 import { sepolia } from "viem/chains";
-import { dnsEncode, RECORD, resolverAbi, universalResolverAbi, SCHEMA_VERSION } from "@rewall/sdk";
+import { dnsEncode, RECORD, resolverAbi, splitNames, universalResolverAbi, SCHEMA_VERSION } from "@rewall/sdk";
 
 export const TEST_OWNER = "rewall-test-1.eth";
 export const UNIVERSAL_RESOLVER = "0x4a1817d13e9cf196f471725176355c1234b63c70";
@@ -23,6 +23,8 @@ export type Secret = {
     version: string;
     owner: string;
     grantees: string[];
+    subtrees: string[];
+    recovery: string[];
     site: string;
 };
 export type Vault = { owner: string; namespace: string; identityPublished: boolean; secrets: Secret[] };
@@ -71,6 +73,8 @@ export async function readSecret(input: string): Promise<Secret> {
         RECORD.allow,
         RECORD.owner,
         RECORD.grantees,
+        RECORD.subtrees,
+        RECORD.recovery,
         RECORD.site,
     ]);
     if (records[RECORD.version] !== SCHEMA_VERSION)
@@ -85,7 +89,9 @@ export async function readSecret(input: string): Promise<Secret> {
         allow: records[RECORD.allow]?.split(",").filter(Boolean) ?? [],
         version: records[RECORD.version],
         owner: records[RECORD.owner] || name.split(".rewall.")[1] || "",
-        grantees: (records[RECORD.grantees] || "").split(",").filter(Boolean),
+        grantees: splitNames(records[RECORD.grantees]),
+        subtrees: splitNames(records[RECORD.subtrees]),
+        recovery: splitNames(records[RECORD.recovery]),
         site: records[RECORD.site] || "",
     };
 }

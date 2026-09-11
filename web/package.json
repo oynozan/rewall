@@ -14,7 +14,8 @@
         "check:dashboard": "node scripts/check-dashboard.mjs",
         "check:otp": "node scripts/check-otp.mjs",
         "check:unlock": "node --env-file=../tools/.env scripts/check-unlock.mjs",
-        "check:create": "node --env-file=../tools/.env scripts/check-create.mjs"
+        "check:create": "node --env-file=../tools/.env scripts/check-create.mjs",
+        "check:sharing": "node --env-file=../tools/.env scripts/check-sharing.mjs"
     },
     "dependencies": {
         "@privy-io/react-auth": "^3.42.0",
