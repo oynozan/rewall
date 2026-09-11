@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { Toaster } from "sonner";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -12,18 +11,20 @@ import { IdentityProvider, useIdentity } from "./identity";
 import { SecretValue } from "./secret-value";
 import { SecretAccess } from "./secret-access";
 import { CreateSecret } from "./create-secret";
+import { ConnectGate } from "./connect-gate";
+import { AddSecret } from "./add-secret";
 import { ownsName, rememberName, resolveOwnName } from "@/src/lib/account";
 import {
     ownerName,
     readSecret,
     readVault,
-    TEST_OWNER,
     TYPE_LABELS,
     type Secret,
     type SecretType,
     type Vault,
 } from "@/src/lib/vault";
 import { FadeDots, FadeIn, SidebarFade } from "./amicro";
+import { Logo } from "./logo";
 import { CopyButton, Glyph, Icon, type IconName } from "./ui";
 
 type Panel = "vault" | "wallet" | "help" | "find" | "create" | Secret | null;
@@ -66,8 +67,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             : pathname.includes("/recovery")
               ? "Recovery"
               : "Home";
-    const [vault, setVault] = useState<Vault | null>(null);
-    const [busy, setBusy] = useState(true);
+    const [loadedVault, setVault] = useState<Vault | null>(null);
+    const [loading, setBusy] = useState(true);
     const [error, setError] = useState("");
     const [panel, setPanel] = useState<Panel>(null);
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -99,27 +100,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         }
     }, []);
 
-    useEffect(() => {
-        let active = true;
-        void readVault(TEST_OWNER)
-            .then((result) => {
-                if (active && request.current === 0) {
-                    setVault(result);
-                    setBusy(false);
-                }
-            })
-            .catch(() => {
-                if (active && request.current === 0) {
-                    setError("We couldn’t reach the test vault. Check your connection and try again.");
-                    setBusy(false);
-                }
-            });
-        return () => {
-            active = false;
-        };
-    }, []);
+    // Tied to the address it was resolved for, so disconnecting drops it without a second render
+    const ownName = resolvedName?.address === account ? resolvedName.name : "";
 
-    // A connected wallet opens its own vault, once the registry confirms the name really is theirs
+    // Derived rather than set, because disconnecting is not an event, it just means there is nothing
+    // of theirs left to show, and the lookup is still running until its answer names this address
+    const vault = account ? loadedVault : null;
+    const resolving = Boolean(account) && resolvedName?.address !== account;
+    const busy = Boolean(account) && (resolving || (Boolean(ownName) && loading));
+
+    // A connected wallet opens its own vault and nobody else's, once the registry confirms the name is theirs
     useEffect(() => {
         let active = true;
         if (!account) return;
@@ -127,15 +117,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         void resolveOwnName(account).then((found) => {
             if (!active) return;
             setResolvedName({ address: account, name: found });
-            if (found && request.current === 0) void loadVault(found);
+            if (found) void loadVault(found);
         });
         return () => {
             active = false;
         };
     }, [account, loadVault]);
-
-    // Tied to the address it was resolved for, so disconnecting drops it without a second render
-    const ownName = resolvedName?.address === account ? resolvedName.name : "";
 
     const claimName = useCallback(
         async (input: string) => {
@@ -170,7 +157,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         panel,
         setPanel,
         loadVault,
-        refresh: () => void loadVault(vault?.owner || TEST_OWNER),
+        refresh: () => void loadVault(vault?.owner || ownName),
         // The drawer is a modal dialog, so it sits in the top layer and would swallow clicks on Privy's own modal
         connect: () => {
             setPanel(null);
@@ -191,35 +178,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                     <SidebarFade className={`sidebar ${mobileOpen ? "is-open" : ""}`} label="Main navigation">
                         <div className="brand-row" style={step(0)}>
                             <Link href="/dashboard" className="brand" aria-label="Rewall home" onClick={navigate}>
-                                <Image
-                                    src="/logo.svg"
-                                    alt="Rewall"
-                                    width={160}
-                                    height={78}
-                                    className="logo-static"
-                                    priority
-                                    unoptimized
-                                />
-                                <Image
-                                    src="/logo-animated.svg"
-                                    alt=""
-                                    width={160}
-                                    height={78}
-                                    className="logo-alternate"
-                                    unoptimized
-                                    aria-hidden="true"
-                                />
+                                <Logo />
                             </Link>
                         </div>
-                        <button className="workspace-switcher" style={step(1)} onClick={() => setPanel("vault")}>
-                            <span className="workspace-avatar">
-                                <Icon name="lock" size={20} />
-                            </span>
-                            <span>
-                                <strong className={vault ? "mono" : ""}>{vault?.owner || "No vault open"}</strong>
-                                {vault && <small>{isOwnVault ? "Yours" : "Read only"}</small>}
-                            </span>
-                        </button>
+                        <div className="sidebar-action" style={step(1)}>
+                            <AddSecret />
+                        </div>
                         <nav>
                             <div className="nav-group">
                                 {(
@@ -244,50 +208,76 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                                     </Link>
                                 ))}
                             </div>
-                            <div className="nav-group">
-                                <span className="nav-caption" style={step(6)}>
-                                    Resources
-                                </span>
-                                <a
-                                    className="nav-item"
-                                    style={step(7)}
-                                    href="https://github.com/oynozan/rewall"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                >
-                                    <Icon name="github" />
-                                    Source Code
-                                </a>
-                                <a
-                                    className="nav-item"
-                                    style={step(8)}
-                                    href="#"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    onClick={(event) => event.preventDefault()}
-                                    aria-disabled="true"
-                                >
-                                    <Icon name="documents" />
-                                    Docs
-                                </a>
-                            </div>
                         </nav>
-                        <button className="sidebar-account" style={step(12)} onClick={() => setPanel("wallet")}>
-                            <span className="account-avatar">
-                                <Icon name="wallet" size={18} />
-                            </span>
-                            <span>
-                                <strong className={account ? "mono" : ""}>
-                                    {account ? `${account.slice(0, 6)}…${account.slice(-4)}` : "Not connected"}
-                                </strong>
-                                <small>{account ? walletLabel || "Connected" : "Connect wallet"}</small>
-                            </span>
-                            {!account && (
+                        <div className="sidebar-bottom">
+                            <nav aria-label="Resources">
+                                <div className="nav-group">
+                                    <span className="nav-caption" style={step(6)}>
+                                        Resources
+                                    </span>
+                                    <a
+                                        className="nav-item"
+                                        style={step(7)}
+                                        href="https://github.com/oynozan/rewall"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                    >
+                                        <Icon name="github" />
+                                        Source Code
+                                    </a>
+                                    <a
+                                        className="nav-item"
+                                        style={step(8)}
+                                        href="#"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        onClick={(event) => event.preventDefault()}
+                                        aria-disabled="true"
+                                    >
+                                        <Icon name="documents" />
+                                        Docs
+                                    </a>
+                                </div>
+                            </nav>
+                            <button
+                                className="sidebar-control sidebar-vault"
+                                id="tour-vault"
+                                style={step(10)}
+                                onClick={() => setPanel("vault")}
+                            >
+                                <span className="account-avatar">
+                                    <Icon name="lock" size={18} />
+                                </span>
+                                <span className="sidebar-control-label">
+                                    <strong className={ownName ? "mono" : ""}>{ownName || "No vault yet"}</strong>
+                                    <small>{ownName ? "Yours" : "Set one up"}</small>
+                                </span>
                                 <span className="wallet-chevron">
                                     <Glyph name="chevron_right" size={18} />
                                 </span>
-                            )}
-                        </button>
+                            </button>
+                            <button
+                                className="sidebar-control sidebar-account"
+                                id="tour-wallet"
+                                style={step(11)}
+                                onClick={() => setPanel("wallet")}
+                            >
+                                <span className="account-avatar">
+                                    <Icon name="wallet" size={18} />
+                                </span>
+                                <span>
+                                    <strong className={account ? "mono" : ""}>
+                                        {account ? `${account.slice(0, 6)}…${account.slice(-4)}` : "Not connected"}
+                                    </strong>
+                                    <small>{account ? walletLabel || "Connected" : "Connect wallet"}</small>
+                                </span>
+                                {!account && (
+                                    <span className="wallet-chevron">
+                                        <Glyph name="chevron_right" size={18} />
+                                    </span>
+                                )}
+                            </button>
+                        </div>
                     </SidebarFade>
                     <div className="workspace-main">
                         <header className="topbar">
@@ -303,7 +293,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                         </header>
                         <main id="workspace-content" tabIndex={-1}>
                             <PrivateDataProvider key={`${account}:${vault?.owner || ""}`}>
-                                {children}
+                                <ConnectGate>{children}</ConnectGate>
                             </PrivateDataProvider>
                         </main>
                     </div>
@@ -393,7 +383,7 @@ function WorkspacePanel() {
     const title = secret
         ? secret.label
         : panel === "vault"
-          ? "Open a vault"
+          ? "Your vault"
           : panel === "wallet"
             ? "Your wallet"
             : panel === "find"
@@ -467,65 +457,81 @@ function WorkspacePanel() {
                 <FadeIn key={secret?.name || String(panel)}>
                     <div className="panel-content">
                         <h2 id="panel-title">{title}</h2>
-                        {(panel === "vault" || panel === "find") && (
+                        {panel === "find" && (
                             <>
                                 <form onSubmit={submit} className="panel-form">
-                                    <label htmlFor="ens-name">
-                                        {panel === "vault" ? "Owner’s ENS name" : "Secret’s full ENS name"}
-                                    </label>
+                                    <label htmlFor="ens-name">Secret’s full ENS name</label>
                                     <input
                                         id="ens-name"
                                         name="name"
-                                        defaultValue={panel === "vault" ? vault?.owner : ""}
-                                        placeholder={panel === "vault" ? "name.eth" : "secret.rewall.name.eth"}
+                                        placeholder="secret.rewall.name.eth"
                                         autoComplete="off"
                                         autoCapitalize="none"
                                         spellCheck={false}
                                         required
                                     />
                                     <button className="button primary" disabled={busy || working}>
-                                        {busy || working
-                                            ? "Opening…"
-                                            : panel === "vault"
-                                              ? "Open vault"
-                                              : "Find secret"}
+                                        {busy || working ? "Opening…" : "Find secret"}
                                     </button>
                                 </form>
-                                {panel === "vault" && (
-                                    <button
-                                        className="text-button test-vault-link"
-                                        disabled={busy}
-                                        onClick={async () => {
-                                            if (await loadVault(TEST_OWNER)) close();
-                                        }}
-                                    >
-                                        Open the Sepolia test vault
-                                    </button>
-                                )}
-                                {panel === "vault" && account && !ownName && (
-                                    <form onSubmit={claim} className="panel-form claim-form">
-                                        <label htmlFor="own-name">Your own ENS name</label>
-                                        <input
-                                            id="own-name"
-                                            name="own"
-                                            placeholder="name.eth"
-                                            autoComplete="off"
-                                            autoCapitalize="none"
-                                            spellCheck={false}
-                                            required
-                                        />
-                                        <button className="button" disabled={claiming}>
-                                            {claiming ? "Checking the registry…" : "This one is mine"}
-                                        </button>
-                                        <p className="field-help">
-                                            Checked against the registry, so a name you do not hold will be refused.
-                                        </p>
-                                    </form>
-                                )}
+                                <p className="field-help">
+                                    Nothing is written on your name when someone shares with you, so a secret shared
+                                    with you is found by its name.
+                                </p>
                                 <div className="notice">
                                     <Icon name="lock" />
-                                    <p>Opening a vault reads public metadata. It does not decrypt any value.</p>
+                                    <p>Looking a secret up reads public metadata. It does not decrypt any value.</p>
                                 </div>
+                            </>
+                        )}
+                        {panel === "vault" && (
+                            <>
+                                {ownName ? (
+                                    <>
+                                        <dl className="detail-list">
+                                            <div>
+                                                <dt>Your name</dt>
+                                                <dd className="mono">{ownName}</dd>
+                                            </div>
+                                        </dl>
+                                        <p className="field-help">
+                                            Everything you store lives under rewall.{ownName}, held by this wallet and
+                                            nobody else.
+                                        </p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="field-help">
+                                            Rewall has to know which name is yours before it can store anything under
+                                            it.
+                                        </p>
+                                        <Link
+                                            href="/dashboard/setup"
+                                            className="button primary full-width"
+                                            onClick={close}
+                                        >
+                                            Set up a new vault
+                                        </Link>
+                                        <form onSubmit={claim} className="panel-form claim-form">
+                                            <label htmlFor="own-name">Or name one you already own</label>
+                                            <input
+                                                id="own-name"
+                                                name="own"
+                                                placeholder="name.eth"
+                                                autoComplete="off"
+                                                autoCapitalize="none"
+                                                spellCheck={false}
+                                                required
+                                            />
+                                            <button className="button" disabled={claiming}>
+                                                {claiming ? "Checking the registry…" : "This one is mine"}
+                                            </button>
+                                            <p className="field-help">
+                                                Checked against the registry, so a name you do not hold will be refused.
+                                            </p>
+                                        </form>
+                                    </>
+                                )}
                             </>
                         )}
                         {panel === "create" && <CreateSecret onDone={close} />}

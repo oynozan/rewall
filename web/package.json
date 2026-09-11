@@ -17,7 +17,9 @@
         "check:create": "node --env-file=../tools/.env scripts/check-create.mjs",
         "check:sharing": "node --env-file=../tools/.env scripts/check-sharing.mjs",
         "check:recovery": "node --env-file=../tools/.env scripts/check-recovery.mjs",
-        "check:faucet": "node scripts/check-faucet.mjs"
+        "check:faucet": "node scripts/check-faucet.mjs",
+        "check:gate": "node --env-file=../tools/.env scripts/check-gate.mjs",
+        "check:onboarding": "node --env-file=../tools/.env --env-file=.env.local scripts/check-onboarding.mjs"
     },
     "dependencies": {
         "@privy-io/react-auth": "^3.42.0",

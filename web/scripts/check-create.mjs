@@ -8,6 +8,7 @@ import { createPublicClient, http, parseAbi } from "viem";
 import { sepolia } from "viem/chains";
 import { dnsEncode, registryLookupAbi } from "@rewall/sdk";
 import { headlessWallet, attachWallet } from "./lib/wallet.mjs";
+import { openOwnVault } from "./lib/session.mjs";
 
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
@@ -54,7 +55,6 @@ page.on("pageerror", (error) => errors.push(error.message));
 const wallet = headlessWallet({ mnemonic: process.env.REWALL_TEST_MNEMONIC, addressIndex: 0 });
 await attachWallet(page, wallet);
 
-const dialog = () => page.locator("#privy-dialog");
 const drawer = () => page.locator("dialog.workspace-dialog[open]");
 const closed = (timeout = 5000) => expect(drawer()).toHaveCount(0, { timeout });
 const opened = () => expect(drawer()).toHaveCount(1);
@@ -64,26 +64,16 @@ const shot = async (name) => {
 };
 
 try {
+    /* A visitor with no wallet is shown nothing at all, let alone somewhere to store */
+
     await page.goto(`${baseURL}/dashboard/secrets`, { waitUntil: "domcontentloaded", timeout: 120000 });
-    await expect(page.locator(".secrets-browser button.secret-name").first()).toBeVisible({ timeout: 90000 });
-
-    /* Storing is not offered to someone who does not own the vault */
-
+    await expect(page.getByRole("dialog", { name: "Connect to Rewall" })).toBeVisible({ timeout: 90000 });
     await expect(page.getByRole("button", { name: "Store a secret" })).toHaveCount(0);
     pass("a visitor who owns nothing is not offered a place to store");
 
     /* Connect and adopt the vault */
 
-    await page.locator(".sidebar-account").click();
-    await page.getByRole("button", { name: /Connect a wallet/i }).click();
-    await expect(dialog().getByText("Continue with a wallet")).toBeVisible({ timeout: 30000 });
-    await dialog().getByText("Continue with a wallet").click();
-    await dialog().getByText("Rewall Test Wallet").first().click();
-    await expect(page.locator(".sidebar-account")).toContainText("0xD2F8", { timeout: 60000 });
-
-    await page.locator(".workspace-switcher, .sidebar-vault").click();
-    await page.getByLabel("Your own ENS name").fill(OWNER);
-    await page.getByRole("button", { name: "This one is mine", exact: true }).click();
+    await openOwnVault(page, { url: `${baseURL}/dashboard/secrets`, address: "0xD2F8", name: OWNER });
     await expect(page.locator(".workspace-switcher small, .sidebar-vault small")).toHaveText("Yours", { timeout: 60000 });
     pass("the owner adopts their vault and the store action appears");
 
