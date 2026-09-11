@@ -11,6 +11,8 @@ const ROLES = [
     { index: 1, name: "grantee", target: parseEther("0.02") },
     { index: 2, name: "stranger", target: 0n },
     { index: 3, name: "recovery", target: parseEther("0.01") },
+    // Pays the dashboard faucet and every sponsored setup, and is the only key the web server holds
+    { index: 4, name: "sponsor", target: parseEther("0.02") },
 ];
 
 /* Mnemonic */

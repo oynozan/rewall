@@ -18,7 +18,9 @@
         "subtree": "node --env-file=.env --experimental-strip-types subtree.ts",
         "e2e": "node --env-file=.env --experimental-strip-types e2e.ts",
         "guardians": "node --env-file=.env --experimental-strip-types guardians.ts",
-        "escalation": "node --env-file=.env --experimental-strip-types escalation.ts"
+        "escalation": "node --env-file=.env --experimental-strip-types escalation.ts",
+        "sponsor": "node --env-file=.env --experimental-strip-types sponsor.ts",
+        "sponsor-key": "node --env-file=.env --experimental-strip-types sponsor-key.ts"
     },
     "dependencies": {
         "@rewall/sdk": "link:../sdk",
