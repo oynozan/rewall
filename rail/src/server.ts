@@ -12,6 +12,7 @@ import { createPublicClient, http, getAddress, parseAbi, toHex, verifyTypedData,
 import { mnemonicToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 import {
+    HOST,
     MAX_REQUEST_AGE_SECONDS,
     PORT,
     TICKET_SIGNER_INDEX,
@@ -236,8 +237,8 @@ const server = createServer(async (req, res) => {
 });
 
 startIndexer();
-server.listen(PORT, () => {
-    console.log(`rail listening on http://127.0.0.1:${PORT}`);
+server.listen(PORT, HOST, () => {
+    console.log(`rail listening on http://${HOST}:${PORT}`);
     console.log(`vault ${vaultAddress()}`);
     console.log(`ticket signer ${signer.address}`);
 });

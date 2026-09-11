@@ -11,6 +11,9 @@ export const REDEEMER_INDEX = Number(process.env.REDEEMER_INDEX ?? 1);
 
 export const PORT = Number(process.env.RAIL_PORT ?? 8787);
 
+// Without a host Node listens on every interface, which anyone on the network can then spend against
+export const HOST = process.env.RAIL_HOST ?? "127.0.0.1";
+
 // Blocks to wait before crediting a deposit, raise it to reproduce the finality delay of the real service
 export const CONFIRMATIONS = BigInt(process.env.CONFIRMATIONS ?? 1);
 
