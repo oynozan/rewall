@@ -5,6 +5,7 @@ import { chromium, expect } from "@playwright/test";
 import { artifacts } from "./lib/artifacts.mjs";
 import { skipTour } from "./lib/tour.mjs";
 import { headlessWallet, attachWallet } from "./lib/wallet.mjs";
+import { connectWallet } from "./lib/session.mjs";
 
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
@@ -32,25 +33,12 @@ async function open(addressIndex, expectAddress, path = "/dashboard/recovery") {
 
     await page.goto(`${baseURL}${path}`, { waitUntil: "domcontentloaded", timeout: 120000 });
 
-    // The sidebar is in the static HTML, so a click lands before React attaches and is simply lost.
-    // Retry until the drawer actually opens, which is the only reliable signal that hydration is done
-    await expect(page.getByRole("heading", { name: "Recovery", exact: true })).toBeVisible({ timeout: 90000 });
-    const drawer = page.locator("dialog.workspace-dialog[open]");
-    for (let attempt = 0; attempt < 30; attempt++) {
-        await page.locator(".sidebar-account").click();
-        if (await drawer.count()) break;
-        await page.waitForTimeout(1000);
-    }
-    await expect(drawer).toHaveCount(1, { timeout: 30000 });
-    await page
-        .getByRole("dialog")
-        .getByRole("button", { name: /Connect a wallet/i })
-        .click();
-    await expect(page.locator("#privy-dialog").getByText("Continue with a wallet")).toBeVisible({ timeout: 30000 });
-    await page.locator("#privy-dialog").getByText("Continue with a wallet").click();
-    await page.locator("#privy-dialog").getByText("Rewall Test Wallet").first().click();
+    await connectWallet(page);
     await expect(page.locator(".sidebar-account")).toContainText(expectAddress, { timeout: 60000 });
     await expect(page.locator("dialog.workspace-dialog[open]")).toHaveCount(0);
+
+    // Recovering is what a wallet with no vault is here to do, so the page itself must be reachable
+    await expect(page.getByRole("heading", { name: "Recovery", exact: true })).toBeVisible({ timeout: 90000 });
     return { page, wallet };
 }
 
@@ -59,10 +47,10 @@ try {
 
     const fresh = await open(REPLACEMENT, "0xEE02");
     await fresh.page.getByRole("button", { name: "Unlock to continue", exact: true }).click();
-    await expect(fresh.page.getByLabel("The ENS name you are recovering")).toBeVisible({ timeout: 120000 });
+    await expect(fresh.page.getByLabel("Vault ENS name")).toBeVisible({ timeout: 120000 });
     pass("a wallet holding nothing still reaches recovery, it only has to derive its own key");
 
-    await fresh.page.getByLabel("The ENS name you are recovering").fill(LOST);
+    await fresh.page.getByLabel("Vault ENS name").fill(LOST);
     await expect(fresh.page.locator(".recovery-count")).toBeVisible({ timeout: 120000 });
     const before = await fresh.page.locator(".recovery-count").innerText();
     assert.match(before, /^\d+ of \d+ approved$/);

@@ -74,6 +74,7 @@ try {
     /* Connect and adopt the vault */
 
     await openOwnVault(page, { url: `${baseURL}/dashboard/secrets`, address: "0xD2F8", name: OWNER });
+    await expect(page.locator(".secrets-browser button.secret-name").first()).toBeVisible({ timeout: 90000 });
     await expect(page.locator(".workspace-switcher small, .sidebar-vault small")).toHaveText("Yours", { timeout: 60000 });
     pass("the owner adopts their vault and the store action appears");
 

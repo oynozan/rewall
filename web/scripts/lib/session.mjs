@@ -36,5 +36,10 @@ export async function openOwnVault(page, { url, address, name }) {
     await connectWallet(page);
     await expect(page.locator(".sidebar-account")).toContainText(address, { timeout: 60000 });
     await claimVault(page, name);
-    await expect(page.locator(".secrets-browser button.secret-name").first()).toBeVisible({ timeout: 90000 });
+
+    // The sidebar naming the vault is the signal, since a vault that holds nothing is still a vault
+    await expect(page.locator(".sidebar-vault strong, .workspace-switcher strong")).toHaveText(name, {
+        timeout: 90000,
+    });
+    await expect(page.getByRole("dialog", { name: "Set up your vault" })).toHaveCount(0);
 }

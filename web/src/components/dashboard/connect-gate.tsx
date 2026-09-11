@@ -14,9 +14,10 @@ export function ConnectGate({ children }: { children: React.ReactNode }) {
     // Locking before Privy has answered would flash the gate at someone who is already signed in
     if (!ready) return <>{children}</>;
 
-    // The wizard is the way out of both states, so it is never gated itself
-    const needsVault = Boolean(account) && !busy && !ownName;
-    if (pathname.startsWith("/dashboard/setup") || (account && !needsVault)) return <>{children}</>;
+    // Setting up and recovering are the two things you do precisely because you have no vault yet
+    const vaultless = ["/dashboard/setup", "/dashboard/recovery"].some((route) => pathname.startsWith(route));
+    const needsVault = Boolean(account) && !busy && !ownName && !vaultless;
+    if (account && !needsVault) return <>{children}</>;
 
     return (
         <div className={`${styles.wrap} ${styles.locked}`}>

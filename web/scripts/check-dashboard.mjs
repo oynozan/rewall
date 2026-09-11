@@ -3,6 +3,8 @@ import { writeFile } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
 import { artifacts } from "./lib/artifacts.mjs";
 import { skipTour } from "./lib/tour.mjs";
+import { headlessWallet, attachWallet } from "./lib/wallet.mjs";
+import { openOwnVault } from "./lib/session.mjs";
 
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
@@ -17,6 +19,7 @@ const errors = [];
 const checks = [];
 const output = await artifacts();
 page.on("pageerror", (error) => errors.push(error.message));
+await attachWallet(page, headlessWallet({ mnemonic: process.env.REWALL_TEST_MNEMONIC, addressIndex: 0 }));
 
 /* Icon controls */
 const ASCII_ICONS = ["↗", "⌄", "☰", "↻", "×", "✓", "↑", "↓", "▷", "Ⅱ", "⌃"];
@@ -40,7 +43,11 @@ async function noAsciiIcons(where) {
 }
 
 try {
+    /* The dashboard belongs to whoever is connected, so the gate comes first */
+
     await page.goto(`${baseURL}/dashboard`, { waitUntil: "domcontentloaded", timeout: 120000 });
+    await expect(page.getByRole("dialog", { name: "Connect to Rewall" })).toBeVisible({ timeout: 90000 });
+    await openOwnVault(page, { url: `${baseURL}/dashboard`, address: "0xD2F8", name: "rewall-test-1.eth" });
     await expect(page.locator(".secrets-browser button.secret-name").first()).toBeVisible({ timeout: 90000 });
     const firstName = await page.locator(".secrets-browser .secret-name small").first().innerText();
     const firstLabel = firstName.split(".")[0];
@@ -194,13 +201,7 @@ try {
     await expect(page.getByRole("dialog")).not.toBeVisible();
     checks.push("Secrets route, type filter, sort, selection, name validation, and live direct lookup work");
 
-    await page.locator(".sidebar-account").click();
-    await page.getByRole("button", { name: "Connect a wallet", exact: false }).click();
-    // Our drawer is a modal dialog, so it has to yield the top layer or Privy's modal is unclickable
-    await expect(page.locator("dialog.workspace-dialog[open]")).toHaveCount(0);
-    await expect(page.locator("#privy-dialog").getByText("Continue with a wallet")).toBeVisible({ timeout: 30000 });
-    await page.keyboard.press("Escape");
-    checks.push("Connecting hands the top layer to Privy, which offers a wallet, an email and a social login");
+    checks.push("The dashboard is gated until a wallet connects, and then shows only that wallet's vault");
 
     for (const [route, title] of [
         ["2fa", "2FA"],

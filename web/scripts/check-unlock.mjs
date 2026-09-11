@@ -5,6 +5,7 @@ import { chromium, expect } from "@playwright/test";
 import { artifacts } from "./lib/artifacts.mjs";
 import { skipTour } from "./lib/tour.mjs";
 import { headlessWallet, attachWallet } from "./lib/wallet.mjs";
+import { connectWallet } from "./lib/session.mjs";
 
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
@@ -22,7 +23,6 @@ page.on("pageerror", (error) => errors.push(error.message));
 const wallet = headlessWallet({ mnemonic: process.env.REWALL_TEST_MNEMONIC, addressIndex: 0 });
 await attachWallet(page, wallet);
 
-const dialog = () => page.locator("#privy-dialog");
 const rail = (label) => page.locator(".rail-access li").filter({ hasText: label });
 const granted = async (label) => ((await rail(label).getAttribute("class")) || "").includes("granted");
 
@@ -33,32 +33,40 @@ async function shot(name) {
 
 try {
     await page.goto(`${baseURL}/dashboard`, { waitUntil: "domcontentloaded", timeout: 120000 });
-    await expect(page.locator(".secrets-browser button.secret-name").first()).toBeVisible({ timeout: 90000 });
+    await expect(page.getByRole("dialog", { name: "Connect to Rewall" })).toBeVisible({ timeout: 90000 });
 
-    /* Nothing is asked of a visitor who only wants to look */
+    /* Nothing is asked of a visitor who has not said who they are */
 
-    assert.equal(wallet.calls.typedData, 0, "Reading public metadata must not ask for a signature");
-    assert.ok(await granted("Read metadata"), "Read metadata is granted to everyone");
+    assert.equal(wallet.calls.typedData, 0, "The gate must not ask for a signature");
     assert.equal(await granted("Decrypt values"), false, "Decrypt is not granted before unlocking");
     assert.equal(await granted("Write records"), false, "Write is not granted before connecting");
     await shot("unlock-1-anonymous");
-    pass("the vault lists without a wallet and asks for no signature");
+    pass("a visitor is asked to connect, and no signature is taken to show them the gate");
 
     /* Connect through Privy, which finds the injected wallet over EIP-6963 */
 
-    await page.locator(".sidebar-account").click();
-    await page.getByRole("button", { name: /Connect a wallet/i }).click();
-    const continueWithWallet = dialog().getByText("Continue with a wallet");
-    await expect(continueWithWallet).toBeVisible({ timeout: 30000 });
-    await continueWithWallet.click();
-    await dialog().getByText("Rewall Test Wallet").first().click();
+    await connectWallet(page);
     await expect(page.locator(".sidebar-account")).toContainText("0xD2F8", { timeout: 60000 });
     assert.equal(wallet.calls.typedData, 0, "Connecting must not derive an identity");
     pass("Privy connects an external wallet without deriving anything");
 
     /* Ownership is a chain fact, not a claim */
 
+    await page.getByRole("button", { name: "I already own a name" }).click();
+    await page.getByLabel("Or name one you already own").fill("rewall-test-2.eth");
+    await page.getByRole("button", { name: "This one is mine", exact: true }).click();
+    await expect(page.getByText("That name is not held by the connected wallet.")).toBeVisible({ timeout: 60000 });
+    pass("a name the wallet does not hold is refused, so a claim cannot be asserted");
+
+    await page.getByLabel("Or name one you already own").fill("rewall-test-1.eth");
+    await page.getByRole("button", { name: "This one is mine", exact: true }).click();
+    await expect(page.locator(".secrets-browser button.secret-name").first()).toBeVisible({ timeout: 90000 });
+    await expect(page.locator(".sidebar-vault strong, .workspace-switcher strong")).toHaveText("rewall-test-1.eth");
+    await shot("unlock-3-own-vault");
+    pass("a name the wallet does hold is adopted and the vault is marked as theirs");
+
     await expect(rail("Write records")).toHaveClass(/granted/, { timeout: 60000 });
+    assert.ok(await granted("Read metadata"), "Read metadata is granted to everyone");
     assert.equal(await granted("Decrypt values"), false, "Connecting alone does not unlock");
     pass("the connected owner gains write, and still has to unlock to read");
 
@@ -115,23 +123,20 @@ try {
     assert.deepEqual(suspicious, [], "No Rewall key material may reach browser storage");
     pass("no derived key material is written to local or session storage");
 
-    /* No reverse record is set, so the vault is someone else's until the registry says otherwise */
+    /* Every secret on screen is under the wallet's own name, never a stranger's */
 
     await closePanel();
-    await expect(page.locator(".workspace-switcher small, .sidebar-vault small")).toHaveText("Read only");
-
-    await page.locator(".workspace-switcher, .sidebar-vault").click();
-    await page.getByLabel("Your own ENS name").fill("rewall-test-2.eth");
-    await page.getByRole("button", { name: "This one is mine", exact: true }).click();
-    await expect(page.getByText("That name is not held by the connected wallet.")).toBeVisible({ timeout: 60000 });
-    pass("a name the wallet does not hold is refused, so a claim cannot be asserted");
-
-    await page.getByLabel("Your own ENS name").fill("rewall-test-1.eth");
-    await page.getByRole("button", { name: "This one is mine", exact: true }).click();
-    await expect(page.locator(".workspace-switcher small, .sidebar-vault small")).toHaveText("Yours", { timeout: 60000 });
-    await expect(page.locator(".workspace-switcher strong, .sidebar-vault strong")).toHaveText("rewall-test-1.eth");
-    await shot("unlock-3-own-vault");
-    pass("a name the wallet does hold is adopted and the vault is marked as theirs");
+    // The row also carries a date, so only the cells that actually read as names are checked
+    const listed = (await page.locator(".secrets-browser .secret-name small").allInnerTexts()).filter((text) =>
+        text.endsWith(".eth"),
+    );
+    assert.ok(listed.length > 0, "The adopted vault lists its secrets");
+    assert.deepEqual(
+        listed.filter((name) => !name.endsWith(".rewall.rewall-test-1.eth")),
+        [],
+        "Only the connected wallet's own secrets may be listed",
+    );
+    pass("every secret listed belongs to the connected wallet");
 
     assert.deepEqual(errors, [], "The page must not throw");
     console.log(JSON.stringify({ passed: checks.length, checks, screenshots: output }, null, 2));
