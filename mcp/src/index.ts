@@ -9,6 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { wipe } from "@rewall/sdk";
+import { parseOtp, otpSnapshot } from "@rewall/sdk/2fa";
 import { openVault, type Vault } from "./vault.ts";
 import { checkUrl, HostRefused } from "./allow.ts";
 import { needlesFor, scrub } from "./scrub.ts";
@@ -156,6 +157,38 @@ function register(server: McpServer, vault: Vault) {
                 return say(`${response.status} from ${host}\n\n${cleaned.text}${alarm}`);
             } catch (error) {
                 if (error instanceof HostRefused) return fail(error.message);
+                return fail((error as Error).message);
+            }
+        },
+    );
+
+    server.registerTool(
+        "otp_code",
+        {
+            title: "Read a one time code",
+            description:
+                "Returns the current TOTP code for a secret of type totp, and how many seconds it stays valid. The seed itself is never returned.",
+            inputSchema: {
+                secret: z.string().describe("The secret's label, as shown by list_secrets"),
+            },
+        },
+        async ({ secret }) => {
+            try {
+                rateLimit(secret);
+                const meta = await vault.metaOf(secret);
+                if (!meta.readable) return fail(`this agent holds no key for ${secret}`);
+                if (meta.type !== "totp") return fail(`${secret} is a ${meta.type}, not an authenticator secret`);
+
+                // parseOtp takes ownership of the bytes and zeroes them, so the only thing left to
+                // clear is the seed it copied onto the TOTP it hands back
+                const otp = parseOtp(await vault.rewall.get(meta.name));
+                try {
+                    const { code, remaining } = otpSnapshot(otp, Date.now());
+                    return say(`${code}, valid for another ${remaining}s`);
+                } finally {
+                    await wipe(otp.secret.bytes);
+                }
+            } catch (error) {
                 return fail((error as Error).message);
             }
         },

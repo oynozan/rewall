@@ -31,7 +31,7 @@ try {
 
     const { tools } = await client.listTools();
     const names = tools.map((tool) => tool.name).sort();
-    assert.deepStrictEqual(names, ["http_with_secret", "list_secrets"]);
+    assert.deepStrictEqual(names, ["http_with_secret", "list_secrets", "otp_code"]);
     pass(`server exposes ${names.join(", ")}`);
 
     /* Listing is metadata only */
@@ -80,6 +80,25 @@ try {
     seen.push(body);
     assert.ok(/from api\.openai\.com/.test(body), "the allowed host was reached");
     pass(`api.openai.com answered, ${body.split("\n")[0]}`);
+
+    /* Type gates, so a credential cannot be used through the wrong tool */
+
+    const wrongTool = await client.callTool({ name: "otp_code", arguments: { secret: "openai" } });
+    seen.push(textOf(wrongTool));
+    assert.ok(wrongTool.isError && /not an authenticator secret/.test(textOf(wrongTool)));
+    pass("otp_code refuses a secret that is not a totp");
+
+    // If a totp secret ever lands on chain the live path proves itself, and until then it says so
+    const totpRow = listing.split("\n").find((line) => line.includes("type=totp"));
+    if (totpRow) {
+        const label = totpRow.trim().split(/\s+/)[0];
+        const code = await client.callTool({ name: "otp_code", arguments: { secret: label } });
+        seen.push(textOf(code));
+        assert.ok(/^\d{6}, valid for another \d+s$/.test(textOf(code)), "otp_code returns a live code");
+        pass(`otp_code returned a live code for ${label}`);
+    } else {
+        console.log("  --  otp_code live path unproven, no totp secret exists on chain yet");
+    }
 
     /* The property the whole server exists for */
 

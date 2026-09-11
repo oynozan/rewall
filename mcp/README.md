@@ -57,6 +57,7 @@ Register it with an MCP client, for example `.mcp.json`:
 | ------------------ | ------------------------------------------------------------------------------ |
 | `list_secrets`     | Label, type, allowed hosts, and whether this agent holds a key. Metadata only. |
 | `http_with_secret` | The response, redacted. Never the secret.                                      |
+| `otp_code`         | Six digits and the seconds left. Never the seed.                               |
 
 ## How a request is refused
 
@@ -97,7 +98,8 @@ allowlist. Redaction is defence in depth behind it.
   over `IDENTITY_TYPED_DATA`, so a tool that signs a model-chosen payload hands over the whole
   identity in one call, permanently and unrevocably. It ships only as one structured payload kind the
   tool builds itself, with the Rewall identity and authorization payloads hard-denied.
-- `otp_code`. Waiting on the `@rewall/sdk/2fa` subpath export.
+- A live `otp_code`. The tool and its type gate are in, but no `totp` secret exists on chain yet, so
+  `pnpm run check` says the live path is unproven rather than quietly skipping it.
 - Seed-only provisioning. The host should hold the 32-byte X25519 seed and no Ethereum key, which
   collapses its capability to _decrypt what was granted to it_. Needs an SDK constructor that takes
   the scalar directly.
