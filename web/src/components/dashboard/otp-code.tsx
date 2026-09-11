@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { TOTP } from "otpauth";
 import { toast } from "sonner";
-import { otpSnapshot } from "@/src/lib/otp";
+import { otpSnapshot, type TOTP } from "@rewall/sdk/2fa";
 import { Glyph, SegmentedProgress } from "./ui";
 
 export function OtpCells({ otp, label }: { otp: TOTP; label: string }) {

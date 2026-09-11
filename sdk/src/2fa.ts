@@ -7,30 +7,32 @@ const ALGORITHMS = ["SHA1", "SHA256", "SHA512"];
 
 /* Parsing */
 
+function usable(parsed: ReturnType<typeof URI.parse>): parsed is TOTP {
+    return (
+        parsed instanceof TOTP &&
+        [6, 8].includes(parsed.digits) &&
+        Number.isInteger(parsed.period) &&
+        parsed.period >= 1 &&
+        parsed.period <= 300 &&
+        ALGORITHMS.includes(parsed.algorithm) &&
+        parsed.secret.bytes.length > 0
+    );
+}
+
+// Wipes before throwing, because URI.parse has already built a real seed by the time validation runs
 function parseUri(text: string): TOTP {
     const parsed = URI.parse(text);
-    if (
-        !(parsed instanceof TOTP) ||
-        ![6, 8].includes(parsed.digits) ||
-        !Number.isInteger(parsed.period) ||
-        parsed.period < 1 ||
-        parsed.period > 300 ||
-        !ALGORITHMS.includes(parsed.algorithm) ||
-        !parsed.secret.bytes.length
-    ) {
-        throw new Error("Unsupported authenticator configuration.");
-    }
-    return parsed;
+    if (usable(parsed)) return parsed;
+
+    parsed.secret.bytes.fill(0);
+    throw new Error("Unsupported authenticator configuration.");
 }
 
 // Consumes the plaintext it is handed, so the caller never keeps a second copy of a seed
 export function parseOtp(bytes: Uint8Array): TOTP {
-    let parsed: TOTP | undefined;
     try {
-        parsed = parseUri(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-        return parsed;
+        return parseUri(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     } catch {
-        parsed?.secret.bytes.fill(0);
         throw new Error("This secret does not contain a supported TOTP account.");
     } finally {
         bytes.fill(0);

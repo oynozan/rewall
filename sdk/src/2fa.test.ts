@@ -25,9 +25,14 @@ test("parseOtp wipes the plaintext it was handed, on success and on failure", ()
     parseOtp(good).secret.bytes.fill(0);
     assert.ok(allZero(good), "a parsed seed was left in the caller's buffer");
 
-    const bad = bytes("not a uri");
-    assert.throws(() => parseOtp(bad));
-    assert.ok(allZero(bad), "a rejected seed was left in the caller's buffer");
+    const malformed = bytes("not a uri");
+    assert.throws(() => parseOtp(malformed));
+    assert.ok(allZero(malformed), "a rejected seed was left in the caller's buffer");
+
+    // Parses cleanly and is refused by policy, which is the path where a real seed exists before the throw
+    const refused = bytes(`otpauth://hotp/Example?secret=${SECRET}&counter=1`);
+    assert.throws(() => parseOtp(refused));
+    assert.ok(allZero(refused), "a policy rejected seed was left in the caller's buffer");
 });
 
 test("parseOtp refuses anything that is not a usable TOTP account", () => {

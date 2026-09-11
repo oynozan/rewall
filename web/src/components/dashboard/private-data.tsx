@@ -1,8 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import type { TOTP } from "otpauth";
-import { parseOtp } from "@/src/lib/otp";
+import { parseOtp, type TOTP } from "@rewall/sdk/2fa";
 import { explain } from "@/src/lib/errors";
 import { useIdentity } from "./identity";
 

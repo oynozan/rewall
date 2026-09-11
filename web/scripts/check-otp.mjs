@@ -15,7 +15,7 @@ import {createRoot} from 'react-dom/client';
 import {OtpCells} from './src/components/dashboard/otp-code';
 import {TableColumns} from './src/components/dashboard/ui';
 import {VolumeChart} from './src/components/dashboard/volume-chart';
-import {parseOtp,otpSnapshot} from './src/lib/otp';
+import {parseOtp,otpSnapshot} from '@rewall/sdk/2fa';
 const bytes=new TextEncoder().encode('otpauth://totp/RFC%206238:Test?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&digits=8&period=30');
 const otp=parseOtp(bytes);
 window.otpTest={wiped:[...bytes].every(b=>b===0),at:timestamp=>otpSnapshot(otp,timestamp),reject:()=>{const b=new TextEncoder().encode('otpauth://hotp/Test?secret=GEZDGNBVGY3TQOJQ&counter=0');let rejected=false;try{parseOtp(b)}catch{rejected=true}return rejected&&b.every(v=>v===0)}};
