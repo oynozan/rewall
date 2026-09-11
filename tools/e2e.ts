@@ -63,6 +63,9 @@ for (const client of [ownerClient, granteeClient, recoveryClient]) {
 
 /* Create */
 
+const ownerAddress = accountFor(owner.index).address;
+const noncebefore = await publicClient.getTransactionCount({ address: ownerAddress });
+
 await ownerClient.create(secretName, new TextEncoder().encode(SECRET), {
     type: "apikey",
     grantees: [`${grantee.label}.eth`],
@@ -71,6 +74,11 @@ await ownerClient.create(secretName, new TextEncoder().encode(SECRET), {
     overwrite: true,
 });
 console.log("");
+
+// The secret and its parent index share a resolver, so both sets of records ride one transaction
+const spent = (await publicClient.getTransactionCount({ address: ownerAddress })) - noncebefore;
+if (spent !== 1) fail(`create sent ${spent} transactions, expected 1`);
+pass("create wrote the secret and its index entry in a single transaction");
 
 if (text(await ownerClient.get(secretName)) !== SECRET) fail("owner cannot read what it created");
 pass("owner reads its own secret");

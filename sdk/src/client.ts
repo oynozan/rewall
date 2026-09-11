@@ -1,4 +1,4 @@
-import { namehash, type Address, type Hash } from "viem";
+import { namehash, type Address, type Hash, type Hex } from "viem";
 import { deriveIdentity, fingerprintOf, IDENTITY_TYPED_DATA, type Identity } from "./identity.ts";
 import { toBase64, fromBase64, wipe } from "./crypto.ts";
 import {
@@ -192,9 +192,16 @@ export class Rewall {
             recovery: named(recovery),
         });
 
-        const hash = await this.write(secretName, [...records, ...cleared, ...authorization]);
-        await this.indexAdd(secretName);
-        return hash;
+        // The index rides the same transaction, or a rejected second prompt would hide a secret that exists
+        const parent = secretName.split(".").slice(1).join(".");
+        const label = secretName.split(".")[0]!;
+        const listed = await this.read(parent, [RECORD.index]);
+        const updated = addToIndex(listed[RECORD.index], label);
+
+        return this.writeAcross([
+            { name: secretName, records: [...records, ...cleared, ...authorization] },
+            { name: parent, records: updated === listed[RECORD.index] ? [] : [{ key: RECORD.index, value: updated }] },
+        ]);
     }
 
     async get(secretName: string): Promise<Uint8Array> {
@@ -346,17 +353,20 @@ export class Rewall {
             ]);
         },
 
-        distribute: async (memberNames: string[]): Promise<Hash[]> => {
+        // Every member shares the parent's resolver, so the whole team is sealed in one transaction
+        distribute: async (memberNames: string[]): Promise<Hash> => {
             const key = await deriveSubtreeKey(await this.identity(), await this.subtreeVersion());
-            const hashes: Hash[] = [];
 
-            for (const member of memberNames) {
-                const { publicKey } = await this.publicKeyOf(member);
-                hashes.push(
-                    await this.write(member, [{ key: RECORD.subtreeKey, value: await sealSubtreeKey(key, publicKey) }]),
-                );
-            }
-            return hashes;
+            const groups = await Promise.all(
+                memberNames.map(async (member) => {
+                    const { publicKey } = await this.publicKeyOf(member);
+                    return {
+                        name: member,
+                        records: [{ key: RECORD.subtreeKey, value: await sealSubtreeKey(key, publicKey) }],
+                    };
+                }),
+            );
+            return this.writeAcross(groups);
         },
 
         // Bumping the version invalidates every distributed copy, which is how a member is removed
@@ -531,14 +541,6 @@ export class Rewall {
         return this.write(secretName, [...records, ...signed]);
     }
 
-    private async indexAdd(secretName: string): Promise<void> {
-        const parent = secretName.split(".").slice(1).join(".");
-        const label = secretName.split(".")[0]!;
-        const current = await this.read(parent, [RECORD.index]);
-        const updated = addToIndex(current[RECORD.index], label);
-        if (updated !== current[RECORD.index]) await this.write(parent, [{ key: RECORD.index, value: updated }]);
-    }
-
     async unindex(secretName: string): Promise<Hash | null> {
         const parent = secretName.split(".").slice(1).join(".");
         const label = secretName.split(".")[0]!;
@@ -595,22 +597,49 @@ export class Rewall {
         return readTexts(this.publicClient, this.universalResolver, name, keys);
     }
 
-    private async write(name: string, records: SecretRecords): Promise<Hash> {
-        // Resolved every write, never cached, because the owner can repoint the name at any moment
-        const resolver = await resolverFor(this.publicClient, this.universalResolver, name);
-        if (!resolver) throw new Error(`no resolver configured for ${name}`);
+    private write(name: string, records: SecretRecords): Promise<Hash> {
+        return this.writeAcross([{ name, records }]);
+    }
 
+    // Records for several names share one transaction when they share a resolver, which by design they do
+    private async writeAcross(groups: { name: string; records: SecretRecords }[]): Promise<Hash> {
+        const pending = groups.filter((group) => group.records.length);
+        if (!pending.length) throw new Error("no records to write");
+
+        // Resolved every write, never cached, because the owner can repoint a name at any moment
+        const resolvers = await Promise.all(
+            pending.map(async (group) => {
+                const resolver = await resolverFor(this.publicClient, this.universalResolver, group.name);
+                if (!resolver) throw new Error(`no resolver configured for ${group.name}`);
+                return resolver.toLowerCase() as Address;
+            }),
+        );
+
+        const batched = new Map<Address, Hex[]>();
+        pending.forEach((group, index) => {
+            const resolver = resolvers[index]!;
+            const calls = encodeSetTextCalls(namehash(group.name), group.records);
+            batched.set(resolver, [...(batched.get(resolver) ?? []), ...calls]);
+        });
+
+        // One transaction per resolver, so a name repointed somewhere else still gets written
+        let hash: Hash | null = null;
+        for (const [resolver, calls] of batched) hash = await this.send(resolver, calls);
+        return hash!;
+    }
+
+    private async send(resolver: Address, calls: Hex[]): Promise<Hash> {
         const hash = await this.walletClient.writeContract({
             address: resolver,
             abi: resolverAbi,
             functionName: "multicall",
-            args: [encodeSetTextCalls(namehash(name), records)],
+            args: [calls],
             account: this.account,
             chain: this.walletClient.chain,
         });
 
         const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
-        if (receipt.status !== "success") throw new Error(`write reverted on ${name}, ${hash}`);
+        if (receipt.status !== "success") throw new Error(`write reverted on ${resolver}, ${hash}`);
         return hash;
     }
 }

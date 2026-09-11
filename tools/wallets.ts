@@ -5,11 +5,12 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 const ENV_PATH = new URL(".env", import.meta.url);
 
+// The owner sends nearly every transaction, so it carries most of the balance
 const ROLES = [
-    { index: 0, name: "owner", target: parseEther("0.12") },
-    { index: 1, name: "grantee", target: parseEther("0.02") },
+    { index: 0, name: "owner", target: parseEther("0.025") },
+    { index: 1, name: "grantee", target: parseEther("0.008") },
     { index: 2, name: "stranger", target: 0n },
-    { index: 3, name: "recovery", target: parseEther("0.02") },
+    { index: 3, name: "recovery", target: parseEther("0.005") },
 ];
 
 /* Mnemonic */
@@ -52,13 +53,15 @@ const accounts = ROLES.map((r) => ({ ...r, account: mnemonicToAccount(mnemonic, 
 const funderBalance = await publicClient.getBalance({ address: funder.address });
 console.log(`\nfunder   ${funder.address}  ${formatEther(funderBalance)} ETH\n`);
 
-const needed = accounts.reduce((sum, a) => sum + a.target, 0n);
+// What is actually short, not the sum of targets, or a rerun refuses over balances already funded
+const balances = await Promise.all(accounts.map((a) => publicClient.getBalance({ address: a.account.address })));
+const needed = accounts.reduce((sum, a, i) => sum + (a.target > balances[i]! ? a.target - balances[i]! : 0n), 0n);
 if (funderBalance < needed) {
-    throw new Error(`funder holds ${formatEther(funderBalance)} ETH but ${formatEther(needed)} ETH is needed`);
+    throw new Error(`funder holds ${formatEther(funderBalance)} ETH but ${formatEther(needed)} ETH is short`);
 }
 
-for (const a of accounts) {
-    const balance = await publicClient.getBalance({ address: a.account.address });
+for (const [index, a] of accounts.entries()) {
+    const balance = balances[index]!;
     const short = a.target > balance ? a.target - balance : 0n;
 
     if (short === 0n) {
