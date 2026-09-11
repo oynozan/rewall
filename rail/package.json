@@ -1,0 +1,21 @@
+{
+    "name": "@rewall/rail",
+    "scripts": {
+        "serve": "node --env-file=.env --experimental-strip-types src/server.ts",
+        "deploy": "node --env-file=.env --experimental-strip-types scripts/deploy.ts",
+        "deposit": "node --env-file=.env --experimental-strip-types scripts/deposit.ts",
+        "redeem": "node --env-file=.env --experimental-strip-types scripts/redeem.ts",
+        "verify": "node --env-file=.env --experimental-strip-types scripts/verify-privacy.ts",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "dependencies": {
+        "@rewall/sdk": "link:../sdk",
+        "viem": "^2.56.3"
+    },
+    "type": "module",
+    "private": true,
+    "devDependencies": {
+        "prettier": "^3.9.6"
+    }
+}

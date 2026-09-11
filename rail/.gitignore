@@ -1,0 +1,10 @@
+# Foundry dependencies, installed with forge install
+lib/
+out/
+cache/
+broadcast/
+
+# The ledger is local state, never shared
+*.db
+*.db-wal
+*.db-shm

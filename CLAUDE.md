@@ -9,7 +9,7 @@ Permissionless secret infrastructure on ENSv2 Sepolia. `SPEC.md` is the source o
 - Every component folder gets its own `.prettierrc` and `.prettierignore`, plus `format` and `format:check` scripts. Indentation is 4 spaces, never 2. Copy the config from `tools/` when adding a folder.
 - Never write a version into `package.json` by hand. Run `pnpm add <pkg>` and take whatever latest stable resolves to. To change an existing pin, `pnpm remove` it first, otherwise `pnpm add` keeps the old specifier.
 - `sdk/` is shared by relative link, `"@rewall/sdk": "link:../sdk"`. It must be built before a consumer runs, since consumers import `dist`.
-- `tools/` holds the setup and inspection scripts. `web/` is the Next.js dApp. `sdk/` does not exist yet.
+- `sdk/` is `@rewall/sdk`, the core. `tools/` holds the setup and inspection scripts and `.env`. `examples/` holds the runnable examples. `web/` is the Next.js dApp. `rail/` is an original reimplementation of the private transfer service for local testing only, never a Rewall component. The upstream it was written against is Chainlink's demo, cloned into the gitignored `sandbox/`.
 - Clients per SPEC: TypeScript SDK (core, everything builds on it), CLI, MCP server, browser extension.
 - Design docs and TODO live outside the repo, in this project's Claude storage under `docs/`. Never add them here.
 
@@ -94,6 +94,13 @@ MockUSDC                         0x768f42455a2d082e23ceef7d51e5787c82d67a39   6d
 MockDAI                          0x5472c5725a00b7ba11f0794a79d08ade6f4683bd   18dp
 StandardRentPriceOracle          0x8914b66260eb8c4fff795650c3ae8cd335958987
 UpgradableUniversalResolverProxy 0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe   viem default
+```
+
+Transfer service addresses, for SPEC section 9 and `sdk/src/transfer.ts`. Both are transcribed from Chainlink's Compliant Private Token demo, which is cloned into the gitignored `sandbox/demo/`, so this table is the only copy that ships.
+
+```
+Transfer API     https://convergence2026-token-api.cldev.cloud
+Transfer vault   0xE588a6c73933BFD66Af9b4A07d48bcE59c0D2d13   Sepolia, EIP-712 verifyingContract
 ```
 
 Registrar constants, read live. MIN_COMMITMENT_AGE 60s, MAX_COMMITMENT_AGE 86400s, MIN_REGISTER_DURATION and GRACE_PERIOD 2419200s (28 days). Labels of 5+ chars cost 8.000021 USDC/yr, 4 chars 160.000009, 3 chars 640.000005, 1 to 2 chars revert. MockUSDC `mint` has no access control, so names cost only gas.

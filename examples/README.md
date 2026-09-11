@@ -1,6 +1,6 @@
 # Rewall examples
 
-Five short programs. Each one is a real scenario, runs against real Sepolia, and
+Seven short programs. Each one is a real scenario, runs against real Sepolia, and
 fits on one screen.
 
 Read them in order. Each README explains what happened and why.
@@ -12,6 +12,8 @@ Read them in order. Each README explains what happened and why.
 | [3. Take access away](03-take-access-away)           | Revoke someone, and what revoking cannot do                          |
 | [4. Share with a team](04-share-with-a-team)         | Grant to a whole group without naming anyone in it                   |
 | [5. Recover a lost wallet](05-recover-a-lost-wallet) | Get back in when your key is gone                                    |
+| [6. Pay a name](06-pay-a-name)                       | Pay by ENS name, then choose who may know you did                    |
+| [7. Share a treasury](07-share-a-treasury)           | A shared wallet whose signing key is itself a secret                 |
 
 ## What Rewall is
 
@@ -52,6 +54,22 @@ pnpm run 04
 pnpm run 05
 ```
 
+## Examples 6 and 7 need one more thing
+
+They move money, so they need a private transfer rail. Chainlink's demo service
+is the real one, but its indexer is not currently crediting deposits, so there
+is a local stand in at [rail/](../rail). Start it, then put the three values it
+prints into `.env` here.
+
+```bash
+cd ../rail && pnpm run deploy && pnpm run serve
+```
+
+```bash
+pnpm run 06
+pnpm run 07
+```
+
 ## The cast
 
 Everyone here is an ENS name with a wallet behind it.
@@ -88,4 +106,7 @@ Worth knowing before you trust it with anything real.
   contents.
 - Everything is public except the plaintext. Who granted what, and when, is
   visible to anyone reading the chain.
+- Payments hide who paid whom, not that you used the vault at all. Deposits and
+  withdrawals are ordinary transactions with visible amounts, which is why
+  example 6 calls this semi confidential rather than anonymous.
 - This runs on Sepolia, a test network. Do not put a real credential in it.
