@@ -4,16 +4,17 @@ import { useEffect, useState } from "react";
 import { guardianRecoveryEntry, NAMESPACE_LABEL, RECORD, readTexts } from "@rewall/sdk";
 import { explain } from "@/src/lib/errors";
 import { ownerName, TYPE_LABELS, UNIVERSAL_RESOLVER, vaultClient } from "@/src/lib/vault";
+import { Select } from "../select";
 import { useIdentity } from "./identity";
 import { useWorkspace } from "./dashboard-shell";
 
-const TYPES = Object.entries(TYPE_LABELS).filter(([type]) => type !== "receipt");
+// Authenticator accounts have their own panel, because a setup key and a hostname are not a value and a type
+const TYPES = Object.entries(TYPE_LABELS).filter(([type]) => type !== "receipt" && type !== "totp");
 
 type Entry = { value: string; type: string; recovery: string; grantees: string[] };
 
-// A secret cannot exist without a recovery holder, and the setup wizard publishes one on the owner's
-// own name, so the common case needs no field at all
-function useOwnRecovery(ownName: string) {
+// The owner's recovery key removes the need for a separate recovery field
+export function useOwnRecovery(ownName: string) {
     const [answer, setAnswer] = useState<{ name: string; has: boolean } | null>(null);
 
     useEffect(() => {
@@ -143,13 +144,13 @@ export function CreateSecret({ onDone }: { onDone: () => void }) {
             />
 
             <label htmlFor="secret-type">Type</label>
-            <select id="secret-type" name="type" defaultValue="generic" className="create-select">
-                {TYPES.map(([type, name]) => (
-                    <option key={type} value={type}>
-                        {name}
-                    </option>
-                ))}
-            </select>
+            <Select
+                id="secret-type"
+                name="type"
+                defaultValue="generic"
+                className="create-select"
+                options={TYPES.map(([value, label]) => ({ value, label }))}
+            />
 
             <button
                 type="button"

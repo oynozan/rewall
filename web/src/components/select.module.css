@@ -1,0 +1,123 @@
+.trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-strong, #383838);
+    border-radius: var(--radius, 6px);
+    background: var(--surface, #1b1b1b);
+    color: var(--foreground, #ededed);
+    font: inherit;
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        border-color 160ms,
+        background-color 160ms;
+}
+.trigger > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.trigger:hover:not(:disabled),
+.trigger[data-state="open"] {
+    border-color: var(--border-hover, #555);
+    background: #222;
+}
+.trigger:focus-visible {
+    outline: 2px solid #dedede;
+    outline-offset: 3px;
+}
+.trigger:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.compact {
+    width: auto;
+    max-width: 160px;
+    min-height: 32px;
+    padding: 5px 9px;
+    gap: 12px;
+    font-size: 12px;
+    background: #202020;
+}
+.chevron {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: #999;
+}
+.content {
+    z-index: 100;
+    box-sizing: border-box;
+    min-width: var(--radix-select-trigger-width);
+    max-width: calc(100vw - 16px);
+    max-height: min(340px, var(--radix-select-content-available-height));
+    overflow: hidden;
+    border: 1px solid var(--border-strong, #383838);
+    border-radius: var(--radius, 6px);
+    background: #1c1c1c;
+    color: var(--foreground, #ededed);
+    font-family: var(--font-manrope), sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    animation: appear 120ms ease-out;
+}
+.viewport {
+    padding: 4px;
+}
+.item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-height: 34px;
+    box-sizing: border-box;
+    padding: 7px 34px 7px 10px;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+    user-select: none;
+}
+.item[data-state="checked"] {
+    background: #252525;
+}
+.item[data-highlighted] {
+    background: #333;
+    color: #fff;
+}
+.item[data-disabled] {
+    opacity: 0.4;
+    pointer-events: none;
+}
+.indicator {
+    position: absolute;
+    right: 9px;
+    display: flex;
+}
+.scroll {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 24px;
+    color: #999;
+}
+@keyframes appear {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .trigger {
+        transition: none;
+    }
+    .content {
+        animation: none;
+    }
+}

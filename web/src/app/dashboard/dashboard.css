@@ -436,34 +436,6 @@ kbd {
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
 }
-.filter-control {
-    display: flex;
-    align-items: center;
-    padding: 0 8px;
-    height: 32px;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
-    background: #202020;
-    white-space: nowrap;
-}
-.filter-control select {
-    appearance: none;
-    outline: 0;
-    border: 0;
-    cursor: pointer;
-    font-size: 12px;
-    max-width: 116px;
-    padding: 3px 17px 3px 0;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none' stroke='%23a2a29a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19l12 12 12-12'/%3E%3C/svg%3E")
-        no-repeat right center / 10px;
-}
-.filter-control option {
-    background: #202020;
-}
-.filter-control:focus-within {
-    outline: 2px solid #deded9;
-    outline-offset: 3px;
-}
 .refresh-button {
     border-color: var(--border-strong);
 }
@@ -1015,9 +987,6 @@ input[type="checkbox"]:indeterminate::after {
         font-size: 14px;
         font-family: var(--font-lexend-deca), sans-serif;
     }
-    .filter-control select {
-        max-width: 92px;
-    }
     .search-field kbd {
         display: none;
     }
@@ -1227,6 +1196,29 @@ input[type="checkbox"]:indeterminate::after {
     align-items: center;
     color: var(--muted);
     font-size: 12px;
+}
+.balance-actions,
+.balance-extra {
+    padding: 0 12px 14px;
+}
+.balance-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.panel-form .check-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 18px;
+}
+.panel-form .check-row input {
+    width: 15px;
+    height: 15px;
+    padding: 0;
+    margin: 0;
+    accent-color: #929288;
 }
 .transfer-recipient {
     max-width: 200px;
@@ -1510,6 +1502,9 @@ input[type="checkbox"]:indeterminate::after {
 .transfers-page-tables {
     grid-template-columns: minmax(0, 1fr);
     gap: 32px;
+}
+.secrets-page > .terminal-card {
+    margin-bottom: 32px;
 }
 .home-body .transfer-sections {
     grid-template-columns: minmax(0, 1fr);
@@ -1867,12 +1862,6 @@ input[type="checkbox"]:indeterminate::after {
     border-color: #929288;
 }
 .create-select {
-    padding: 10px 12px;
-    font-size: 14px;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
-    background: var(--surface);
-    color: var(--foreground);
     margin-bottom: 18px;
 }
 

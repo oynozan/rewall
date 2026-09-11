@@ -18,13 +18,18 @@
         "check:sharing": "node --env-file=../tools/.env scripts/check-sharing.mjs",
         "check:recovery": "node --env-file=../tools/.env scripts/check-recovery.mjs",
         "check:faucet": "node scripts/check-faucet.mjs",
+        "check:rail": "node --env-file=.env.local scripts/check-rail.mjs",
+        "check:transfers": "node --env-file=../tools/.env --env-file=.env.local scripts/check-transfers.mjs",
+        "check:chain": "node --env-file=../tools/.env scripts/check-chain.mjs",
         "check:gate": "node --env-file=../tools/.env scripts/check-gate.mjs",
-        "check:onboarding": "node --env-file=../tools/.env --env-file=.env.local scripts/check-onboarding.mjs"
+        "check:onboarding": "node --env-file=../tools/.env --env-file=.env.local scripts/check-onboarding.mjs",
+        "check:2fa": "node --env-file=../tools/.env scripts/check-2fa-create.mjs"
     },
     "dependencies": {
         "@paper-design/shaders": "^0.0.80",
         "@privy-io/node": "^0.34.0",
         "@privy-io/react-auth": "^3.42.0",
+        "@radix-ui/react-select": "^2.3.7",
         "@rewall/sdk": "link:../sdk",
         "canvas-confetti": "^1.9.4",
         "mongodb": "^7.6.0",

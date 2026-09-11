@@ -2,18 +2,21 @@
 
 import { Toaster } from "sonner";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { type EIP1193Provider } from "viem";
+import { sepolia } from "viem/chains";
 import { PrivateDataProvider } from "./private-data";
 import { IdentityProvider, useIdentity } from "./identity";
+import { RailProvider } from "./rail";
+import { FundBalance, ReceiptDetail, SendTransfer, WithdrawBalance } from "./transfer-forms";
 import { SecretValue } from "./secret-value";
 import { SecretAccess } from "./secret-access";
 import { CreateSecret } from "./create-secret";
+import { AddAuthenticator } from "./add-authenticator";
 import { ConnectGate } from "./connect-gate";
 import { AddSecret } from "./add-secret";
-import { LiquidMetalButton } from "./liquid-metal-button";
 import { ownsName, rememberName, resolveOwnName } from "@/src/lib/account";
 import {
     ownerName,
@@ -28,7 +31,8 @@ import { FadeDots, FadeIn, SidebarFade } from "./amicro";
 import { Logo } from "./logo";
 import { CopyButton, Glyph, Icon, type IconName } from "./ui";
 
-type Panel = "vault" | "wallet" | "help" | "find" | "create" | Secret | null;
+type Panel =
+    "vault" | "wallet" | "help" | "find" | "create" | "authenticator" | "send" | "fund" | "withdraw" | Secret | null;
 type Workspace = {
     vault: Vault | null;
     busy: boolean;
@@ -138,10 +142,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     );
 
     // Privy hands the provider over asynchronously, so the identity session asks for it when it needs it
-    const getProvider = useCallback(
-        async () => (wallet ? ((await wallet.getEthereumProvider()) as EIP1193Provider) : null),
-        [wallet],
-    );
+    // Its login time switch has no add chain fallback, so a wallet without Sepolia arrives still on its old one
+    // switchChain adds the chain first, and Privy's own note is that a provider taken before it keeps the old id
+    const getProvider = useCallback(async () => {
+        if (!wallet) return null;
+        if (wallet.chainId !== `eip155:${sepolia.id}`) await wallet.switchChain(sepolia.id);
+        return (await wallet.getEthereumProvider()) as EIP1193Provider;
+    }, [wallet]);
 
     const isOwnVault = Boolean(ownName) && vault?.owner === ownName;
 
@@ -171,150 +178,164 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     return (
         <WorkspaceContext value={workspace}>
             <IdentityProvider address={account} getProvider={getProvider} name={ownName}>
-                <div className="dashboard-app">
-                    <a className="skip-link" href="#workspace-content">
-                        Skip to content
-                    </a>
-                    {mobileOpen && <button className="mobile-scrim" onClick={navigate} aria-label="Close navigation" />}
-                    <SidebarFade className={`sidebar ${mobileOpen ? "is-open" : ""}`} label="Main navigation">
-                        <div className="brand-row" style={step(0)}>
-                            <Link href="/dashboard" className="brand" aria-label="Rewall home" onClick={navigate}>
-                                <Logo />
-                            </Link>
-                        </div>
-                        <nav>
-                            <div className="nav-group">
-                                {(
-                                    [
-                                        { href: "/dashboard", label: "Home", icon: "home" },
-                                        { href: "/dashboard/secrets", label: "Secrets", icon: "key" },
-                                        { href: "/dashboard/2fa", label: "2FA", icon: "authenticator" },
-                                        { href: "/dashboard/transfers", label: "Transfers", icon: "wallet" },
-                                        { href: "/dashboard/recovery", label: "Recovery", icon: "shield" },
-                                    ] as { href: string; label: string; icon: IconName }[]
-                                ).map((item, index) => (
-                                    <Link
-                                        key={item.href}
-                                        href={item.href}
-                                        style={step(index + 2)}
-                                        className={`nav-item ${pageTitle === item.label ? "selected" : ""}`}
-                                        aria-current={pageTitle === item.label ? "page" : undefined}
-                                        onClick={navigate}
-                                    >
-                                        <Icon name={item.icon} />
-                                        {item.label}
-                                    </Link>
-                                ))}
+                {/* Wraps the drawer as well as the page, since the transfer panels render inside it */}
+                <RailProvider key={account} address={account} getProvider={getProvider}>
+                    <div className="dashboard-app">
+                        <a className="skip-link" href="#workspace-content">
+                            Skip to content
+                        </a>
+                        {mobileOpen && (
+                            <button className="mobile-scrim" onClick={navigate} aria-label="Close navigation" />
+                        )}
+                        <SidebarFade className={`sidebar ${mobileOpen ? "is-open" : ""}`} label="Main navigation">
+                            <div className="brand-row" style={step(0)}>
+                                <Link href="/dashboard" className="brand" aria-label="Rewall home" onClick={navigate}>
+                                    <Logo />
+                                </Link>
                             </div>
-                        </nav>
-                        <div className="sidebar-bottom">
-                            <div className="sidebar-action" style={step(7)}>
-                                <AddSecret fullWidth />
-                            </div>
-                            <nav aria-label="Resources">
+                            <nav>
                                 <div className="nav-group">
-                                    <span className="nav-caption" style={step(6)}>
-                                        Resources
-                                    </span>
-                                    <a
-                                        className="nav-item"
-                                        style={step(7)}
-                                        href="https://github.com/oynozan/rewall"
-                                        target="_blank"
-                                        rel="noreferrer"
-                                    >
-                                        <Icon name="github" />
-                                        Source Code
-                                    </a>
-                                    <a
-                                        className="nav-item"
-                                        style={step(8)}
-                                        href="#"
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        onClick={(event) => event.preventDefault()}
-                                        aria-disabled="true"
-                                    >
-                                        <Icon name="documents" />
-                                        Docs
-                                    </a>
+                                    {(
+                                        [
+                                            { href: "/dashboard", label: "Home", icon: "home" },
+                                            { href: "/dashboard/secrets", label: "Secrets", icon: "key" },
+                                            { href: "/dashboard/2fa", label: "2FA", icon: "authenticator" },
+                                            { href: "/dashboard/transfers", label: "Transfers", icon: "wallet" },
+                                            { href: "/dashboard/recovery", label: "Recovery", icon: "shield" },
+                                        ] as { href: string; label: string; icon: IconName }[]
+                                    ).map((item, index) => (
+                                        <Link
+                                            key={item.href}
+                                            href={item.href}
+                                            style={step(index + 2)}
+                                            className={`nav-item ${pageTitle === item.label ? "selected" : ""}`}
+                                            aria-current={pageTitle === item.label ? "page" : undefined}
+                                            onClick={navigate}
+                                        >
+                                            <Icon name={item.icon} />
+                                            {item.label}
+                                        </Link>
+                                    ))}
                                 </div>
                             </nav>
-                            <button
-                                className="sidebar-control sidebar-vault"
-                                id="tour-vault"
-                                style={step(10)}
-                                onClick={() => setPanel("vault")}
-                            >
-                                <span className="account-avatar">
-                                    <Icon name="lock" size={18} />
-                                </span>
-                                <span className="sidebar-control-label">
-                                    <strong className={ownName ? "mono" : ""}>{ownName || "No vault yet"}</strong>
-                                    {!ownName && <small>Set one up</small>}
-                                </span>
-                                <span className="wallet-chevron">
-                                    <Glyph name="chevron_right" size={18} />
-                                </span>
-                            </button>
-                            <button
-                                className="sidebar-control sidebar-account"
-                                id="tour-wallet"
-                                style={step(11)}
-                                onClick={() => setPanel("wallet")}
-                            >
-                                <span className="account-avatar">
-                                    <Icon name="wallet" size={18} />
-                                </span>
-                                <span>
-                                    <strong className={account ? "mono" : ""}>
-                                        {account ? `${account.slice(0, 6)}…${account.slice(-4)}` : "Not connected"}
-                                    </strong>
-                                    <small>{account ? walletLabel || "Connected" : "Connect wallet"}</small>
-                                </span>
-                                {!account && (
+                            <div className="sidebar-bottom">
+                                <nav aria-label="Resources">
+                                    <div className="nav-group">
+                                        <span className="nav-caption" style={step(6)}>
+                                            Resources
+                                        </span>
+                                        <a
+                                            className="nav-item"
+                                            style={step(7)}
+                                            href="https://github.com/oynozan/rewall"
+                                            target="_blank"
+                                            rel="noreferrer"
+                                        >
+                                            <Icon name="github" />
+                                            Source Code
+                                        </a>
+                                        <a
+                                            className="nav-item"
+                                            style={step(8)}
+                                            href="#"
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            onClick={(event) => event.preventDefault()}
+                                            aria-disabled="true"
+                                        >
+                                            <Icon name="documents" />
+                                            Docs
+                                        </a>
+                                    </div>
+                                </nav>
+                                <div className="sidebar-action" style={step(7)}>
+                                    <AddSecret fullWidth />
+                                </div>
+                                <button
+                                    className="sidebar-control sidebar-vault"
+                                    id="tour-vault"
+                                    style={step(10)}
+                                    onClick={() => setPanel("vault")}
+                                >
+                                    <span className="account-avatar">
+                                        <Icon name="lock" size={18} />
+                                    </span>
+                                    <span className="sidebar-control-label">
+                                        <strong className={ownName ? "mono" : ""}>{ownName || "No vault yet"}</strong>
+                                        {!ownName && <small>Set one up</small>}
+                                    </span>
                                     <span className="wallet-chevron">
                                         <Glyph name="chevron_right" size={18} />
                                     </span>
-                                )}
-                            </button>
+                                </button>
+                                <button
+                                    className="sidebar-control sidebar-account"
+                                    style={step(11)}
+                                    onClick={() => setPanel("wallet")}
+                                >
+                                    <span className="account-avatar">
+                                        <Icon name="wallet" size={18} />
+                                    </span>
+                                    <span>
+                                        <strong className={account ? "mono" : ""}>
+                                            {account ? `${account.slice(0, 6)}…${account.slice(-4)}` : "Not connected"}
+                                        </strong>
+                                        <small>{account ? walletLabel || "Connected" : "Connect wallet"}</small>
+                                    </span>
+                                    {!account && (
+                                        <span className="wallet-chevron">
+                                            <Glyph name="chevron_right" size={18} />
+                                        </span>
+                                    )}
+                                </button>
+                            </div>
+                        </SidebarFade>
+                        <div className="workspace-main">
+                            <header className="topbar">
+                                <button
+                                    className="mobile-menu icon-button"
+                                    onClick={() => setMobileOpen(!mobileOpen)}
+                                    aria-expanded={mobileOpen}
+                                    aria-label="Open navigation"
+                                >
+                                    <Icon name="hamburger_menu" size={17} />
+                                </button>
+                                <span>{pageTitle}</span>
+                            </header>
+                            <main id="workspace-content" tabIndex={-1}>
+                                <PrivateDataProvider key={`${account}:${vault?.owner || ""}`}>
+                                    <ConnectGate>{children}</ConnectGate>
+                                </PrivateDataProvider>
+                            </main>
                         </div>
-                    </SidebarFade>
-                    <div className="workspace-main">
-                        <header className="topbar">
-                            <button
-                                className="mobile-menu icon-button"
-                                onClick={() => setMobileOpen(!mobileOpen)}
-                                aria-expanded={mobileOpen}
-                                aria-label="Open navigation"
-                            >
-                                <Icon name="hamburger_menu" size={17} />
-                            </button>
-                            <span>{pageTitle}</span>
-                        </header>
-                        <main id="workspace-content" tabIndex={-1}>
-                            <PrivateDataProvider key={`${account}:${vault?.owner || ""}`}>
-                                <ConnectGate>{children}</ConnectGate>
-                            </PrivateDataProvider>
-                        </main>
+                        <WorkspacePanel />
+                        <Toaster
+                            theme="dark"
+                            position="bottom-right"
+                            duration={2200}
+                            visibleToasts={1}
+                            swipeDirections={[]}
+                            toastOptions={{ className: "dashboard-toast" }}
+                        />
                     </div>
-                    <WorkspacePanel />
-                    <Toaster
-                        theme="dark"
-                        position="bottom-right"
-                        duration={2200}
-                        visibleToasts={1}
-                        swipeDirections={[]}
-                        toastOptions={{ className: "dashboard-toast" }}
-                    />
-                </div>
+                </RailProvider>
             </IdentityProvider>
         </WorkspaceContext>
     );
 }
 
+const TITLES: Record<string, string> = {
+    vault: "Your vault",
+    wallet: "Your wallet",
+    find: "Find a secret",
+    create: "Store a secret",
+    authenticator: "Add an authenticator",
+    send: "Send privately",
+    fund: "Add funds",
+    withdraw: "Take funds out",
+};
+
 function WorkspacePanel() {
-    const router = useRouter();
     const {
         panel,
         setPanel,
@@ -382,17 +403,7 @@ function WorkspacePanel() {
     // Resolved from the vault rather than the snapshot the click captured, so a grant updates the panel
     const opened = typeof panel === "object" ? panel : null;
     const secret = opened ? (vault?.secrets.find((entry) => entry.name === opened.name) ?? opened) : null;
-    const title = secret
-        ? secret.label
-        : panel === "vault"
-          ? "Your vault"
-          : panel === "wallet"
-            ? "Your wallet"
-            : panel === "find"
-              ? "Find a secret"
-              : panel === "create"
-                ? "Store a secret"
-                : "How Rewall works";
+    const title = secret ? secret.label : (TITLES[String(panel)] ?? "How Rewall works");
 
     async function claim(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -507,14 +518,13 @@ function WorkspacePanel() {
                                             Rewall has to know which name is yours before it can store anything under
                                             it.
                                         </p>
-                                        <LiquidMetalButton
-                                            fullWidth
-                                            label="Set up a new vault"
-                                            onClick={() => {
-                                                close();
-                                                router.push("/dashboard/setup");
-                                            }}
-                                        />
+                                        <Link
+                                            href="/dashboard/setup"
+                                            className="button primary full-width"
+                                            onClick={close}
+                                        >
+                                            Set up a new vault
+                                        </Link>
                                         <form onSubmit={claim} className="panel-form claim-form">
                                             <label htmlFor="own-name">Or name one you already own</label>
                                             <input
@@ -526,12 +536,9 @@ function WorkspacePanel() {
                                                 spellCheck={false}
                                                 required
                                             />
-                                            <LiquidMetalButton
-                                                fullWidth
-                                                type="submit"
-                                                disabled={claiming}
-                                                label={claiming ? "Checking the registry…" : "This one is mine"}
-                                            />
+                                            <button className="button" disabled={claiming}>
+                                                {claiming ? "Checking the registry…" : "This one is mine"}
+                                            </button>
                                             <p className="field-help">
                                                 Checked against the registry, so a name you do not hold will be refused.
                                             </p>
@@ -541,6 +548,10 @@ function WorkspacePanel() {
                             </>
                         )}
                         {panel === "create" && <CreateSecret onDone={close} />}
+                        {panel === "authenticator" && <AddAuthenticator onDone={close} />}
+                        {panel === "send" && <SendTransfer onDone={close} />}
+                        {panel === "fund" && <FundBalance onDone={close} />}
+                        {panel === "withdraw" && <WithdrawBalance onDone={close} />}
                         {panel === "wallet" && (
                             <>
                                 {account ? (
@@ -606,12 +617,13 @@ function WorkspacePanel() {
                                     </>
                                 ) : (
                                     <>
-                                        <LiquidMetalButton
-                                            fullWidth
+                                        <button
+                                            className="button primary full-width"
                                             onClick={connect}
                                             disabled={!ready}
-                                            label={ready ? "Connect a wallet" : "Loading…"}
-                                        />
+                                        >
+                                            {ready ? "Connect a wallet" : "Loading…"}
+                                        </button>
                                         <p className="field-help">
                                             Bring your own wallet or have one made for you from an email address.
                                             Connecting reads your public address and signs nothing.
@@ -653,7 +665,11 @@ function WorkspacePanel() {
                                     <span className="mono">{secret.name}</span>
                                     <CopyButton value={secret.name} />
                                 </div>
-                                <SecretValue secret={secret} />
+                                {secret.type === "receipt" ? (
+                                    <ReceiptDetail secret={secret} />
+                                ) : (
+                                    <SecretValue secret={secret} />
+                                )}
                                 <SecretAccess secret={secret} />
                                 <dl className="detail-list">
                                     <div>

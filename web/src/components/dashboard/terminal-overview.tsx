@@ -7,7 +7,7 @@ import { VolumeChart } from "./volume-chart";
 
 export function TerminalOverview() {
     const { vault, busy, error } = useWorkspace();
-    const { accounts } = usePrivateData();
+    const { accounts, shared } = usePrivateData();
     const ready = Boolean(vault) && !busy && !error;
     const secrets = (vault?.secrets || []).filter((secret) => !["totp", "receipt"].includes(secret.type));
     const encrypted = secrets.filter((secret) => secret.encryption === "aes-256-gcm").length;
@@ -61,7 +61,7 @@ export function TerminalOverview() {
                     </div>
                     <div>
                         <span className="mono">Shared</span>
-                        <strong className="mono">—</strong>
+                        <strong className="mono">{ready ? shared.length.toString().padStart(2, "0") : "—"}</strong>
                     </div>
                 </div>
             </section>

@@ -105,6 +105,17 @@ export async function readSecret(input: string): Promise<Secret> {
     };
 }
 
+// Only receipts carry an r- label, so a watched vault is scanned without reading anyone's other secrets
+export async function readReceipts(input: string): Promise<Secret[]> {
+    const owner = ownerName(input);
+    const namespace = `rewall.${owner}`;
+    const index = await readRecords(namespace, [RECORD.index]);
+    const labels = [...new Set((index[RECORD.index] || "").split(",").filter(Boolean))]
+        .filter((label) => label.startsWith("r-") && !label.includes("."))
+        .slice(0, 32);
+    return Promise.all(labels.map((label) => readSecret(`${label}.${namespace}`)));
+}
+
 export async function readVault(input: string): Promise<Vault> {
     const owner = ownerName(input);
     const namespace = `rewall.${owner}`;

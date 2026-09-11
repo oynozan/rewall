@@ -17,6 +17,7 @@ export type Account = {
     _id: string;
     firstSeen: number;
     dripped?: { hash: string; wei: string; at: number };
+    funded?: { hash: string; units: string; at: number };
     name?: string;
     provisioned?: Provisioned;
     completedAt?: number;
@@ -62,4 +63,10 @@ export async function drippedTotal(): Promise<bigint> {
         .find({ dripped: { $exists: true } }, { projection: { dripped: 1 } })
         .toArray();
     return rows.reduce((sum, row) => sum + BigInt(row.dripped?.wei ?? 0), BigInt(0));
+}
+
+// A structural twin of drippedTotal, because folding them together needs casts past Collection<Account>
+export async function fundedTotal(): Promise<bigint> {
+    const rows = await (await accounts()).find({ funded: { $exists: true } }, { projection: { funded: 1 } }).toArray();
+    return rows.reduce((sum, row) => sum + BigInt(row.funded?.units ?? 0), BigInt(0));
 }

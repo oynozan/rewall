@@ -16,6 +16,12 @@ const registryAbi = parseAbi([
 
 const remembered = (address: string) => `rewall.name.${address.toLowerCase()}`;
 
+// Names whose vaults are scanned for receipts granted to you, since ENS has no reverse index
+const watched = (address: string) => `rewall.watch.${address.toLowerCase()}`;
+
+// Each name costs a chain read per receipt it holds, and a short list is what keeps that bounded
+const MAX_WATCHED = 5;
+
 export type VaultSetup = {
     owned: boolean;
     resolver: boolean;
@@ -61,17 +67,49 @@ export function forgetName(address: string) {
     } catch {}
 }
 
+// Kept on the device rather than in a record, because a public list of who you pay is a social graph
+export function watchedNames(address: string): string[] {
+    try {
+        return JSON.parse(localStorage.getItem(watched(address)) || "[]");
+    } catch {
+        return [];
+    }
+}
+
+export function watchName(address: string, name: string) {
+    const next = [...new Set([...watchedNames(address), name])].slice(-MAX_WATCHED);
+    try {
+        localStorage.setItem(watched(address), JSON.stringify(next));
+    } catch {}
+}
+
+export function unwatchName(address: string, name: string) {
+    try {
+        localStorage.setItem(watched(address), JSON.stringify(watchedNames(address).filter((held) => held !== name)));
+    } catch {}
+}
+
+// Read off the device so a returning wallet has its name before the first chain call
+export function cachedName(address: string): string {
+    if (!address) return "";
+    try {
+        return localStorage.getItem(remembered(address)) || "";
+    } catch {
+        return "";
+    }
+}
+
 // A remembered choice wins over a reverse record, and either one has to survive the ownership check
 export async function resolveOwnName(address: string): Promise<string> {
     if (!address) return "";
 
-    let stored = "";
-    try {
-        stored = localStorage.getItem(remembered(address)) || "";
-    } catch {}
-
-    if (stored && (await ownsName(stored, address))) return stored;
-    if (stored) forgetName(address);
+    const stored = cachedName(address);
+    if (stored) {
+        // A read that failed is not an answer, so the name is only dropped when the registry names somebody else
+        const owner = await ownerAddressOf(vaultClient, UNIVERSAL_RESOLVER, stored).catch(() => null);
+        if (!owner || owner.toLowerCase() === address.toLowerCase()) return stored;
+        forgetName(address);
+    }
 
     const claimed = await reverseName(address);
     if (claimed && (await ownsName(claimed, address))) {

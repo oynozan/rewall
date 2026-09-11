@@ -11,6 +11,16 @@ const MESSAGES: Record<string, string> = {
     UserRejectedRequestError: "You turned down the wallet request.",
 };
 
+// The rail names its failures in the body, which is more precise than the status they arrive with
+const RAIL: Record<string, string> = {
+    insufficient_balance: "Your balance is below that amount.",
+    policy_denied: "The transfer policy refused this payment.",
+    "request authentication failed": "The transfer rail refused the signature. Check your device clock, then retry.",
+    invalid_request: "The transfer rail could not read that request.",
+    not_found: "The transfer rail has no record of that account yet.",
+    internal_error: "The transfer rail is having trouble. Try again in a moment.",
+};
+
 const FALLBACK = "Something went wrong. Try again.";
 
 export function explain(error: unknown): string {
@@ -21,7 +31,28 @@ export function explain(error: unknown): string {
     const cause = (error as { cause?: unknown }).cause;
     if (cause instanceof Error && MESSAGES[cause.name]) return MESSAGES[cause.name];
 
+    // The rail client carries a status and a body but sets no name, so its failures are read off those
+    const status = (error as { status?: number }).status;
+    if (typeof status === "number") {
+        const code = (error as { body?: { error?: string } }).body?.error ?? "";
+        return RAIL[code] ?? "The transfer rail refused that request. Try again in a moment.";
+    }
+
     if (/user rejected|user denied/i.test(error.message)) return MESSAGES.UserRejectedRequestError!;
+
+    // A failed fetch is a TypeError with no name of its own, so the rail being down reads as network
+    if (/failed to fetch|networkerror|load failed/i.test(error.message)) {
+        return "The transfer rail is unreachable. Check your connection and try again.";
+    }
+
+    // Some wallets refuse the transfer service's primary types, which contain spaces
+    if (/invalid type|primarytype|unexpected token in type/i.test(error.message)) {
+        return "This wallet will not sign the transfer service's request format. Connect a different wallet.";
+    }
+
+    if (/receipt payload is malformed/i.test(error.message)) {
+        return "That receipt was written in a format Rewall cannot read.";
+    }
 
     // A contract account returns an ERC-1271 signature, which has no recoverable key to derive from
     if (/expected a 65 byte signature/i.test(error.message)) {
