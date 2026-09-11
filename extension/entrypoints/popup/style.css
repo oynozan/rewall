@@ -1,0 +1,37 @@
+:root {
+    color-scheme: dark;
+    --background: #161616;
+    --foreground: #ededeb;
+    --border: #2b2b2b;
+    --muted: #999996;
+}
+
+body {
+    margin: 0;
+    width: 320px;
+    padding: 16px;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+}
+
+h1 {
+    margin: 0 0 12px;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.status {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.note {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+}
