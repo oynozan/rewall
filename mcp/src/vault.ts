@@ -7,7 +7,16 @@
 import { createPublicClient, http, type Address } from "viem";
 import { sepolia } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
-import { Rewall, RECORD, readTexts, splitNames, identityFromAccount, type Identity } from "@rewall/sdk";
+import {
+    Rewall,
+    RECORD,
+    readTexts,
+    splitNames,
+    fromBase64,
+    identityFromAccount,
+    identityFromSeed,
+    type Identity,
+} from "@rewall/sdk";
 
 const UNIVERSAL_RESOLVER: Address = "0x4a1817d13e9cf196f471725176355c1234b63c70";
 const NAMESPACE_LABEL = "rewall";
@@ -42,10 +51,19 @@ export async function openVault(): Promise<Vault> {
     const name = required("REWALL_NAME");
     const rpc = process.env.SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
 
-    // ponytail: the key is read from the environment, seed only provisioning needs an SDK
-    // constructor that takes the 32 byte scalar directly so the host never holds a signer at all
-    const account = privateKeyToAccount(required("REWALL_AGENT_KEY") as `0x${string}`);
-    const identity: Identity = await identityFromAccount(account);
+    // A seed is the whole capability this server needs, so a host holding one can decrypt what was
+    // granted to it and nothing else, no signing, no gas, no ENS writes, no forged authorizations
+    // The wallet key stays supported only because that is how an identity is first derived
+    const seed = process.env.REWALL_IDENTITY_SEED;
+    let identity: Identity;
+    let identityAddress = "";
+    if (seed) {
+        identity = await identityFromSeed(fromBase64(seed));
+    } else {
+        const account = privateKeyToAccount(required("REWALL_AGENT_KEY") as `0x${string}`);
+        identity = await identityFromAccount(account);
+        identityAddress = account.address;
+    }
 
     // Batched because one metadata read fans out to six keys and a listing multiplies that by the vault
     const publicClient = createPublicClient({
@@ -62,7 +80,7 @@ export async function openVault(): Promise<Vault> {
         name,
         fingerprint: identity.fingerprint,
         // Held so a signing tool can refuse to sign with the key backing this host's own identity
-        identityAddress: account.address,
+        identityAddress,
         list: () => rewall.list(),
         async metaOf(label: string): Promise<Meta> {
             const secretName = `${label}.${namespace}`;

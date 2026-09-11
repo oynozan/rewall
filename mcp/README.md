@@ -11,9 +11,14 @@ never lands in a transcript, a log, or a context window that gets shipped somewh
 Stated first, because the name invites the wrong assumption.
 
 **This defends the model boundary, not the machine.** Anyone who can run code as this user can read
-the key out of the process and decrypt every secret granted to it. That is not a bug in this server,
+the seed out of the process and decrypt every secret granted to it. That is not a bug in this server,
 it is the same exposure SPEC section 6 already concedes for `rewall run` and section 8 for the
 extension.
+
+What that seed cannot do is worth saying, because it bounds the damage. The host holds the 32-byte
+X25519 scalar and no wallet key, so a compromised host can read what was granted to this name and
+nothing else. It cannot sign, spend gas, register or rewrite ENS records, or forge the authorization
+a rotation rebuilds its grantee list from.
 
 What it does defend against is real and worth having: prompt injection steering a credential
 somewhere it should not go, a transcript or log capturing a key, and an agent that reads a secret
@@ -31,7 +36,7 @@ Two more limits, both inherited from the protocol:
 ## Setup
 
 ```bash
-cp .env.example .env       # REWALL_NAME and REWALL_AGENT_KEY
+cp .env.example .env       # REWALL_NAME, then pnpm run seed to fill REWALL_IDENTITY_SEED
 cd ../sdk && pnpm run build
 cd ../mcp && pnpm install
 pnpm run check
@@ -119,6 +124,3 @@ allowlist. Redaction is defence in depth behind it.
   `sign.ts`, never a widening of what the model may pass.
 - A live `otp_code`. The tool and its type gate are in, but no `totp` secret exists on chain yet, so
   `pnpm run check` says the live path is unproven rather than quietly skipping it.
-- Seed-only provisioning. The host should hold the 32-byte X25519 seed and no Ethereum key, which
-  collapses its capability to _decrypt what was granted to it_. Needs an SDK constructor that takes
-  the scalar directly.

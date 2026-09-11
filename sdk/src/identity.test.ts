@@ -3,7 +3,14 @@ import assert from "node:assert/strict";
 import sodium from "libsodium-wrappers";
 import { privateKeyToAccount } from "viem/accounts";
 import { hashTypedData, recoverAddress, hexToBytes, bytesToHex, numberToHex, concat, type Hex } from "viem";
-import { canonicalSignature, deriveIdentity, fingerprintOf, IDENTITY_TYPED_DATA, SECP256K1_N } from "./identity.ts";
+import {
+    canonicalSignature,
+    deriveIdentity,
+    fingerprintOf,
+    identityFromSeed,
+    IDENTITY_TYPED_DATA,
+    SECP256K1_N,
+} from "./identity.ts";
 
 const KEY_A = "0x0000000000000000000000000000000000000000000000000000000000000001" as const;
 const KEY_B = "0x0000000000000000000000000000000000000000000000000000000000000002" as const;
@@ -140,4 +147,18 @@ test("canonicalSignature rejects s of zero or s at or above the curve order", ()
 
     const atOrder = bytesToHex(concat([r, hexToBytes(numberToHex(SECP256K1_N, { size: 32 })), new Uint8Array([27])]));
     assert.throws(() => canonicalSignature(atOrder), /curve order/);
+});
+
+// A host that holds only the scalar must land on exactly the identity the wallet derived
+test("an identity rebuilt from its seed matches the one the wallet derived", async () => {
+    const derived = await deriveIdentity(await sign(accountA));
+    const rebuilt = await identityFromSeed(derived.secretKey);
+
+    assert.deepEqual(rebuilt.publicKey, derived.publicKey);
+    assert.equal(rebuilt.fingerprint, derived.fingerprint);
+});
+
+test("a seed of the wrong length is refused rather than padded", async () => {
+    await assert.rejects(() => identityFromSeed(new Uint8Array(31)), /32 byte seed/);
+    await assert.rejects(() => identityFromSeed(new Uint8Array(33)), /32 byte seed/);
 });

@@ -8,6 +8,8 @@
         "check": "node --env-file=.env check.mjs",
         "check:allow": "node --experimental-strip-types src/allow.ts",
         "check:scrub": "node --experimental-strip-types src/scrub.ts",
+        "check:sign": "node --experimental-strip-types src/sign.ts",
+        "seed": "node --env-file=.env seed.mjs",
         "format": "prettier --write .",
         "format:check": "prettier --check ."
     },

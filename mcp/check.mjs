@@ -6,10 +6,10 @@
 import assert from "node:assert";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { Rewall, identityFromAccount } from "@rewall/sdk";
+import { Rewall } from "@rewall/sdk";
 import { createPublicClient, http } from "viem";
 import { sepolia } from "viem/chains";
-import { privateKeyToAccount } from "viem/accounts";
+import { identityFromSeed, fromBase64 } from "@rewall/sdk";
 
 const UR = "0x4a1817d13e9cf196f471725176355c1234b63c70";
 const NAME = process.env.REWALL_NAME;
@@ -145,8 +145,7 @@ try {
 
     /* The property the whole server exists for */
 
-    const account = privateKeyToAccount(process.env.REWALL_AGENT_KEY);
-    const identity = await identityFromAccount(account);
+    const identity = await identityFromSeed(fromBase64(process.env.REWALL_IDENTITY_SEED));
     const rewall = new Rewall({
         publicClient: createPublicClient({ chain: sepolia, transport: http(undefined, { batch: true }) }),
         name: NAME,

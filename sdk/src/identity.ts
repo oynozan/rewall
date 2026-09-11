@@ -60,6 +60,17 @@ export async function deriveIdentity(signature: Hex): Promise<Identity> {
     return { secretKey: seed, publicKey, fingerprint: fingerprintOf(publicKey) };
 }
 
+// Rebuilds an identity from the scalar itself, so a host can hold only what it needs to decrypt
+// A wallet key would also let that host sign, spend gas and write records, which reading never needs
+export async function identityFromSeed(seed: Uint8Array): Promise<Identity> {
+    await sodium.ready;
+    if (seed.length !== 32) {
+        throw new Error(`expected a 32 byte seed, got ${seed.length}`);
+    }
+    const publicKey = sodium.crypto_scalarmult_base(seed);
+    return { secretKey: seed, publicKey, fingerprint: fingerprintOf(publicKey) };
+}
+
 // The wallet client path spreads IDENTITY_TYPED_DATA itself, because it needs an account alongside it
 export async function identityFromAccount(account: { signTypedData: (data: any) => Promise<Hex> }): Promise<Identity> {
     return deriveIdentity(await account.signTypedData(IDENTITY_TYPED_DATA));
