@@ -137,9 +137,9 @@ export function buildSecretRecords(input: {
         { key: RECORD.created, value: String(input.createdAt) },
     ];
 
-    if (input.allow?.length) records.push({ key: RECORD.allow, value: input.allow.join(",") });
-
     // Always written, including empty, so a rotation that drops the last grantee clears the old list
+    // Host allowlists are the boundary the MCP server enforces, so a stale one is a live hole
+    records.push({ key: RECORD.allow, value: joinNames(input.allow ?? []) });
     records.push({ key: RECORD.site, value: input.site ?? "" });
     records.push({ key: RECORD.owner, value: input.owner ?? "" });
     records.push({ key: RECORD.recovery, value: joinNames(input.recovery ?? []) });

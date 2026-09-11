@@ -90,12 +90,12 @@ test("the record set carries version, type, encryption and created", async () =>
     assert.equal(records[RECORD.created], String(CREATED));
 });
 
-test("allow is written only when hosts are given", async () => {
+test("allow is written even when empty, so dropping every host actually drops them on chain", async () => {
     const without = toMap(await planSecret(baseInput));
-    assert.equal(without[RECORD.allow], undefined);
+    assert.equal(without[RECORD.allow], "");
 
     const withHosts = toMap(await planSecret({ ...baseInput, allow: ["api.openai.com", "api.example.com"] }));
-    assert.equal(withHosts[RECORD.allow], "api.openai.com,api.example.com");
+    assert.equal(withHosts[RECORD.allow], "api.example.com,api.openai.com");
 });
 
 test("an owner who is also the recovery holder still yields one wrap", async () => {

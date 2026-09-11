@@ -67,10 +67,17 @@ test("a fingerprint of the wrong length or charset is refused", () => {
     }
 });
 
-test("allow joins hosts with commas and is omitted when empty, so it survives a rotation but cannot be cleared", () => {
-    assert.equal(asMap(buildSecretRecords({ ...base, allow: [] }))[RECORD.allow], undefined);
+test("allow is always written, including empty, so a host can be taken off the list", () => {
+    assert.equal(asMap(buildSecretRecords(base))[RECORD.allow], "");
+    assert.equal(asMap(buildSecretRecords({ ...base, allow: [] }))[RECORD.allow], "");
     assert.equal(asMap(buildSecretRecords({ ...base, allow: ["a.com"] }))[RECORD.allow], "a.com");
     assert.equal(asMap(buildSecretRecords({ ...base, allow: ["a.com", "b.com"] }))[RECORD.allow], "a.com,b.com");
+});
+
+// The same joiner as every other list, or the dashboard and the MCP server disagree about a space
+test("allow is deduped and sorted like the other lists", () => {
+    const records = asMap(buildSecretRecords({ ...base, allow: ["b.com", "a.com", "b.com"] }));
+    assert.equal(records[RECORD.allow], "a.com,b.com");
 });
 
 test("site is always written, including empty, so overwriting a secret clears a stale hostname", () => {
