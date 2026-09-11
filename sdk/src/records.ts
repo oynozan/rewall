@@ -3,7 +3,9 @@ import {
     encodeFunctionData,
     decodeFunctionResult,
     hexToBytes,
+    keccak256,
     namehash,
+    toBytes,
     toHex,
     type Address,
     type Hex,
@@ -185,6 +187,42 @@ export async function readTexts(
 }
 
 export const wrapKeyFor = (fingerprint: string) => RECORD.wrap(fingerprint);
+
+export const registryLookupAbi = parseAbi([
+    "function findParentRegistry(bytes name) view returns (address)",
+    "function getTokenId(uint256 anyId) view returns (uint256)",
+    "function ownerOf(uint256 tokenId) view returns (address)",
+]);
+
+// The address holding a name is the one thing about it a write delegate cannot rewrite
+export async function ownerAddressOf(
+    client: ReadClient,
+    universalResolver: Address,
+    name: string,
+): Promise<Address> {
+    const registry = await client.readContract({
+        address: universalResolver,
+        abi: registryLookupAbi,
+        functionName: "findParentRegistry",
+        args: [dnsEncode(name)],
+    });
+    if (!registry || registry === "0x0000000000000000000000000000000000000000") {
+        throw new Error(`no registry holds ${name}`);
+    }
+
+    const tokenId = await client.readContract({
+        address: registry,
+        abi: registryLookupAbi,
+        functionName: "getTokenId",
+        args: [BigInt(keccak256(toBytes(name.split(".")[0]!)))],
+    });
+    return client.readContract({
+        address: registry,
+        abi: registryLookupAbi,
+        functionName: "ownerOf",
+        args: [tokenId],
+    }) as Promise<Address>;
+}
 
 /* The rewall.index record, which is what list reads because ENSv2 exposes no enumeration */
 

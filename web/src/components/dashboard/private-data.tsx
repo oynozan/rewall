@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { TOTP } from "otpauth";
 import { parseOtp } from "@/src/lib/otp";
 import { explain } from "@/src/lib/errors";
-import { useWorkspace } from "./dashboard-shell";
+import { useIdentity } from "./identity";
 import { MOCKS_ENABLED, mockOtpAccounts, mockOtpBytes } from "../../../scripts/dashboard-mocks";
 
 type PrivateData = {
@@ -17,7 +17,7 @@ type PrivateData = {
 const PrivateContext = createContext<PrivateData | null>(null);
 
 export function PrivateDataProvider({ children }: { children: React.ReactNode }) {
-    const { decryptSecret } = useWorkspace();
+    const { decrypt } = useIdentity();
     const [accounts, setAccounts] = useState<Record<string, TOTP>>({});
     const [pending, setPending] = useState("");
     const [error, setError] = useState<PrivateData["error"]>(null);
@@ -51,7 +51,7 @@ export function PrivateDataProvider({ children }: { children: React.ReactNode })
         setPending(name);
         setError(null);
         try {
-            const bytes = await decryptSecret(name);
+            const bytes = MOCKS_ENABLED ? mockOtpBytes(name) : await decrypt(name);
             if (current !== generation.current.value) {
                 bytes.fill(0);
                 return;

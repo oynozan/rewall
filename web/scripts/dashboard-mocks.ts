@@ -4,7 +4,7 @@ import type { TransferVolume } from "../src/components/dashboard/volume-chart";
 
 const preference = process.env.NEXT_PUBLIC_REWALL_MOCKS;
 export const MOCKS_ENABLED = preference === "on" || (preference !== "off" && process.env.NODE_ENV === "development");
-const owner = "demo.eth";
+const owner = "rewall-test-1.eth";
 const created = Date.UTC(2026, 8, 10, 12) / 1000;
 
 function secret(label: string, type: string, daysAgo = 0): Secret {

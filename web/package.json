@@ -13,9 +13,11 @@
         "check:privy": "node --env-file=.env.local scripts/check-privy.mjs",
         "check:dashboard": "node scripts/check-dashboard.mjs",
         "check:mock": "node scripts/check-mock-dashboard.mjs",
-        "check:otp": "node scripts/check-otp.mjs"
+        "check:otp": "node scripts/check-otp.mjs",
+        "check:unlock": "node --env-file=../tools/.env scripts/check-unlock.mjs"
     },
     "dependencies": {
+        "@privy-io/react-auth": "^3.42.0",
         "@rewall/sdk": "link:../sdk",
         "motion": "^13.2.0",
         "next": "16.3.4",

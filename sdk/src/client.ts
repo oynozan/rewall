@@ -1,4 +1,4 @@
-import { namehash, keccak256, toBytes, parseAbi, type Address, type Hash } from "viem";
+import { namehash, type Address, type Hash } from "viem";
 import { deriveIdentity, fingerprintOf, IDENTITY_TYPED_DATA, type Identity } from "./identity.ts";
 import { toBase64, fromBase64, wipe } from "./crypto.ts";
 import {
@@ -11,11 +11,11 @@ import {
     joinNames,
     SCHEMA_VERSION,
     ENCRYPTION,
+    ownerAddressOf,
     addToIndex,
     GUARDIAN_RECOVERY_PREFIX,
     guardianRecoveryEntry,
     removeFromIndex,
-    dnsEncode,
     WRAP_PREFIX,
     type SecretRecords,
 } from "./records.ts";
@@ -55,14 +55,7 @@ export type CreateOptions = {
     overwrite?: boolean;
 };
 
-const NAMESPACE_LABEL = "rewall";
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-
-const registryLookupAbi = parseAbi([
-    "function findParentRegistry(bytes name) view returns (address)",
-    "function getTokenId(uint256 anyId) view returns (uint256)",
-    "function ownerOf(uint256 tokenId) view returns (address)",
-]);
+export const NAMESPACE_LABEL = "rewall";
 
 export class Rewall {
     readonly name: string;
@@ -554,28 +547,8 @@ export class Rewall {
     /* Authorization, so a rotation cannot be steered by whoever can write the records */
 
     // A write delegate can rewrite every record on a secret but not who owns it
-    private async ownerAddressOf(secretName: string): Promise<Address> {
-        const registry = await this.publicClient.readContract({
-            address: this.universalResolver,
-            abi: registryLookupAbi,
-            functionName: "findParentRegistry",
-            args: [dnsEncode(secretName)],
-        });
-        if (!registry || registry === ZERO_ADDRESS) throw new Error(`no registry holds ${secretName}`);
-
-        const label = secretName.split(".")[0]!;
-        const tokenId = await this.publicClient.readContract({
-            address: registry,
-            abi: registryLookupAbi,
-            functionName: "getTokenId",
-            args: [BigInt(keccak256(toBytes(label)))],
-        });
-        return this.publicClient.readContract({
-            address: registry,
-            abi: registryLookupAbi,
-            functionName: "ownerOf",
-            args: [tokenId],
-        }) as Promise<Address>;
+    ownerAddressOf(secretName: string): Promise<Address> {
+        return ownerAddressOf(this.publicClient, this.universalResolver, secretName);
     }
 
     private authorizationOf(secretName: string, records: Record<string, string>): Authorization {

@@ -34,7 +34,8 @@ export function headlessWallet({ mnemonic, addressIndex = 0, rpcUrl = RPC } = {}
                 calls.typedData++;
                 const payload = typeof params[1] === "string" ? JSON.parse(params[1]) : params[1];
                 // viem derives EIP712Domain itself and rejects it being passed back in
-                const { EIP712Domain: _ignored, ...types } = payload.types;
+                const types = { ...payload.types };
+                delete types.EIP712Domain;
                 return account.signTypedData({ ...payload, types });
             }
 

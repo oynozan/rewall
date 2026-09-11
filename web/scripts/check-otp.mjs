@@ -3,7 +3,7 @@ import { build } from "esbuild";
 import { chromium, expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 
-const origin = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000";
+const origin = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 const output = "artifacts/dashboard";
 await mkdir(output, { recursive: true });
 const bundled = await build({
@@ -12,12 +12,13 @@ const bundled = await build({
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {OtpCells} from './src/components/dashboard/otp-code';
+import {TableColumns} from './src/components/dashboard/ui';
 import {VolumeChart} from './src/components/dashboard/volume-chart';
 import {parseOtp,otpSnapshot} from './src/lib/otp';
 const bytes=new TextEncoder().encode('otpauth://totp/RFC%206238:Test?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&digits=8&period=30');
 const otp=parseOtp(bytes);
 window.otpTest={wiped:[...bytes].every(b=>b===0),at:timestamp=>otpSnapshot(otp,timestamp),reject:()=>{const b=new TextEncoder().encode('otpauth://hotp/Test?secret=GEZDGNBVGY3TQOJQ&counter=0');let rejected=false;try{parseOtp(b)}catch{rejected=true}return rejected&&b.every(v=>v===0)}};
-createRoot(document.getElementById('root')).render(<main className="fixture"><h1>Component test</h1><p className="muted">Public RFC 6238 test account</p><div className="secrets-browser"><div className="table-scroll"><table className="otp-table"><colgroup><col className="otp-account-col"/><col className="otp-code-col"/><col className="otp-expiry-col"/><col className="otp-action-col"/></colgroup><thead><tr><th>Account</th><th>Code</th><th>Expires in</th><th>Actions</th></tr></thead><tbody><tr><td>RFC 6238</td><OtpCells otp={otp} label="RFC 6238"/><td/></tr></tbody></table></div></div><div className="fixture-chart"><VolumeChart volume={{asset:'TEST',sentTotal:'150',sharedTotal:'75',points:[{label:'01 Sep',sent:5,shared:2},{label:'02 Sep',sent:12,shared:4},{label:'03 Sep',sent:8,shared:6},{label:'04 Sep',sent:22,shared:9},{label:'05 Sep',sent:15,shared:10},{label:'06 Sep',sent:32,shared:18},{label:'07 Sep',sent:24,shared:14},{label:'08 Sep',sent:32,shared:12}]}}/></div></main>);
+createRoot(document.getElementById('root')).render(<main className="fixture dashboard-app"><h1>Component test</h1><p className="muted">Public RFC 6238 test account</p><div className="secrets-browser"><div className="table-scroll"><table className="otp-table"><TableColumns/><thead><tr><th colSpan={2}>Account</th><th>Code</th><th>Expires in</th><th>Actions</th></tr></thead><tbody><tr><td colSpan={2}>RFC 6238</td><OtpCells otp={otp} label="RFC 6238"/><td/></tr></tbody></table></div></div><div className="fixture-chart"><VolumeChart volume={{asset:'TEST',sentTotal:'150',sharedTotal:'75',points:[{label:'01 Sep',sent:5,shared:2},{label:'02 Sep',sent:12,shared:4},{label:'03 Sep',sent:8,shared:6},{label:'04 Sep',sent:22,shared:9},{label:'05 Sep',sent:15,shared:10},{label:'06 Sep',sent:32,shared:18},{label:'07 Sep',sent:24,shared:14},{label:'08 Sep',sent:32,shared:12}]}}/></div></main>);
 `,
         loader: "tsx",
         resolveDir: process.cwd(),

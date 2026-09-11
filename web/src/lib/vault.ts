@@ -101,7 +101,7 @@ export async function readSecret(input: string): Promise<Secret> {
 export async function readVault(input: string): Promise<Vault> {
     if (MOCKS_ENABLED) {
         if (![TEST_OWNER, mockVault.owner].includes(ownerName(input)))
-            throw new Error("Open demo.eth in the mock preview.");
+            throw new Error(`Open ${TEST_OWNER} in the mock preview.`);
         return mockVault;
     }
     const owner = ownerName(input);

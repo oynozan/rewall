@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
 
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000";
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
 const context = await browser.newContext({ viewport: { width: 1512, height: 1100 }, deviceScaleFactor: 1 });
 await context.grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -155,12 +155,12 @@ try {
     checks.push("Secrets route, type filter, sort, selection, name validation, and live direct lookup work");
 
     await page.locator(".sidebar-account").click();
-    await page.getByRole("button", { name: "Connect MetaMask", exact: false }).click();
-    await expect(
-        page.getByText("MetaMask wasn’t found in this browser. Install the extension, then reload this page."),
-    ).toBeVisible();
+    await page.getByRole("button", { name: "Connect a wallet", exact: false }).click();
+    // Our drawer is a modal dialog, so it has to yield the top layer or Privy's modal is unclickable
+    await expect(page.locator("dialog.workspace-dialog[open]")).toHaveCount(0);
+    await expect(page.locator("#privy-dialog").getByText("Continue with a wallet")).toBeVisible({ timeout: 30000 });
     await page.keyboard.press("Escape");
-    checks.push("Missing wallet is explained without simulating a connection");
+    checks.push("Connecting hands the top layer to Privy, which offers a wallet, an email and a social login");
 
     for (const [route, title] of [
         ["2fa", "2FA"],

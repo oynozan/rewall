@@ -5,14 +5,12 @@ import { Toaster } from "sonner";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { createWalletClient, custom, type Address, type EIP1193Provider } from "viem";
-import { sepolia } from "viem/chains";
-import { Rewall, wipe } from "@rewall/sdk";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { type EIP1193Provider } from "viem";
 import { PrivateDataProvider } from "./private-data";
-import { MOCKS_ENABLED, mockOtpBytes } from "../../../scripts/dashboard-mocks";
+import { IdentityProvider, useIdentity } from "./identity";
+import { MOCKS_ENABLED } from "../../../scripts/dashboard-mocks";
 import {
-    vaultClient,
-    UNIVERSAL_RESOLVER,
     ownerName,
     readSecret,
     readVault,
@@ -26,17 +24,19 @@ import { FadeDots, FadeIn, SidebarFade } from "./amicro";
 import { CopyButton, Glyph, Icon, type IconName } from "./ui";
 
 type Panel = "vault" | "wallet" | "help" | "find" | Secret | null;
-type WalletProvider = EIP1193Provider & { isMetaMask?: boolean; providers?: WalletProvider[] };
 type Workspace = {
     vault: Vault | null;
     busy: boolean;
     error: string;
     account: string;
+    walletLabel: string;
+    ready: boolean;
     panel: Panel;
     setPanel: (panel: Panel) => void;
     loadVault: (name: string) => Promise<boolean>;
     refresh: () => void;
-    decryptSecret: (name: string) => Promise<Uint8Array>;
+    connect: () => void;
+    disconnect: () => void;
 };
 const WorkspaceContext = createContext<Workspace | null>(null);
 
@@ -61,11 +61,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     const [vault, setVault] = useState<Vault | null>(null);
     const [busy, setBusy] = useState(true);
     const [error, setError] = useState("");
-    const [account, setAccount] = useState("");
     const [panel, setPanel] = useState<Panel>(null);
     const [mobileOpen, setMobileOpen] = useState(false);
     const request = useRef(0);
-    const provider = useRef<WalletProvider | null>(null);
+
+    const { ready, authenticated, login, logout } = usePrivy();
+    const { wallets } = useWallets();
+    const wallet = wallets[0];
+    const account = authenticated ? (wallet?.address ?? "") : "";
+    const walletLabel =
+        wallet?.walletClientType === "privy" ? "Privy wallet" : (wallet?.meta?.name ?? wallet?.walletClientType ?? "");
     const loadVault = useCallback(async (input: string) => {
         const current = ++request.current;
         setBusy(true);
@@ -105,204 +110,176 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
-    useEffect(() => {
-        const injected = (window as Window & { ethereum?: WalletProvider }).ethereum;
-        provider.current =
-            injected?.providers?.find((item) => item.isMetaMask) ?? (injected?.isMetaMask ? injected : null);
-        const accountsChanged = (accounts: string[]) => setAccount(accounts[0] || "");
-        const disconnected = () => setAccount("");
-        provider.current?.on("accountsChanged", accountsChanged);
-        provider.current?.on("disconnect", disconnected);
-        return () => {
-            provider.current?.removeListener("accountsChanged", accountsChanged);
-            provider.current?.removeListener("disconnect", disconnected);
-        };
-    }, []);
-
-    async function decryptSecret(name: string) {
-        if (MOCKS_ENABLED) return mockOtpBytes(name);
-        const injected = provider.current;
-        if (!injected || !account || !vault) {
-            setPanel("wallet");
-            throw new Error("Connect your wallet first.");
-        }
-        const wallet = createWalletClient({ account: account as Address, chain: sepolia, transport: custom(injected) });
-        const reader = new Rewall({
-            publicClient: vaultClient,
-            walletClient: wallet,
-            account: account as Address,
-            name: vault.owner,
-            universalResolver: UNIVERSAL_RESOLVER,
-        });
-        const identity = await reader.identity();
-        try {
-            return await reader.get(name);
-        } finally {
-            await wipe(identity.secretKey);
-        }
-    }
+    // Privy hands the provider over asynchronously, so the identity session asks for it when it needs it
+    const getProvider = useCallback(
+        async () => (wallet ? ((await wallet.getEthereumProvider()) as EIP1193Provider) : null),
+        [wallet],
+    );
 
     const workspace: Workspace = {
         vault,
         busy,
         error,
         account,
+        walletLabel,
+        ready,
         panel,
         setPanel,
         loadVault,
         refresh: () => void loadVault(vault?.owner || TEST_OWNER),
-        decryptSecret,
+        // The drawer is a modal dialog, so it sits in the top layer and would swallow clicks on Privy's own modal
+        connect: () => {
+            setPanel(null);
+            void login();
+        },
+        disconnect: () => void logout(),
     };
     const navigate = () => setMobileOpen(false);
 
     return (
         <WorkspaceContext value={workspace}>
-            <div className="dashboard-app">
-                <a className="skip-link" href="#workspace-content">
-                    Skip to content
-                </a>
-                {mobileOpen && <button className="mobile-scrim" onClick={navigate} aria-label="Close navigation" />}
-                <SidebarFade className={`sidebar ${mobileOpen ? "is-open" : ""}`} label="Main navigation">
-                    <div className="brand-row" style={step(0)}>
-                        <Link href="/dashboard" className="brand" aria-label="Rewall home" onClick={navigate}>
-                            <Image
-                                src="/logo.svg"
-                                alt="Rewall"
-                                width={160}
-                                height={78}
-                                className="logo-static"
-                                priority
-                                unoptimized
-                            />
-                            <Image
-                                src="/logo-animated.svg"
-                                alt=""
-                                width={160}
-                                height={78}
-                                className="logo-alternate"
-                                unoptimized
-                                aria-hidden="true"
-                            />
-                        </Link>
-                    </div>
-                    <button className="workspace-switcher" style={step(1)} onClick={() => setPanel("vault")}>
-                        <span className="workspace-avatar">
-                            <Icon name="lock" size={20} />
-                        </span>
-                        <span>
-                            <strong>Personal workspace</strong>
-                            <small>
-                                {vault?.owner || "No vault open"}
-                                {MOCKS_ENABLED ? " · Mock" : ""}
-                            </small>
-                        </span>
-                    </button>
-                    <nav>
-                        <div className="nav-group">
-                            {(
-                                [
-                                    { href: "/dashboard", label: "Home", icon: "home" },
-                                    { href: "/dashboard/secrets", label: "Secrets", icon: "key" },
-                                    { href: "/dashboard/2fa", label: "2FA", icon: "authenticator" },
-                                    { href: "/dashboard/transfers", label: "Transfers", icon: "wallet" },
-                                ] as { href: string; label: string; icon: IconName }[]
-                            ).map((item, index) => (
-                                <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    style={step(index + 2)}
-                                    className={`nav-item ${pageTitle === item.label ? "selected" : ""}`}
-                                    aria-current={pageTitle === item.label ? "page" : undefined}
-                                    onClick={navigate}
-                                >
-                                    <Icon name={item.icon} />
-                                    {item.label}
-                                </Link>
-                            ))}
+            <IdentityProvider address={account} getProvider={getProvider} name={vault?.owner || ""}>
+                <div className="dashboard-app">
+                    <a className="skip-link" href="#workspace-content">
+                        Skip to content
+                    </a>
+                    {mobileOpen && <button className="mobile-scrim" onClick={navigate} aria-label="Close navigation" />}
+                    <SidebarFade className={`sidebar ${mobileOpen ? "is-open" : ""}`} label="Main navigation">
+                        <div className="brand-row" style={step(0)}>
+                            <Link href="/dashboard" className="brand" aria-label="Rewall home" onClick={navigate}>
+                                <Image
+                                    src="/logo.svg"
+                                    alt="Rewall"
+                                    width={160}
+                                    height={78}
+                                    className="logo-static"
+                                    priority
+                                    unoptimized
+                                />
+                                <Image
+                                    src="/logo-animated.svg"
+                                    alt=""
+                                    width={160}
+                                    height={78}
+                                    className="logo-alternate"
+                                    unoptimized
+                                    aria-hidden="true"
+                                />
+                            </Link>
                         </div>
-                        <div className="nav-group">
-                            <span className="nav-caption" style={step(6)}>
-                                Resources
+                        <button className="workspace-switcher" style={step(1)} onClick={() => setPanel("vault")}>
+                            <span className="workspace-avatar">
+                                <Icon name="lock" size={20} />
                             </span>
-                            <a
-                                className="nav-item"
-                                style={step(7)}
-                                href="https://github.com/oynozan/rewall"
-                                target="_blank"
-                                rel="noreferrer"
-                            >
-                                <Icon name="github" />
-                                Source Code
-                            </a>
-                            <a
-                                className="nav-item"
-                                style={step(8)}
-                                href="#"
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={(event) => event.preventDefault()}
-                                aria-disabled="true"
-                            >
-                                <Icon name="documents" />
-                                Docs
-                            </a>
-                        </div>
-                    </nav>
-                    <button className="sidebar-account" style={step(12)} onClick={() => setPanel("wallet")}>
-                        <span className="account-avatar">
-                            <Icon name="wallet" size={18} />
-                        </span>
-                        <span>
-                            <strong className={account ? "mono" : ""}>
-                                {account ? `${account.slice(0, 6)}…${account.slice(-4)}` : "Not connected"}
-                            </strong>
-                            <small>{account ? "MetaMask" : "Connect wallet"}</small>
-                        </span>
-                        {!account && (
-                            <span className="wallet-chevron">
-                                <Glyph name="chevron_right" size={18} />
+                            <span>
+                                <strong className={vault ? "mono" : ""}>{vault?.owner || "No vault open"}</strong>
+                                {MOCKS_ENABLED && <small>Mock preview</small>}
                             </span>
-                        )}
-                    </button>
-                </SidebarFade>
-                <div className="workspace-main">
-                    <header className="topbar">
-                        <button
-                            className="mobile-menu icon-button"
-                            onClick={() => setMobileOpen(!mobileOpen)}
-                            aria-expanded={mobileOpen}
-                            aria-label="Open navigation"
-                        >
-                            <Icon name="hamburger_menu" size={17} />
                         </button>
-                        <span>{pageTitle}</span>
-                    </header>
-                    <main id="workspace-content" tabIndex={-1}>
-                        <PrivateDataProvider key={`${account}:${vault?.owner || ""}`}>{children}</PrivateDataProvider>
-                    </main>
+                        <nav>
+                            <div className="nav-group">
+                                {(
+                                    [
+                                        { href: "/dashboard", label: "Home", icon: "home" },
+                                        { href: "/dashboard/secrets", label: "Secrets", icon: "key" },
+                                        { href: "/dashboard/2fa", label: "2FA", icon: "authenticator" },
+                                        { href: "/dashboard/transfers", label: "Transfers", icon: "wallet" },
+                                    ] as { href: string; label: string; icon: IconName }[]
+                                ).map((item, index) => (
+                                    <Link
+                                        key={item.href}
+                                        href={item.href}
+                                        style={step(index + 2)}
+                                        className={`nav-item ${pageTitle === item.label ? "selected" : ""}`}
+                                        aria-current={pageTitle === item.label ? "page" : undefined}
+                                        onClick={navigate}
+                                    >
+                                        <Icon name={item.icon} />
+                                        {item.label}
+                                    </Link>
+                                ))}
+                            </div>
+                            <div className="nav-group">
+                                <span className="nav-caption" style={step(6)}>
+                                    Resources
+                                </span>
+                                <a
+                                    className="nav-item"
+                                    style={step(7)}
+                                    href="https://github.com/oynozan/rewall"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                >
+                                    <Icon name="github" />
+                                    Source Code
+                                </a>
+                                <a
+                                    className="nav-item"
+                                    style={step(8)}
+                                    href="#"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    onClick={(event) => event.preventDefault()}
+                                    aria-disabled="true"
+                                >
+                                    <Icon name="documents" />
+                                    Docs
+                                </a>
+                            </div>
+                        </nav>
+                        <button className="sidebar-account" style={step(12)} onClick={() => setPanel("wallet")}>
+                            <span className="account-avatar">
+                                <Icon name="wallet" size={18} />
+                            </span>
+                            <span>
+                                <strong className={account ? "mono" : ""}>
+                                    {account ? `${account.slice(0, 6)}…${account.slice(-4)}` : "Not connected"}
+                                </strong>
+                                <small>{account ? walletLabel || "Connected" : "Connect wallet"}</small>
+                            </span>
+                            {!account && (
+                                <span className="wallet-chevron">
+                                    <Glyph name="chevron_right" size={18} />
+                                </span>
+                            )}
+                        </button>
+                    </SidebarFade>
+                    <div className="workspace-main">
+                        <header className="topbar">
+                            <button
+                                className="mobile-menu icon-button"
+                                onClick={() => setMobileOpen(!mobileOpen)}
+                                aria-expanded={mobileOpen}
+                                aria-label="Open navigation"
+                            >
+                                <Icon name="hamburger_menu" size={17} />
+                            </button>
+                            <span>{pageTitle}</span>
+                        </header>
+                        <main id="workspace-content" tabIndex={-1}>
+                            <PrivateDataProvider key={`${account}:${vault?.owner || ""}`}>
+                                {children}
+                            </PrivateDataProvider>
+                        </main>
+                    </div>
+                    <WorkspacePanel />
+                    <Toaster
+                        theme="dark"
+                        position="bottom-right"
+                        duration={2200}
+                        visibleToasts={1}
+                        swipeDirections={[]}
+                        toastOptions={{ className: "dashboard-toast" }}
+                    />
                 </div>
-                <WorkspacePanel providerRef={provider} onAccount={setAccount} />
-                <Toaster
-                    theme="dark"
-                    position="bottom-right"
-                    duration={2200}
-                    visibleToasts={1}
-                    swipeDirections={[]}
-                    toastOptions={{ className: "dashboard-toast" }}
-                />
-            </div>
+            </IdentityProvider>
         </WorkspaceContext>
     );
 }
 
-function WorkspacePanel({
-    providerRef,
-    onAccount,
-}: {
-    providerRef: React.RefObject<WalletProvider | null>;
-    onAccount: (account: string) => void;
-}) {
-    const { panel, setPanel, vault, loadVault, busy, error, account } = useWorkspace();
+function WorkspacePanel() {
+    const { panel, setPanel, vault, loadVault, busy, error, account, ready, connect, disconnect } = useWorkspace();
+    const identity = useIdentity();
     const dialog = useRef<HTMLDialogElement>(null);
     const drawerMotion = useRef<Animation | null>(null);
     const [localError, setLocalError] = useState("");
@@ -385,24 +362,6 @@ function WorkspacePanel({
         }
     }
 
-    async function connect() {
-        setLocalError("");
-        const provider = providerRef.current;
-        if (!provider) {
-            setLocalError("MetaMask wasn’t found in this browser. Install the extension, then reload this page.");
-            return;
-        }
-        setWorking(true);
-        try {
-            const accounts = await provider.request({ method: "eth_requestAccounts" });
-            onAccount(accounts[0] || "");
-        } catch {
-            setLocalError("The connection wasn’t completed. You can try again whenever you’re ready.");
-        } finally {
-            setWorking(false);
-        }
-    }
-
     return (
         <dialog
             className="workspace-dialog"
@@ -479,7 +438,45 @@ function WorkspacePanel({
                                             <p className="mono address">{account}</p>
                                             <CopyButton value={account} label="Copy wallet address" />
                                         </div>
-                                        <button className="button" onClick={() => onAccount("")}>
+                                        <div className="detail-block">
+                                            <span className="muted">Secret key</span>
+                                            <p>
+                                                {identity.unlocked ? (
+                                                    <>
+                                                        Unlocked in this tab,{" "}
+                                                        <span className="mono">{identity.fingerprint}</span>
+                                                    </>
+                                                ) : (
+                                                    "Locked"
+                                                )}
+                                            </p>
+                                            {identity.unlocked ? (
+                                                <button className="button" onClick={identity.lock}>
+                                                    Lock
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    className="button"
+                                                    onClick={() => {
+                                                        setPanel(null);
+                                                        void identity.unlock();
+                                                    }}
+                                                    disabled={identity.unlocking}
+                                                >
+                                                    {identity.unlocking ? "Waiting for your wallet…" : "Unlock"}
+                                                </button>
+                                            )}
+                                            <p className="field-help">
+                                                Your key is derived from one signature and held in memory for this tab
+                                                only. It is never written to disk and never leaves this device.
+                                            </p>
+                                            {identity.error && (
+                                                <p className="form-error" role="alert">
+                                                    {identity.error}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <button className="button" onClick={disconnect}>
                                             Disconnect
                                         </button>
                                     </>
@@ -488,22 +485,14 @@ function WorkspacePanel({
                                         <button
                                             className="button primary full-width"
                                             onClick={connect}
-                                            disabled={working}
+                                            disabled={!ready}
                                         >
-                                            {working ? "Waiting for MetaMask…" : "Connect MetaMask"}
+                                            {ready ? "Connect a wallet" : "Loading…"}
                                         </button>
                                         <p className="field-help">
-                                            Connecting requests your public address. It does not sign a message or send
-                                            a transaction.
+                                            Bring your own wallet or have one made for you from an email address.
+                                            Connecting reads your public address and signs nothing.
                                         </p>
-                                        <a
-                                            href="https://metamask.io/download"
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="text-button"
-                                        >
-                                            Get MetaMask
-                                        </a>
                                     </>
                                 )}
                             </>

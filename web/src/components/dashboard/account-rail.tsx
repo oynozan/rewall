@@ -1,13 +1,13 @@
 "use client";
 
 import { useWorkspace } from "./dashboard-shell";
-import { usePrivateData } from "./private-data";
+import { useCapabilities } from "./identity";
 import { Glyph, SegmentedProgress } from "./ui";
 import { SidebarFade, SidebarSection } from "./amicro";
 
 export function AccountRail() {
-    const { vault, account, setPanel } = useWorkspace();
-    const { accounts } = usePrivateData();
+    const { vault, account, walletLabel, setPanel } = useWorkspace();
+    const { canRead, canDecrypt, canWrite } = useCapabilities(vault?.owner, account);
     const entries = vault?.secrets ?? [];
     const encrypted = entries.filter((secret) => secret.encryption === "aes-256-gcm").length;
     return (
@@ -19,7 +19,7 @@ export function AccountRail() {
                         <p className="rail-address mono">{account}</p>
                         <div className="rail-row">
                             <span>Wallet</span>
-                            <span>MetaMask</span>
+                            <span>{walletLabel || "Connected"}</span>
                         </div>
                     </>
                 ) : (
@@ -54,9 +54,9 @@ export function AccountRail() {
             <SidebarSection delay={0.16}>
                 <h2>Access</h2>
                 <ul className="rail-access">
-                    <li className={vault ? "granted" : ""}>Read metadata</li>
-                    <li className={Object.keys(accounts).length ? "granted" : ""}>Decrypt values</li>
-                    <li>Write records</li>
+                    <li className={canRead ? "granted" : ""}>Read metadata</li>
+                    <li className={canDecrypt ? "granted" : ""}>Decrypt values</li>
+                    <li className={canWrite ? "granted" : ""}>Write records</li>
                 </ul>
             </SidebarSection>
         </SidebarFade>

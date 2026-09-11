@@ -10,7 +10,7 @@ const fixture = await build({
     format: "esm",
     platform: "node",
 });
-const { mockSecrets, mockOtpAccounts, mockTransfers, mockVolume } = await import(
+const { mockSecrets, mockOtpAccounts, mockTransfers, mockVolume, mockVault } = await import(
     "data:text/javascript;base64," + Buffer.from(fixture.outputFiles[0].text).toString("base64")
 );
 const browser = await chromium.launch({
@@ -29,7 +29,7 @@ page.on("pageerror", (error) => errors.push(error.message));
 page.on("request", (request) => {
     if (request.url().includes("publicnode.com")) rpc.push(request.url());
 });
-const origin = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000";
+const origin = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 const output = "artifacts/dashboard";
 await mkdir(output, { recursive: true });
 async function capture(name) {
@@ -97,7 +97,8 @@ async function cardGeometry(width) {
 }
 try {
     await page.goto(origin + "/dashboard", { waitUntil: "networkidle", timeout: 120000 });
-    await expect(page.locator(".workspace-switcher small")).toContainText("demo.eth · Mock");
+    await expect(page.locator(".workspace-switcher strong")).toContainText(mockVault.owner);
+    await expect(page.locator(".workspace-switcher small")).toContainText("Mock preview");
     await expect(page.locator(".otp-code")).toHaveCount(mockOtpAccounts.length);
     await expect(page.locator(".otp-code").first()).toBeEnabled();
     const cards = page.locator(".terminal-overview .terminal-card");
