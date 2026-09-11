@@ -6,6 +6,9 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { toHex } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
 import { DEPLOYER_INDEX, TICKET_SIGNER_INDEX, rpcUrl } from "../src/config.ts";
@@ -19,12 +22,17 @@ const signer = mnemonicToAccount(mnemonic, { addressIndex: TICKET_SIGNER_INDEX }
 const privateKey = deployer.getHdKey().privateKey;
 if (!privateKey) throw new Error("mnemonic produced no private key");
 
+// An npm package of the same name can shadow Foundry on PATH, which fails with a confusing message
+const installed = join(homedir(), ".foundry", "bin", process.platform === "win32" ? "forge.exe" : "forge");
+const forge = process.env.FORGE_BIN ?? (existsSync(installed) ? installed : "forge");
+
 console.log(`deploying as ${deployer.address}`);
 console.log(`ticket signer ${signer.address}`);
+console.log(`forge ${forge}`);
 
 // --slow sends one transaction at a time, since broadcasting them together races the account's nonce
 const result = spawnSync(
-    "forge",
+    `"${forge}"`,
     ["script", "contracts/script/Deploy.s.sol:Deploy", "--rpc-url", rpcUrl(), "--broadcast", "--slow", "--via-ir"],
     {
         cwd: new URL("..", import.meta.url),

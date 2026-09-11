@@ -4,7 +4,7 @@
  * appears once the indexer has seen the Deposit event CONFIRMATIONS blocks deep.
  */
 
-import { createPublicClient, createWalletClient, http, parseAbi, formatEther } from "viem";
+import { createPublicClient, createWalletClient, http, parseAbi, formatUnits } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 import { DEPLOYER_INDEX, rpcUrl, tokenAddress, vaultAddress } from "../src/config.ts";
@@ -12,7 +12,8 @@ import { DEPLOYER_INDEX, rpcUrl, tokenAddress, vaultAddress } from "../src/confi
 const mnemonic = process.env.REWALL_TEST_MNEMONIC;
 if (!mnemonic) throw new Error("REWALL_TEST_MNEMONIC is not set");
 
-const amount = BigInt(process.env.DEPOSIT_AMOUNT ?? 10n ** 19n);
+// Base units, and USDC carries six decimals rather than the eighteen an ether amount would
+const amount = BigInt(process.env.DEPOSIT_AMOUNT ?? 10n ** 7n);
 const account = mnemonicToAccount(mnemonic, { addressIndex: DEPLOYER_INDEX });
 
 const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl()) });
@@ -22,10 +23,25 @@ const vaultAbi = parseAbi(["function deposit(address token, uint256 amount)"]);
 const erc20Abi = parseAbi([
     "function allowance(address owner, address spender) view returns (uint256)",
     "function balanceOf(address) view returns (uint256)",
+    "function decimals() view returns (uint8)",
+    "function symbol() view returns (string)",
 ]);
 
 const token = tokenAddress();
 const vault = vaultAddress();
+const read = (functionName: "decimals" | "symbol") =>
+    publicClient.readContract({ address: token, abi: erc20Abi, functionName });
+const [decimals, symbol] = await Promise.all([read("decimals"), read("symbol")]);
+
+const held = await publicClient.readContract({
+    address: token,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: [account.address],
+});
+// Nothing here can mint Circle's USDC, so an empty deployer is a funding problem rather than a bug
+if (held < amount)
+    throw new Error(`${account.address} holds ${formatUnits(held, decimals)} ${symbol}, send it some first`);
 
 const allowance = await publicClient.readContract({
     address: token,
@@ -54,6 +70,6 @@ const vaultHolds = await publicClient.readContract({
     args: [vault],
 });
 
-console.log(`deposited ${formatEther(amount)} in block ${receipt.blockNumber}`);
-console.log(`vault now holds ${formatEther(vaultHolds)}`);
+console.log(`deposited ${formatUnits(amount, decimals)} ${symbol} in block ${receipt.blockNumber}`);
+console.log(`vault now holds ${formatUnits(vaultHolds, decimals)} ${symbol}`);
 console.log(`tx ${hash}`);

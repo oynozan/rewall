@@ -64,7 +64,8 @@ pnpm install
 cp .env.example .env
 ```
 
-Put your mnemonic in `.env`, then deploy. It writes the three addresses to copy back in.
+Put your mnemonic in `.env`, then deploy. It prints the vault and the policy engine to copy back in,
+alongside the token it registered, which is Circle's Sepolia USDC unless `TOKEN_ADDRESS` names another.
 
 ```bash
 pnpm run deploy
@@ -84,7 +85,7 @@ The server watches the chain and serves the API. Leave it running.
 pnpm run serve
 ```
 
-Then put tokens in and use them.
+Then put tokens in and use them. The deployer needs a USDC balance first, since nothing here mints it.
 
 ```bash
 pnpm run deposit
@@ -114,17 +115,57 @@ const transfers = new Transfers({
 });
 ```
 
+## Running behind the dApp
+
+A browser cannot call this server. It sends no `Access-Control-Allow-Origin` header, and it answers
+anything that is not a POST with a 404, so the preflight the SDK's `Content-Type` triggers fails
+before the real request is ever sent. The dApp therefore posts to its own `/api/rail/<endpoint>`,
+which forwards the already signed body here and relays the answer back untouched. That proxy holds no
+key, signs nothing, decrypts nothing, caches nothing and reads no field, and it refuses any path
+outside the five. It is a hop, not a party to the transfer, and the signature this server checks is
+still the only thing that authorises a spend.
+
+Deploy first, then leave the server running.
+
+```bash
+pnpm run deploy
+pnpm run serve
+```
+
+The token is Circle's Sepolia USDC, which nothing here can mint. The dApp's faucet hands a new wallet
+one of it out of the sponsor's own balance, so send that wallet some USDC from Circle's faucet before
+anybody tries to deposit. A redeploy does not change this, since the token is not redeployed with it.
+
+The dApp needs `NEXT_PUBLIC_REWALL_VAULT` and `REWALL_RAIL_URL` in `web/.env.local`. `pnpm run deploy`
+prints the vault ready to paste, and the token address is fixed in `web/src/lib/rail.ts` rather than
+configured. If every call comes back `request authentication failed`, the vault address there is from
+a previous deploy, because the vault is the EIP-712 `verifyingContract` and a stale one recovers to a
+different signer.
+
+## Running it on a VPS
+
+`RAIL_HOST` defaults to `127.0.0.1`, which is the only default worth having. If the dApp and this
+server share a host, leave it and let the proxy reach it over loopback.
+
+If they do not share a host, bind the private interface the two of them share and firewall the port
+to the web host's address. Do not publish it. Setting `RAIL_HOST` to `0.0.0.0` puts every balance in
+this process behind nothing but a signature check, and the caveat below is not a figure of speech.
+
+There is no TLS here and none is planned. If the hop between the dApp and this server crosses
+anything public it belongs in a tunnel or behind a reverse proxy that terminates TLS, and note what
+that does and does not buy, the signature protects the payer from a forged spend, not the ledger from
+being read.
+
 ## Layout
 
-| Path                            | Role                                                                   |
-| ------------------------------- | ---------------------------------------------------------------------- |
-| `contracts/RewallTestVault.sol` | Custody, ACE policy calls and withdraw ticket verification             |
-| `contracts/DemoToken.sol`       | A test ERC-20, since the vault moves tokens rather than ether          |
-| `contracts/script/Deploy.s.sol` | Deploys the token, the policy engine and the vault, and registers them |
-| `src/config.ts`                 | Every setting, all overridable from the environment                    |
-| `src/db.ts`                     | SQLite ledger, amounts stored as decimal strings                       |
-| `src/indexer.ts`                | Credits deposits, settles withdrawals, refunds expired tickets         |
-| `src/server.ts`                 | The five endpoints, EIP-712 authentication, ticket signing             |
+| Path                            | Role                                                                       |
+| ------------------------------- | -------------------------------------------------------------------------- |
+| `contracts/RewallTestVault.sol` | Custody, ACE policy calls and withdraw ticket verification                 |
+| `contracts/script/Deploy.s.sol` | Deploys the policy engine and the vault, and registers the token with them |
+| `src/config.ts`                 | Every setting, all overridable from the environment                        |
+| `src/db.ts`                     | SQLite ledger, amounts stored as decimal strings                           |
+| `src/indexer.ts`                | Credits deposits, settles withdrawals, refunds expired tickets             |
+| `src/server.ts`                 | The five endpoints, EIP-712 authentication, ticket signing                 |
 
 The wire format itself lives in the SDK at `transfer.ts`, so the client and this server cannot drift.
 
