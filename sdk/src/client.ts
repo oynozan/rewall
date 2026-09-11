@@ -1,4 +1,4 @@
-import { keccak256, namehash, parseAbi, toBytes, type Address, type Hash, type Hex } from "viem";
+import { isAddress, keccak256, namehash, parseAbi, toBytes, type Address, type Hash, type Hex } from "viem";
 import { deriveIdentity, fingerprintOf, IDENTITY_TYPED_DATA, type Identity } from "./identity.ts";
 import { toBase64, fromBase64, wipe } from "./crypto.ts";
 import {
@@ -109,6 +109,24 @@ export class Rewall {
         if (current[RECORD.pubkey] === encoded) return null;
 
         return this.write(this.name, [{ key: RECORD.pubkey, value: encoded }]);
+    }
+
+    /* Payment address */
+
+    // Publishing many over time is what keeps senders from noticing they pay the same account
+    async publishShielded(address: string): Promise<Hash | null> {
+        if (!isAddress(address)) throw new Error(`${address} is not an address`);
+
+        const current = await this.read(this.name, [RECORD.shielded]);
+        if (current[RECORD.shielded]?.toLowerCase() === address.toLowerCase()) return null;
+
+        return this.write(this.name, [{ key: RECORD.shielded, value: address }]);
+    }
+
+    // How a payer turns a name into something payable, which is the whole of pay a name
+    async shieldedOf(name: string): Promise<string | null> {
+        const records = await this.read(name, [RECORD.shielded]);
+        return records[RECORD.shielded] || null;
     }
 
     // Every key this caller can decrypt with, its own plus any subtree key sealed to its name
@@ -497,6 +515,30 @@ export class Rewall {
             if (!sealed) throw new Error(`${ownerName} holds no share sealed to ${this.name}`);
 
             return reshare(sealed, identity, newOwnerPublicKey);
+        },
+
+        // Run by a guardian that can write on its own name, the piece being already sealed to the
+        // replacement key, so a guardian whose records belong to a parent hands the string over instead
+        approve: async (ownerName: string, newOwnerPublicKey: Uint8Array, publishOn?: string): Promise<Hash> => {
+            const sealed = await this.guardians.reshare(ownerName, newOwnerPublicKey);
+            return this.write(publishOn ?? this.name, [
+                { key: RECORD.reshare(fingerprintOf(newOwnerPublicKey)), value: sealed },
+            ]);
+        },
+
+        // Run by the new owner, gathering whatever each guardian has published for them
+        collect: async (ownerName: string): Promise<string[]> => {
+            const identity = await this.identity();
+            const key = RECORD.reshare(identity.fingerprint);
+            const { names } = await this.guardians.of(ownerName);
+
+            const found = await Promise.all(
+                names.map(async (guardian) => {
+                    const records = await this.read(guardian, [key]).catch(() => ({}) as Record<string, string>);
+                    return records[key] || "";
+                }),
+            );
+            return found.filter(Boolean);
         },
 
         // Run by the new owner once enough guardians have re-shared

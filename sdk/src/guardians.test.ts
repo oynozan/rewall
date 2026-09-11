@@ -165,7 +165,7 @@ test("a corrupted share among honest ones is isolated and recovery still succeed
     assert.equal(recovered.fingerprint, set.recoveryFingerprint);
 });
 
-test("two pieces sharing an x coordinate are refused", async () => {
+test("two pieces sharing an x coordinate cannot stand in for a third guardian", async () => {
     const set = await createGuardianSet(guardians, 3);
     const one = set.shares[0]!.sealed;
     const pieces = [
@@ -173,7 +173,21 @@ test("two pieces sharing an x coordinate are refused", async () => {
         await reshare(one, guardianIdentities[0]!, newOwner.publicKey),
         ...(await resharedBy(set, [1])),
     ];
-    await assert.rejects(() => recoverWithShares(pieces, newOwner, expectOf(set)), ForgedShareError);
+    await assert.rejects(() => recoverWithShares(pieces, newOwner, expectOf(set)), RecoveryFailedError);
+});
+
+test("a stale share colliding with a current one is routed around, not fatal", async () => {
+    const set = await createGuardianSet(guardians, 3);
+
+    // A replaced guardian set leaves records behind whose x can collide with a live share
+    const stale = await createGuardianSet(guardians, 3);
+    const pieces = [
+        ...(await resharedBy(set, [0, 1, 2])),
+        await reshare(stale.shares[0]!.sealed, guardianIdentities[0]!, newOwner.publicKey),
+    ];
+
+    const recovered = await recoverWithShares(pieces, newOwner, expectOf(set));
+    assert.equal(recovered.fingerprint, set.recoveryFingerprint);
 });
 
 test("pieces from the wrong guardian set fail loudly", async () => {

@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { createWalletClient, custom, type Address, type EIP1193Provider } from "viem";
 import { sepolia } from "viem/chains";
-import { Rewall, ownerAddressOf, wipe, type Identity } from "@rewall/sdk";
+import { Rewall, ownerAddressOf, toBase64, wipe, type Identity } from "@rewall/sdk";
 import { UNIVERSAL_RESOLVER, vaultClient } from "@/src/lib/vault";
 import { explain } from "@/src/lib/errors";
 
@@ -25,6 +25,7 @@ type Session = {
     unlocking: boolean;
     error: string;
     fingerprint: string;
+    publicKey: string;
     unlock: () => Promise<boolean>;
     lock: () => void;
     decrypt: (secretName: string) => Promise<Uint8Array>;
@@ -54,6 +55,7 @@ export function IdentityProvider({
     const [unlocking, setUnlocking] = useState(false);
     const [error, setError] = useState("");
     const [fingerprint, setFingerprint] = useState("");
+    const [publicKey, setPublicKey] = useState("");
 
     const client = useRef<Rewall | null>(null);
     const identity = useRef<Identity | null>(null);
@@ -65,6 +67,7 @@ export function IdentityProvider({
         client.current = null;
         setUnlocked(false);
         setFingerprint("");
+        setPublicKey("");
         if (held) void wipe(held.secretKey);
     }, []);
 
@@ -125,6 +128,7 @@ export function IdentityProvider({
             client.current = live;
             identity.current = derived;
             setFingerprint(derived.fingerprint);
+            setPublicKey(toBase64(derived.publicKey));
             setUnlocked(true);
             return true;
         } catch (failure) {
@@ -152,7 +156,7 @@ export function IdentityProvider({
         [unlock, error],
     );
 
-    const session: Session = { unlocked, unlocking, error, fingerprint, unlock, lock, decrypt, write };
+    const session: Session = { unlocked, unlocking, error, fingerprint, publicKey, unlock, lock, decrypt, write };
     return <IdentityContext value={session}>{children}</IdentityContext>;
 }
 

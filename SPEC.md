@@ -91,6 +91,7 @@ rewall.subtree.v         subtree key version, bumped to remove a member
 rewall.subtree.key       subtree private key sealed to this subname's pubkey (on subnames)
 rewall.guardians         comma-separated guardian names
 rewall.guardian.<fp>     Shamir share of the recovery key sealed to guardian fp
+rewall.reshare.<fp>      a guardian's share re-sealed to a replacement key, on the guardian's own name
 rewall.recovery.pubkey   public half of the guardian backed recovery key
 rewall.recovery.k        guardian threshold
 rewall.shielded          shielded address for private transfers (optional)
@@ -202,7 +203,11 @@ Supported recovery grantees, in implementation priority:
 1. **Recovery name.** A second ENS name backed by a cold wallet. Auto-wrapped on every create.
 2. **Guardians.** A recovery keypair whose private key is split with Shamir (k of n). Each share is sealed to a guardian's ENS name and stored on the owner's name as `rewall.guardian.<fp>`, alongside `rewall.guardians`, `rewall.recovery.pubkey` and `rewall.recovery.k`. Every secret is wrapped to the recovery public key, referenced in `rewall.recovery` as `guardians:<owner name>`. Recovery: new wallet and key, k guardians re-seal their share to the new key, reconstruct, decrypt, re-wrap.
 
-   The recovery private key is destroyed the moment the shares are made. Nobody holds it, and no fewer than k guardians can bring it back. Below k, Shamir reconstruction is unauthenticated and returns a key that is simply wrong rather than an error, so recovery never trusts a reconstruction. It rejects a share whose x coordinate is zero or that duplicates another's, tries each exact-threshold subset in turn, and accepts only a candidate whose public half matches the published `rewall.recovery.pubkey`. A threshold below 2 is refused, because it would let one guardian recover alone, and a set below 2 guardians for the same reason.
+   **Approvals go on chain.** A guardian re-seals its share to the replacement key and publishes it on **its own name** as `rewall.reshare.<replacement fp>`. The piece is already sealed to the replacement key, so publishing it discloses nothing to anyone else, and it removes the need to pass opaque blobs around by hand. The replacement wallet reads the guardian list off the owner's name, reads that record from each guardian, and reconstructs.
+
+   Two consequences worth stating. A guardian can only publish if it can write a record on its own name, so a guardian that is a subname controlled by a parent has to hand the re-sealed string to that parent instead. And the share is addressed by identity, not by name, so a client deciding where to publish must pick the guardian name whose `rewall.pubkey` is its own key, not merely a name it happens to own, or a parent will publish its own share under a child's name.
+
+   The recovery private key is destroyed the moment the shares are made. Nobody holds it, and no fewer than k guardians can bring it back. Below k, Shamir reconstruction is unauthenticated and returns a key that is simply wrong rather than an error, so recovery never trusts a reconstruction. It rejects a share whose x coordinate is zero, tries each exact-threshold subset in turn, skipping any subset holding two shares with the same x, and accepts only a candidate whose public half matches the published `rewall.recovery.pubkey`. Skipping rather than refusing matters because a guardian set that was replaced leaves old `rewall.reshare` records behind, and one stale share must not be able to deny recovery. A threshold below 2 is refused, because it would let one guardian recover alone, and a set below 2 guardians for the same reason.
 
 Not implemented: automatically wrapping anything created under a parent name to that parent's recovery key. A parent that wants recovery on a child's secrets is named explicitly in `recovery` like any other entry.
 

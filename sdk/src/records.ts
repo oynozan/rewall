@@ -45,6 +45,8 @@ export const RECORD = {
     guardian: (fingerprint: string) => `rewall.guardian.${fingerprint}`,
     recoveryPubkey: "rewall.recovery.pubkey",
     recoveryThreshold: "rewall.recovery.k",
+    // A guardian's share re-sealed to a replacement key, published on the guardian's own name
+    reshare: (fingerprint: string) => `rewall.reshare.${fingerprint}`,
     // Published on the participant's own name so a payer can resolve a name and pay it privately
     shielded: "rewall.shielded",
     site: "rewall.site",

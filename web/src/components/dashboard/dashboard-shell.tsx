@@ -63,7 +63,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           ? "Transfers"
           : pathname.includes("/secrets")
             ? "Secrets"
-            : "Home";
+            : pathname.includes("/recovery")
+              ? "Recovery"
+              : "Home";
     const [vault, setVault] = useState<Vault | null>(null);
     const [busy, setBusy] = useState(true);
     const [error, setError] = useState("");
@@ -226,6 +228,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                                         { href: "/dashboard/secrets", label: "Secrets", icon: "key" },
                                         { href: "/dashboard/2fa", label: "2FA", icon: "authenticator" },
                                         { href: "/dashboard/transfers", label: "Transfers", icon: "wallet" },
+                                        { href: "/dashboard/recovery", label: "Recovery", icon: "shield" },
                                     ] as { href: string; label: string; icon: IconName }[]
                                 ).map((item, index) => (
                                     <Link

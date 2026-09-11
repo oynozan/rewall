@@ -138,12 +138,13 @@ export async function recoverWithShares(
             if (piece[SHARE_BYTES - 1] === 0) throw new ForgedShareError("its x coordinate is zero");
         }
 
-        const xs = new Set(pieces.map((p) => p[SHARE_BYTES - 1]!));
-        if (xs.size !== pieces.length) throw new ForgedShareError("two pieces share an x coordinate");
-
         // Exactly threshold at a time, so a poisoned piece is isolated rather than poisoning the whole set
         for (const combo of combinations(pieces.length, threshold)) {
-            const candidate = await combine(combo.map((i) => pieces[i]!));
+            // A stale share from a replaced guardian set can collide with a current one, so route around it
+            const xs = new Set(combo.map((i) => pieces[i]![SHARE_BYTES - 1]!));
+            if (xs.size !== combo.length) continue;
+
+            const candidate = await combine(combo.map((i) => pieces[i]!)).catch(() => new Uint8Array(0));
             if (candidate.length !== 32) continue;
 
             const publicKey = sodium.crypto_scalarmult_base(candidate);

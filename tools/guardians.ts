@@ -9,8 +9,9 @@ import {
     GUARDIANS,
     GUARDIAN_THRESHOLD,
     REPLACEMENT_WALLET_INDEX,
+    SUBTREE_PARENT_ROLE,
 } from "./participants.ts";
-import { publicClient, byRole, accountFor, identityFor, ensureSecretName } from "./chain.ts";
+import { publicClient, byRole, accountFor, identityFor, ensureSecretName, writeRecords } from "./chain.ts";
 
 const LABEL = process.env.REWALL_SECRET_LABEL ?? "vault";
 const SECRET = "correct-horse-battery-staple-not-real";
@@ -131,5 +132,31 @@ const otherSet = await Promise.all(GUARDIANS.slice(1, 1 + GUARDIAN_THRESHOLD).ma
 const again = await replacement.guardians.recover(otherSet);
 if (again.fingerprint !== recovery.fingerprint) fail("a different quorum reconstructed a different key");
 pass("a different quorum of the same size reconstructs the same key");
+
+/* The same thing again through chain records instead of passed strings */
+
+// Only a guardian that holds its own name can publish. A subname's records belong to its parent
+const selfOwned = GUARDIANS.filter((g) => g.name.split(".").length === 2);
+for (const g of selfOwned) {
+    await clientFor(g.index, g.name).guardians.approve(ownerName, replacementIdentity.publicKey);
+}
+pass(`${selfOwned.length} guardians holding their own name published a re-sealed share`);
+
+const delegated = GUARDIANS.filter((g) => !selfOwned.includes(g)).slice(0, GUARDIAN_THRESHOLD - selfOwned.length);
+for (const g of delegated) {
+    const share = await clientFor(g.index, g.name).guardians.reshare(ownerName, replacementIdentity.publicKey);
+    const parentIndex = byRole[SUBTREE_PARENT_ROLE]!.index;
+    await writeRecords(parentIndex, g.name, [{ key: RECORD.reshare(replacementIdentity.fingerprint), value: share }]);
+}
+pass(`${delegated.length} guardian under a parent had its share published by that parent`);
+
+const expected = selfOwned.length + delegated.length;
+const collected = await replacement.guardians.collect(ownerName);
+if (collected.length !== expected) fail(`collected ${collected.length} shares, expected ${expected}`);
+pass("the replacement wallet collected every approval from chain with nothing passed by hand");
+
+const fromChain = await replacement.guardians.recover(collected, ownerName);
+if (fromChain.fingerprint !== recovery.fingerprint) fail("the chain collected shares rebuilt a different key");
+pass("shares read off chain reconstruct the same recovery key");
 
 console.log(`\n${passed} checks passed against real Sepolia`);

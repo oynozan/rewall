@@ -1929,3 +1929,46 @@ input[type="checkbox"]:indeterminate::after {
 .access-form .field-help {
     margin: 10px 0 12px;
 }
+
+/* Recovery */
+
+.recovery-page .page-heading {
+    margin-bottom: 8px;
+}
+.recovery-block {
+    max-width: 640px;
+    border-top: 1px solid var(--border);
+    padding-top: 22px;
+    margin-top: 22px;
+}
+.recovery-block h2 {
+    font-family: var(--font-lexend-deca), sans-serif;
+    font-weight: 200;
+    font-size: 18px;
+    margin: 0 0 12px;
+}
+.recovery-block p {
+    font-size: 13px;
+    line-height: 1.8;
+    margin: 0 0 14px;
+}
+.recovery-block label {
+    display: block;
+    font-size: 13px;
+    margin-bottom: 9px;
+}
+.recovery-block input {
+    width: 100%;
+    max-width: 360px;
+    padding: 10px 12px;
+    font-size: 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--foreground);
+    margin-bottom: 18px;
+}
+.recovery-count {
+    font-size: 15px;
+    margin-bottom: 10px;
+}
