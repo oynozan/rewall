@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Rewall and your Ledger</title>
+        <style>
+            :root {
+                --bg: #0d0d0c;
+                --panel: #151513;
+                --line: #2a2a26;
+                --text: #deded9;
+                --muted: #8f8f83;
+                --go: #d7ff64;
+                --warn: #ffb26b;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                background: var(--bg);
+                color: var(--text);
+                font:
+                    15px/1.6 ui-sans-serif,
+                    system-ui,
+                    sans-serif;
+            }
+            header {
+                padding: 28px 32px 0;
+            }
+            h1 {
+                margin: 0 0 6px;
+                font-size: 22px;
+                font-weight: 300;
+            }
+            header p {
+                margin: 0;
+                color: var(--muted);
+                max-width: 70ch;
+            }
+            main {
+                display: grid;
+                grid-template-columns: 420px 1fr;
+                gap: 28px;
+                padding: 28px 32px 40px;
+                align-items: start;
+            }
+            @media (max-width: 900px) {
+                main {
+                    grid-template-columns: 1fr;
+                }
+            }
+            .panel {
+                background: var(--panel);
+                border: 1px solid var(--line);
+                border-radius: 10px;
+                padding: 20px;
+            }
+            .device iframe {
+                width: 100%;
+                height: 420px;
+                border: 0;
+                border-radius: 6px;
+                background: #000;
+            }
+            .device .off {
+                height: 420px;
+                display: grid;
+                place-items: center;
+                color: var(--muted);
+                border: 1px dashed var(--line);
+                border-radius: 6px;
+                text-align: center;
+                padding: 20px;
+            }
+            .step {
+                border-top: 1px solid var(--line);
+                padding: 18px 0;
+            }
+            .step:first-of-type {
+                border-top: 0;
+                padding-top: 0;
+            }
+            .step h2 {
+                margin: 0 0 4px;
+                font-size: 15px;
+                font-weight: 500;
+            }
+            .step p {
+                margin: 0 0 12px;
+                color: var(--muted);
+                font-size: 14px;
+            }
+            button {
+                background: var(--go);
+                color: #14140f;
+                border: 0;
+                border-radius: 6px;
+                padding: 9px 16px;
+                font: inherit;
+                font-weight: 500;
+                cursor: pointer;
+            }
+            button.quiet {
+                background: transparent;
+                color: var(--text);
+                border: 1px solid var(--line);
+            }
+            button:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+            }
+            #log {
+                margin-top: 20px;
+                background: #0a0a09;
+                border: 1px solid var(--line);
+                border-radius: 8px;
+                padding: 14px 16px;
+                height: 260px;
+                overflow: auto;
+                font-family: ui-monospace, "Ubuntu Mono", monospace;
+                font-size: 13px;
+                white-space: pre-wrap;
+            }
+            #log .done {
+                color: var(--go);
+            }
+            #log .warn {
+                color: var(--warn);
+            }
+            .hint {
+                color: var(--muted);
+                font-size: 13px;
+                margin-top: 10px;
+            }
+            kbd {
+                background: #222;
+                border: 1px solid var(--line);
+                border-radius: 4px;
+                padding: 1px 6px;
+                font-size: 12px;
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>Giving a server access to your secrets, without giving it your secrets</h1>
+            <p>
+                A program running somewhere else wants to use credentials you own. Your Ledger decides whether it is
+                allowed in. Rewall carries the permission to it, addressed to a name, so nothing secret is ever copied
+                onto that machine.
+            </p>
+        </header>
+
+        <main>
+            <section class="panel device">
+                <div id="deviceBox">
+                    <div class="off">The device is not running yet.<br />Start it in step one.</div>
+                </div>
+                <p class="hint">
+                    This is a real Ledger app running in Ledger's own emulator, so you can see the screen. Press
+                    <kbd>right</kbd> to move and <kbd>both</kbd> to approve.
+                </p>
+            </section>
+
+            <section>
+                <div class="panel">
+                    <div class="step">
+                        <h2>1. Turn on the Ledger</h2>
+                        <p>Boots the device so you can see its screen and press its buttons.</p>
+                        <button id="start">Turn it on</button>
+                    </div>
+
+                    <div class="step">
+                        <h2>2. A server asks to join</h2>
+                        <p>
+                            It creates its own key and asks for permission. Your Ledger will show the request, and
+                            nothing happens until you approve it on the device.
+                        </p>
+                        <button id="enroll" disabled>Let it ask</button>
+                    </div>
+
+                    <div class="step">
+                        <h2>3. Unplug the Ledger</h2>
+                        <p>Proves what comes next needs no device at all.</p>
+                        <button id="stop" class="quiet" disabled>Unplug it</button>
+                    </div>
+
+                    <div class="step">
+                        <h2>4. The server does its work</h2>
+                        <p>With no device anywhere, it reads its permission off the blockchain and uses the secret.</p>
+                        <button id="agent" class="quiet" disabled>Run the server</button>
+                    </div>
+                </div>
+
+                <div id="log"></div>
+            </section>
+        </main>
+
+        <script>
+            const el = (id) => document.getElementById(id);
+            const log = el("log");
+
+            function write(line, kind) {
+                const row = document.createElement("div");
+                if (kind && kind !== "log") row.className = kind;
+                row.textContent = line;
+                log.appendChild(row);
+                log.scrollTop = log.scrollHeight;
+            }
+
+            new EventSource("/api/log").onmessage = (event) => {
+                const { line, kind } = JSON.parse(event.data);
+                write(line, kind);
+            };
+
+            const post = (path) => fetch(path, { method: "POST" });
+
+            el("start").onclick = () => post("/api/device/start");
+            el("enroll").onclick = () => post("/api/enroll");
+            el("stop").onclick = () => post("/api/device/stop");
+            el("agent").onclick = () => post("/api/agent");
+
+            // The device frame is only mounted once it answers, or the iframe shows a connection error
+            let mounted = false;
+            async function poll() {
+                const { device, busy } = await fetch("/api/status").then((r) => r.json());
+
+                if (device && !mounted) {
+                    el("deviceBox").innerHTML = '<iframe src="http://127.0.0.1:5000" title="Ledger device"></iframe>';
+                    mounted = true;
+                }
+                if (!device && mounted) {
+                    el("deviceBox").innerHTML = '<div class="off">Unplugged. There is no device now.</div>';
+                    mounted = false;
+                }
+
+                el("start").disabled = device || busy;
+                el("enroll").disabled = !device || busy;
+                el("stop").disabled = !device || busy;
+                el("agent").disabled = busy;
+            }
+            poll();
+            setInterval(poll, 1500);
+        </script>
+    </body>
+</html>

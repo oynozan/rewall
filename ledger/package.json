@@ -4,6 +4,7 @@
     "type": "module",
     "packageManager": "pnpm@9.12.2",
     "scripts": {
+        "demo": "node demo.mjs",
         "speculos": "node speculos.mjs",
         "speculos:stop": "docker rm -f speculos",
         "enroll": "node --env-file=../tools/.env --experimental-strip-types src/enroll.ts",
