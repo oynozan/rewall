@@ -42,6 +42,13 @@ async function noAsciiIcons(where) {
     assert.deepEqual(found, [], `${where} must not use text glyphs as icons`);
 }
 
+// The dropdowns are listbox buttons rather than native selects, so a value is picked by opening and clicking
+async function choose(field, option) {
+    await page.getByRole("combobox", { name: field }).click();
+    await page.getByRole("option", { name: option }).click();
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+}
+
 try {
     /* The dashboard belongs to whoever is connected, so the gate comes first */
 
@@ -101,15 +108,15 @@ try {
     const transformed = await page
         .locator(".dashboard-app *:not(.brand-logo, .brand-logo *, .liquid-metal, .liquid-metal *)")
         .evaluateAll((elements) =>
-        elements
-            .filter((element) => {
-                const { transform, scale } = getComputedStyle(element);
-                return (
-                    (transform !== "none" && transform !== "matrix(1, 0, 0, 1, 0, 0)") ||
-                    (scale !== "none" && scale !== "1")
-                );
-            })
-            .map((element) => element.className),
+            elements
+                .filter((element) => {
+                    const { transform, scale } = getComputedStyle(element);
+                    return (
+                        (transform !== "none" && transform !== "matrix(1, 0, 0, 1, 0, 0)") ||
+                        (scale !== "none" && scale !== "1")
+                    );
+                })
+                .map((element) => element.className),
         );
     assert.deepEqual(transformed, [], "The dashboard must not scale or transform anything");
     checks.push("Sidebar reveals as a staggered cascade and nothing is scaled or transformed");
@@ -186,9 +193,9 @@ try {
     await page.getByRole("link", { name: "View all", exact: true }).first().click();
     await expect(page).toHaveURL(`${baseURL}/dashboard/secrets`);
     await expect(page.getByRole("heading", { name: "Secrets", exact: true })).toBeVisible();
-    await page.getByRole("combobox", { name: "Filter by type" }).selectOption("apikey");
+    await choose("Filter by type", "API key");
     await expect(page.locator(".secrets-browser button.secret-name").first()).toBeVisible();
-    await page.getByRole("combobox", { name: "Sort secrets" }).selectOption("name");
+    await choose("Sort secrets", /^Name A/);
     await page.getByRole("checkbox", { name: "Select all visible secrets" }).check();
     await page.getByRole("button", { name: "Copy names", exact: true }).click();
     assert.match(await page.evaluate(() => navigator.clipboard.readText()), /\.rewall\.rewall-test-1\.eth/);

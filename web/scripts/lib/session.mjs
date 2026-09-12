@@ -10,7 +10,10 @@ export async function connectWallet(page) {
     // Disconnected always means the gate, so waiting for it beats racing the sidebar drawer for the top layer
     await expect(gate).toBeVisible({ timeout: 90000 });
     for (let attempt = 0; attempt < 12; attempt++) {
-        await gate.getByRole("button").click({ timeout: 10000 }).catch(() => {});
+        await gate
+            .getByRole("button")
+            .click({ timeout: 10000 })
+            .catch(() => {});
         if (await walletRow.isVisible({ timeout: 6000 }).catch(() => false)) break;
     }
 

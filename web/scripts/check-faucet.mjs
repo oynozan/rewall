@@ -40,7 +40,10 @@ pass("a malformed address is refused rather than looked up");
 
 for (const [path, body] of [
     ["/api/faucet", { address: SOMEONE }],
-    ["/api/provision", { phase: "start", address: SOMEONE, label: "someclaim", publicKey: "a", recoveryPublicKey: "b" }],
+    [
+        "/api/provision",
+        { phase: "start", address: SOMEONE, label: "someclaim", publicKey: "a", recoveryPublicKey: "b" },
+    ],
 ]) {
     const anonymous = await post(path, body);
     assert.equal(anonymous.status, 401, `${path} must refuse an unauthenticated caller`);

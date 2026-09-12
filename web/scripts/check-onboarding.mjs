@@ -87,7 +87,9 @@ try {
     assert.equal(phrase.length, 24, "A recovery phrase is 24 words");
     await shot("onboarding-3-recovery");
 
-    const leaked = sent.filter((body) => body.includes(phrase.join(" ")) || body.includes(phrase.slice(0, 6).join(" ")));
+    const leaked = sent.filter(
+        (body) => body.includes(phrase.join(" ")) || body.includes(phrase.slice(0, 6).join(" ")),
+    );
     assert.deepEqual(leaked, [], "The recovery phrase must never reach the network");
     pass("the recovery phrase is 24 words and never leaves the browser");
 
@@ -107,7 +109,10 @@ try {
     const owner = await ownerAddressOf(publicClient, UNIVERSAL_RESOLVER, `${label}.eth`);
     assert.equal(owner.toLowerCase(), wallet.address.toLowerCase(), "The wallet must end up owning the name");
 
-    const records = await readTexts(publicClient, UNIVERSAL_RESOLVER, `${label}.eth`, [RECORD.pubkey, RECORD.recoveryPubkey]);
+    const records = await readTexts(publicClient, UNIVERSAL_RESOLVER, `${label}.eth`, [
+        RECORD.pubkey,
+        RECORD.recoveryPubkey,
+    ]);
     assert.ok(records[RECORD.pubkey], "The identity key must resolve");
     assert.ok(records[RECORD.recoveryPubkey], "The recovery key must resolve, or no secret can name it");
     pass(`${label}.eth is owned by the wallet and publishes both keys`);

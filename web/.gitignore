@@ -1,1 +1,9 @@
 /artifacts/
+
+# Capture tools nobody runs from package.json, unlike the check scripts beside them
+/scripts/shot.mjs
+/scripts/survey.mjs
+/scripts/zoom.mjs
+/scripts/inspect-dashboard.mjs
+/scripts/tmp-*
+/scripts/.tmp-*

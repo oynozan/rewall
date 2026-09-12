@@ -45,38 +45,46 @@ const short = `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`;
 await expect(page.locator(".sidebar-account")).toContainText(short, { timeout: 60000 });
 await claimVault(page, OWNER);
 await expect(page.locator(".sidebar-vault strong")).toHaveText(OWNER, { timeout: 90000 });
-await expect(page.getByRole("heading", { name: "Balance", exact: true })).toBeVisible({ timeout: 60000 });
+await expect(page.getByRole("complementary", { name: "Transfer balance" })).toBeVisible({ timeout: 60000 });
 
 /* Reading the page asks the wallet for nothing */
 
 assert.equal(wallet.calls.typedData, 0, "Opening transfers must not prompt the wallet, a poll would be a prompt each");
-await expect(page.locator(".terminal-value")).toHaveText("—");
-pass("the transfers page loads with a hidden balance and zero wallet prompts");
+const figure = page.locator(".balance-figure");
+await expect(figure).toContainText("—");
+// The unit is half the number, so a figure without it is a bug rather than a style choice
+await expect(figure).toContainText("USDC", { timeout: 60000 });
+pass("the transfers page loads with a hidden balance, a visible unit and zero wallet prompts");
 
 /* One signature buys the balance, and the replay buys every refresh after it */
 
 await page.getByRole("button", { name: "Show balance", exact: true }).click();
-await expect(page.locator(".terminal-value")).not.toHaveText("—", { timeout: 60000 });
+await expect(figure).not.toContainText("—", { timeout: 60000 });
 
 assert.equal(wallet.calls.typedData, 1, "Reading the balance must cost exactly one signature");
 assert.deepEqual(primaryTypes, ["Retrieve Balances"], "The rail's primary type is what must reach the wallet");
-assert.match(primaryTypes[0], / /, "That primary type contains a space, which is what the rail and the wallet must accept");
-const shown = await page.locator(".terminal-value").innerText();
-pass(`a balance of ${shown.trim()} came back for one signature over a primary type containing a space`);
+assert.match(
+    primaryTypes[0],
+    / /,
+    "That primary type contains a space, which is what the rail and the wallet must accept",
+);
+const shown = (await figure.innerText()).replace(/\s+/g, " ").trim();
+pass(`a balance of ${shown} came back for one signature over a primary type containing a space`);
 
-const refresh = page.getByRole("button", { name: "Refresh", exact: true });
+const refresh = page.getByRole("button", { name: "Refresh balance" });
 await refresh.click();
 await expect(refresh).toBeEnabled({ timeout: 60000 });
-await expect(page.locator(".terminal-value")).toHaveText(shown);
+await expect(figure).toContainText(shown.split(" ")[0]);
 
 assert.equal(wallet.calls.typedData, 1, "A refresh inside the rail's window must replay the signed body, not re-sign");
 pass("a refresh inside the freshness window costs no second signature and returns the same balance");
 
 /* A name that cannot be paid is refused before a signature is spent */
 
-await page.getByRole("button", { name: "Send", exact: true }).click();
+await page.getByRole("button", { name: "Send confidential transfer" }).click();
 const dialog = page.getByRole("dialog");
-await expect(dialog.getByRole("heading", { name: "Send privately" })).toBeVisible({ timeout: 30000 });
+// The drawer title has to name the same thing the button did, or the flow reads as two features
+await expect(dialog.getByRole("heading", { name: "Send confidential transfer" })).toBeVisible({ timeout: 30000 });
 
 const send = dialog.getByRole("button", { name: "Send", exact: true });
 await dialog.getByLabel("Pay").fill(UNPAID);

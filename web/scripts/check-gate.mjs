@@ -33,6 +33,7 @@ try {
     await page.goto(`${baseURL}/dashboard`, { waitUntil: "domcontentloaded", timeout: 120000 });
     await expect(page.getByRole("complementary", { name: "Connect to Rewall" })).toBeVisible({ timeout: 90000 });
     await shot("gate-1-locked");
+    await expect(page.locator(".account-rail .liquid-metal")).toHaveCount(0);
 
     const body = await page.locator(".dashboard-app").innerText();
     assert.equal(body.includes("rewall-test-1.eth"), false, "A visitor must not be shown someone else's vault");
@@ -88,9 +89,29 @@ try {
     // Reverse resolution is empty on Sepolia, so an owner on a fresh browser is asked which name is theirs
     await expect(page.getByRole("complementary", { name: "Set up your vault" })).toBeVisible({ timeout: 90000 });
     await shot("gate-2-needs-vault");
+
+    // A vault is the only thing missing now, so the panels are honest and empty rather than frosted over
+    const unlocked = await page.evaluate(() => {
+        const filterOf = (selector) => {
+            const element = document.querySelector(selector);
+            return element ? getComputedStyle(element).filter : "missing";
+        };
+        return {
+            overview: filterOf(".terminal-overview"),
+            table: filterOf(".secrets-browser"),
+            rail: filterOf(".account-rail"),
+            inert: document.querySelectorAll("main [inert]").length,
+        };
+    });
+    assert.equal(unlocked.overview, "none", "The cards are sharp once a wallet is connected");
+    assert.equal(unlocked.table, "none", "The tables are sharp once a wallet is connected");
+    assert.equal(unlocked.rail, "none", "The rail is sharp once a wallet is connected");
+    assert.equal(unlocked.inert, 0, "Nothing is held inert once a wallet is connected");
     pass("a connected wallet with nothing linked is offered a vault rather than shown an empty dashboard");
+    pass("connecting lifts the glass even before a vault exists, so the empty dashboard stays usable");
 
     await page.getByRole("button", { name: "I already own a name" }).click();
+    await expect(page.locator("dialog.workspace-dialog .liquid-metal")).toHaveCount(0);
     await page.getByLabel("Or name one you already own").fill("rewall-test-1.eth");
     await page.getByRole("button", { name: "This one is mine", exact: true }).click();
     await expect(page.locator(".secrets-browser button.secret-name").first()).toBeVisible({ timeout: 90000 });
