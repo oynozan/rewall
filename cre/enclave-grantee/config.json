@@ -1,0 +1,10 @@
+{
+  "schedule": "0 */1 * * * *",
+  "secretId": "ENCLAVE_SCALAR",
+  "secretName": "enclave-spike.rewall.rewall-test-1.eth",
+  "dnsName": "0x0d656e636c6176652d7370696b6506726577616c6c0d726577616c6c2d746573742d310365746800",
+  "wrapKey": "rewall.key.a477785bfa62cdb6",
+  "expectedDigest": "287b15ca6651b40efe86f4033da5c120969ec6353a3f762cf884d9384260f1b3",
+  "chainSelectorName": "ethereum-testnet-sepolia",
+  "universalResolver": "0x4a1817d13e9cf196f471725176355c1234b63c70"
+}

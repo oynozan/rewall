@@ -1,0 +1,21 @@
+{
+    "name": "@rewall/cre",
+    "private": true,
+    "type": "module",
+    "description": "Chainlink CRE Confidential Workflow that opens a Rewall secret inside an enclave",
+    "scripts": {
+        "provision": "node --env-file=../tools/.env --experimental-strip-types provision.ts",
+        "grant": "node --env-file=../tools/.env --experimental-strip-types grant.ts",
+        "access": "node --env-file=../tools/.env --experimental-strip-types access.ts",
+        "check": "node check-batched-read.mjs",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "devDependencies": {
+        "prettier": "^3.9.6"
+    },
+    "dependencies": {
+        "@rewall/sdk": "link:..\\sdk",
+        "viem": "^2.56.3"
+    }
+}

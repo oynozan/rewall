@@ -1,0 +1,5 @@
+node_modules
+bun.lock
+pnpm-lock.yaml
+config.json
+*.wasm
