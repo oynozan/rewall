@@ -4,10 +4,11 @@ import { useState } from "react";
 import { guardianRecoveryEntry, NAMESPACE_LABEL, normalizeSite } from "@rewall/sdk";
 import { describeOtpUri, type OtpAccount } from "@rewall/sdk/2fa";
 import { explain } from "@/src/lib/errors";
-import { ownerName } from "@/src/lib/vault";
+import { ownerName, TYPE_LABELS, type Secret } from "@/src/lib/vault";
 import { useIdentity } from "./identity";
 import { useWorkspace } from "./dashboard-shell";
 import { useOwnRecovery } from "./create-secret";
+import styles from "./add-authenticator.module.css";
 
 type Entry = { uri: string; site: string; recovery: string };
 type Decoded = { state: "empty" } | { state: "bad"; message: string } | { state: "ready"; account: OtpAccount };
@@ -21,8 +22,10 @@ const slug = (value: string) =>
         .replace(/[^a-z0-9-]+/g, "-")
         .replace(/^-+|-+$/g, "");
 
+const named = (secret: Secret) => TYPE_LABELS[secret.type as keyof typeof TYPE_LABELS] ?? secret.type;
+
 export function AddAuthenticator({ onDone }: { onDone: () => void }) {
-    const { ownName, refresh } = useWorkspace();
+    const { ownName, vault, refresh } = useWorkspace();
     const { write } = useIdentity();
     const [uri, setUri] = useState("");
     const [decoded, setDecoded] = useState<Decoded>({ state: "empty" });
@@ -37,6 +40,9 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
     const namespace = ownName ? `${NAMESPACE_LABEL}.${ownName}` : "";
     const target = label ? `${label}.${namespace}` : "";
     const ownRecovery = useOwnRecovery(ownName);
+
+    // Every secret type shares one namespace, so an authenticator can land on an API key of the same name
+    const existing = target ? vault?.secrets.find((secret) => secret.name === target) : undefined;
 
     // Reads the display fields without keeping the seed, which is why it can run on every keystroke
     function read(value: string) {
@@ -63,6 +69,7 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
             setSite(normalizeSite(value));
             setSiteError("");
         } catch (failure) {
+            setSite("");
             setSiteError(reason(failure));
         }
     }
@@ -94,6 +101,7 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
 
     async function submit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
+        if (step) return;
         setError("");
         setConflict(null);
 
@@ -101,15 +109,23 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
             setError("Paste the setup key your account shows when it offers a QR code.");
             return;
         }
-        if (!site || siteError) {
-            setError("Give the hostname where this code gets typed.");
+
+        // Read from the field rather than state, so a hostname typed and never blurred is still normalized
+        const typedSite = String(new FormData(event.currentTarget).get("site") || "");
+        let settled: string;
+        try {
+            settled = normalizeSite(typedSite);
+            setSite(settled);
+            setSiteError("");
+        } catch (failure) {
+            setSiteError(reason(failure));
             return;
         }
 
         const typed = String(new FormData(event.currentTarget).get("recovery") || "").trim();
         const entry: Entry = {
             uri: uri.trim(),
-            site,
+            site: settled,
             recovery: typed || (ownRecovery ? guardianRecoveryEntry(ownName) : ""),
         };
 
@@ -151,26 +167,26 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
                 required
             />
             {decoded.state === "ready" ? (
-                <p className="field-help">
-                    {decoded.account.issuer || "Account"}
-                    {decoded.account.label ? ` · ${decoded.account.label}` : ""} · {decoded.account.digits} digits every{" "}
-                    {decoded.account.period}s
+                <p className={styles.decoded}>
+                    <span className={styles.issuer}>
+                        {decoded.account.issuer || decoded.account.label || "Account"}
+                    </span>
+                    <span className={styles.shape}>
+                        {decoded.account.digits} digits · {decoded.account.period}s
+                    </span>
                 </p>
             ) : decoded.state === "bad" ? (
-                <p className="form-error" role="alert">
+                <p className={styles.problem} role="alert">
                     {decoded.message}
                 </p>
             ) : (
-                <p className="field-help">
-                    Most sites show this as a long link behind a “can’t scan the QR code?” link. The seed never leaves
-                    this page unencrypted.
-                </p>
+                <p className={styles.hint}>Shown behind the “can’t scan the code?” link when you turn 2FA on.</p>
             )}
 
             <label htmlFor="otp-site">Site</label>
             <input
                 id="otp-site"
-                defaultValue=""
+                name="site"
                 onBlur={(event) => settleSite(event.target.value)}
                 placeholder="github.com"
                 autoComplete="off"
@@ -179,14 +195,12 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
                 required
             />
             {siteError ? (
-                <p className="form-error" role="alert">
+                <p className={styles.problem} role="alert">
                     {siteError}
                 </p>
             ) : (
-                <p className="field-help">
-                    {site
-                        ? `Fills only on ${site}, matched exactly. A different subdomain is a different site.`
-                        : "The hostname where you type this code. Matched exactly, so www.example.com and example.com are not the same."}
+                <p className={styles.hint}>
+                    {site ? `Fills only on ${site}.` : "Matched exactly, so a different subdomain is a different site."}
                 </p>
             )}
 
@@ -201,15 +215,26 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
                 spellCheck={false}
                 required
             />
-            <p className="field-help create-target">{target || `<name>.${namespace}`}</p>
+            {existing ? (
+                <p className={styles.collision} role="alert">
+                    {existing.type === "totp"
+                        ? "An authenticator already lives at this name. Adding replaces it."
+                        : `Your ${named(existing)} lives at this name. Adding an authenticator here replaces it, and that value is gone from the current record.`}
+                </p>
+            ) : (
+                <p className={`field-help create-target ${styles.hint}`}>{target || `<name>.${namespace}`}</p>
+            )}
 
             <button
                 type="button"
-                className="text-button"
+                className={`text-button ${styles.disclosure} ${advanced ? styles.open : ""}`}
                 onClick={() => setAdvanced(!advanced)}
                 aria-expanded={advanced}
             >
-                {advanced ? "Hide options" : "Recovery"}
+                <span className={styles.caret} aria-hidden="true">
+                    ▶
+                </span>
+                Recovery options
             </button>
 
             <div hidden={!advanced}>
@@ -222,7 +247,7 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
                     autoCapitalize="none"
                     spellCheck={false}
                 />
-                <p className="field-help">
+                <p className={styles.hint}>
                     {ownRecovery === null
                         ? "Checking what can recover this vault…"
                         : ownRecovery
@@ -232,12 +257,16 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
             </div>
 
             <button className="button primary full-width" disabled={Boolean(step)}>
-                {step || "Add account"}
+                {step || "Store account"}
             </button>
 
             {conflict && (
                 <div className="form-error" role="alert">
-                    <p>An account already lives at this name. Replacing it puts a new seed under a new key.</p>
+                    <p>
+                        {existing
+                            ? `Replacing your ${named(existing)} puts a new seed under a new key.`
+                            : "Something already lives at this name. Replacing it puts a new seed under a new key."}
+                    </p>
                     <button type="button" className="button" onClick={() => void store(conflict, true)}>
                         Replace it
                     </button>
