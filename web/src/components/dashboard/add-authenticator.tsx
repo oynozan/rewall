@@ -10,7 +10,7 @@ import { useWorkspace } from "./dashboard-shell";
 import { useOwnRecovery } from "./create-secret";
 import styles from "./add-authenticator.module.css";
 
-type Entry = { uri: string; site: string; recovery: string };
+type Entry = { uri: string; site: string; recovery: string; target: string };
 type Decoded = { state: "empty" } | { state: "bad"; message: string } | { state: "ready"; account: OtpAccount };
 
 // The SDK's validation messages are already written for a reader, unlike an opaque chain failure
@@ -22,6 +22,22 @@ const slug = (value: string) =>
         .replace(/[^a-z0-9-]+/g, "-")
         .replace(/^-+|-+$/g, "");
 
+// Keeps a trailing dash while it is still being typed, so the field does not fight the keyboard
+const typing = (value: string) =>
+    value
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, "-")
+        .replace(/^-+/, "");
+
+// One issuer can hold several accounts, so the account name is what separates a second GitHub from the first
+function suggest(account: OtpAccount, taken: (label: string) => boolean): string {
+    const base = slug(account.issuer) || slug(account.label) || "authenticator";
+    if (!taken(base)) return base;
+
+    const specific = slug(`${account.issuer}-${account.label}`);
+    return specific && specific !== base && !taken(specific) ? specific : base;
+}
+
 const named = (secret: Secret) => TYPE_LABELS[secret.type as keyof typeof TYPE_LABELS] ?? secret.type;
 
 export function AddAuthenticator({ onDone }: { onDone: () => void }) {
@@ -30,6 +46,7 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
     const [uri, setUri] = useState("");
     const [decoded, setDecoded] = useState<Decoded>({ state: "empty" });
     const [label, setLabel] = useState("");
+    const [labelEdited, setLabelEdited] = useState(false);
     const [site, setSite] = useState("");
     const [siteError, setSiteError] = useState("");
     const [error, setError] = useState("");
@@ -38,7 +55,14 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
     const [conflict, setConflict] = useState<Entry | null>(null);
 
     const namespace = ownName ? `${NAMESPACE_LABEL}.${ownName}` : "";
-    const target = label ? `${label}.${namespace}` : "";
+    const taken = (name: string) => Boolean(vault?.secrets.some((secret) => secret.label === name));
+
+    // Derived during render rather than on paste, so a vault that arrives late still moves the suggestion
+    const shown = labelEdited ? label : decoded.state === "ready" ? suggest(decoded.account, taken) : "";
+
+    // What the field shows can still be mid-edit, so the name that gets written is the settled one
+    const settledLabel = slug(shown);
+    const target = settledLabel ? `${settledLabel}.${namespace}` : "";
     const ownRecovery = useOwnRecovery(ownName);
 
     // Every secret type shares one namespace, so an authenticator can land on an API key of the same name
@@ -51,9 +75,8 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
         if (!value.trim()) return setDecoded({ state: "empty" });
 
         try {
-            const account = describeOtpUri(value.trim());
-            setDecoded({ state: "ready", account });
-            if (!label) setLabel(slug(account.issuer || account.label || "authenticator"));
+            setDecoded({ state: "ready", account: describeOtpUri(value.trim()) });
+            setConflict(null);
         } catch (failure) {
             setDecoded({ state: "bad", message: reason(failure) });
         }
@@ -80,7 +103,9 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
         try {
             await write(async (client) => {
                 setStep("Waiting for your wallet…");
-                const hash = await client.create(target, new TextEncoder().encode(entry.uri), {
+
+                // The name the conflict was raised for, not whatever the field says by the time Replace it is pressed
+                const hash = await client.create(entry.target, new TextEncoder().encode(entry.uri), {
                     type: "totp",
                     site: entry.site,
                     recovery: [entry.recovery],
@@ -127,6 +152,7 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
             uri: uri.trim(),
             site: settled,
             recovery: typed || (ownRecovery ? guardianRecoveryEntry(ownName) : ""),
+            target,
         };
 
         if (!entry.recovery) {
@@ -207,8 +233,12 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
             <label htmlFor="otp-label">Name</label>
             <input
                 id="otp-label"
-                value={label}
-                onChange={(event) => setLabel(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                value={shown}
+                onChange={(event) => {
+                    setLabelEdited(true);
+                    setConflict(null);
+                    setLabel(typing(event.target.value));
+                }}
                 placeholder="github"
                 autoComplete="off"
                 autoCapitalize="none"
@@ -218,7 +248,7 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
             {existing ? (
                 <p className={styles.collision} role="alert">
                     {existing.type === "totp"
-                        ? "An authenticator already lives at this name. Adding replaces it."
+                        ? "Another authenticator already lives at this name. Replacing it loses that seed, and most sites will not show the setup key again without resetting 2FA."
                         : `Your ${named(existing)} lives at this name. Adding an authenticator here replaces it, and that value is gone from the current record.`}
                 </p>
             ) : (
@@ -264,8 +294,13 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
                 <div className="form-error" role="alert">
                     <p>
                         {existing
-                            ? `Replacing your ${named(existing)} puts a new seed under a new key.`
-                            : "Something already lives at this name. Replacing it puts a new seed under a new key."}
+                            ? `Replacing your ${named(existing)} at ${conflict.target} puts a new seed under a new key.`
+                            : `Something already lives at ${conflict.target}. Replacing it puts a new seed under a new key.`}
+                    </p>
+                    <p className="field-help">
+                        {existing?.type === "totp"
+                            ? "The old setup key stays readable in chain history, so reset 2FA at the site rather than treating this as deleting it."
+                            : "The old value stays readable in chain history by anyone ever granted it. Rotate the real credential too."}
                     </p>
                     <button type="button" className="button" onClick={() => void store(conflict, true)}>
                         Replace it

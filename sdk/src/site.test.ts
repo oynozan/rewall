@@ -85,3 +85,45 @@ test("an empty or single label is refused", () => {
     rejects("github");
     rejects("localhost");
 });
+
+/* Messages, which a form renders straight into the page */
+
+test("no message echoes the input, so a pasted override cannot rewrite what the form displays", () => {
+    const hostile = ["\u202egnv.example.com", "\u0000evil.com", "a".repeat(300) + ".com", "not a hostname"];
+    for (const input of hostile) {
+        let message = "";
+        try {
+            normalizeSite(input);
+        } catch (failure) {
+            message = (failure as Error).message;
+        }
+        assert.ok(message, `${JSON.stringify(input)} was accepted`);
+        assert.ok(!message.includes(input), `the message repeated ${JSON.stringify(input)} back`);
+    }
+});
+
+test("an IP literal is named as one rather than blamed for its colons", () => {
+    assert.throws(() => normalizeSite("[::1]"), /IP address/);
+    assert.throws(() => normalizeSite("https://[::1]"), /IP address/);
+    assert.throws(() => normalizeSite("1.2.3.4"), /IP address/);
+});
+
+/* Length, because a name past these cannot be reached in a browser */
+
+test("an over long name or label is refused", () => {
+    rejects(`${"a".repeat(64)}.com`);
+    rejects(`${Array.from({ length: 30 }, () => "a".repeat(9)).join(".")}.com`);
+    assert.equal(normalizeSite(`${"a".repeat(63)}.com`), `${"a".repeat(63)}.com`);
+});
+
+/* Only the authority is policed, since the rest is a path the parser drops */
+
+test("a space in the path is not a reason to refuse the hostname", () => {
+    assert.equal(normalizeSite("https://example.com/a b"), "example.com");
+    assert.equal(normalizeSite("https://example.com/login?next=a b#c"), "example.com");
+});
+
+test("a control character in the authority is refused like any other invisible", () => {
+    rejects(`example${String.fromCharCode(0)}.com`);
+    rejects(`exam${String.fromCharCode(31)}ple.com`);
+});
