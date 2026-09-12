@@ -56,6 +56,33 @@ Register it with an MCP client, for example `.mcp.json`:
 }
 ```
 
+## Hosting it, so nobody has to clone anything
+
+`pnpm run serve` speaks MCP over Streamable HTTP instead of stdio, and `mcp/Dockerfile` builds an
+image that carries the SDK with it.
+
+```bash
+docker build -f mcp/Dockerfile -t rewall-mcp .     # from the repo root, not from mcp/
+docker run -p 8787:8787 \
+  -e REWALL_NAME=your-name.eth \
+  -e REWALL_IDENTITY_SEED=... \
+  rewall-mcp
+```
+
+Put it behind TLS on a hostname and any MCP client can point at `https://<host>/mcp` with no install
+step. `GET /` answers with the vault it serves, so a person who opens the URL sees something useful.
+Check a deployment with `REWALL_MCP_URL=https://<host>/mcp pnpm run check:http`.
+
+**A hosted server shares one identity with everyone who connects.** It holds the seed that opens its
+vault, so every caller can use every secret granted to that name. That is the point for a public demo
+vault of throwaway credentials, and wrong for anything else. Two consequences:
+
+- `sign_with_secret` is **off** unless you set `REWALL_SIGNING=1`. A stranger signing transfers with
+  the vault owner's key is not a demo.
+- A shared budget of `REWALL_RPM` requests a minute sits on top of the per-secret limits.
+
+Point a public deployment at a vault whose secrets you would not mind a stranger using.
+
 ## Tools
 
 | Tool               | What the model gets back                                                       |

@@ -1,0 +1,25 @@
+# pnpm node_modules is a symlink farm into a local store, so copying it in yields broken links
+node_modules
+**/node_modules
+
+# Rebuilt inside the image
+**/dist
+**/.next
+**/out
+
+# Never let a key reach an image
+.env
+**/.env
+!**/.env.example
+
+# Not needed to run the server
+.git
+sandbox
+rail
+web
+extension
+examples
+tools
+ledger
+**/work
+**/artifacts

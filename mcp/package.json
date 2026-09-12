@@ -11,7 +11,9 @@
         "check:sign": "node --experimental-strip-types src/sign.ts",
         "seed": "node --env-file=.env seed.mjs",
         "format": "prettier --write .",
-        "format:check": "prettier --check ."
+        "format:check": "prettier --check .",
+        "serve": "node --env-file=.env --experimental-strip-types src/http.ts",
+        "check:http": "node check-http.mjs"
     },
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.30.0",
