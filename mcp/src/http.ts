@@ -15,11 +15,21 @@ import { assertSafeEnvironment, register, INSTRUCTIONS } from "./tools.ts";
 const PORT = Number(process.env.PORT || 8787);
 const PATH = process.env.REWALL_MCP_PATH || "/mcp";
 
+// Loopback by default so the vault is not reachable from the network, since every caller shares one
+// identity here. Set REWALL_MCP_HOST to 0.0.0.0 only behind an authenticating proxy
+const HOST = process.env.REWALL_MCP_HOST || "127.0.0.1";
+
 // Signing from a shared identity means a stranger spending the vault owner's key, so it stays off
 const SIGNING = process.env.REWALL_SIGNING === "1";
 
 // One shared budget on top of the per secret limits, because every caller is the same identity here
 const REQUESTS_PER_MINUTE = Number(process.env.REWALL_RPM || 120);
+
+// Named hosts stop a page in someone's browser rebinding a name to this server and driving it as them
+const ALLOWED_HOSTS = (process.env.REWALL_ALLOWED_HOSTS ?? "")
+    .split(",")
+    .map((host) => host.trim())
+    .filter(Boolean);
 const recent: number[] = [];
 
 function overBudget(): boolean {
@@ -40,10 +50,11 @@ async function main() {
     const vault: Vault = await openVault();
 
     const http = createServer(async (request, response) => {
-        const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+        // Split rather than parsed, because new URL throws on a caller controlled Host and stops the process
+        const path = (request.url ?? "/").split(/[?#]/)[0] || "/";
 
         // Something for a person who opens the URL in a browser and finds JSON-RPC
-        if (url.pathname === "/" || url.pathname === "/health") {
+        if (path === "/" || path === "/health") {
             return json(response, 200, {
                 name: "rewall",
                 vault: vault.name,
@@ -54,14 +65,19 @@ async function main() {
             });
         }
 
-        if (url.pathname !== PATH) return json(response, 404, { error: "not found" });
+        if (path !== PATH) return json(response, 404, { error: "not found" });
         if (overBudget()) return json(response, 429, { error: "too many requests, try again shortly" });
 
         // Stateless, so nothing is remembered between calls and any instance can answer any request
         const server = new McpServer({ name: "rewall", version: "0.1.0" }, { instructions: INSTRUCTIONS });
         register(server, vault, { signing: SIGNING });
 
-        const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+        const transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: undefined,
+            ...(ALLOWED_HOSTS.length
+                ? { allowedHosts: ALLOWED_HOSTS, enableDnsRebindingProtection: true }
+                : {}),
+        });
         response.on("close", () => {
             void transport.close();
             void server.close();
@@ -75,8 +91,8 @@ async function main() {
         }
     });
 
-    http.listen(PORT, () => {
-        process.stderr.write(`rewall mcp on :${PORT}${PATH}, vault ${vault.name} as ${vault.fingerprint}\n`);
+    http.listen(PORT, HOST, () => {
+        process.stderr.write(`rewall mcp on ${HOST}:${PORT}${PATH}, vault ${vault.name} as ${vault.fingerprint}\n`);
         process.stderr.write(`signing ${SIGNING ? "enabled" : "disabled"}, ${REQUESTS_PER_MINUTE} requests a minute\n`);
     });
 }
