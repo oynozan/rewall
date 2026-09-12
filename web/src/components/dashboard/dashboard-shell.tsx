@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { type EIP1193Provider } from "viem";
+import { createWalletClient, custom, type EIP1193Provider } from "viem";
 import { sepolia } from "viem/chains";
 import { PrivateDataProvider } from "./private-data";
 import { IdentityProvider, useIdentity } from "./identity";
@@ -17,11 +17,13 @@ import { CreateSecret } from "./create-secret";
 import { AddAuthenticator } from "./add-authenticator";
 import { ConnectGate } from "./connect-gate";
 import { AddSecret } from "./add-secret";
-import { ownsName, rememberName, resolveOwnName } from "@/src/lib/account";
+import { cachedName, ownsName, rememberName, resolveOwnName } from "@/src/lib/account";
+import { explain } from "@/src/lib/errors";
 import {
     ownerName,
     readSecret,
     readVault,
+    SEPOLIA,
     TYPE_LABELS,
     type Secret,
     type SecretType,
@@ -29,7 +31,7 @@ import {
 } from "@/src/lib/vault";
 import { FadeDots, FadeIn, SidebarFade } from "./amicro";
 import { Logo } from "./logo";
-import { CopyButton, Glyph, Icon, type IconName } from "./ui";
+import { CopyButton, Glyph, Icon, Skeleton, type IconName } from "./ui";
 
 type Panel =
     "vault" | "wallet" | "help" | "find" | "create" | "authenticator" | "send" | "fund" | "withdraw" | Secret | null;
@@ -43,6 +45,7 @@ type Workspace = {
     ownName: string;
     isOwnVault: boolean;
     claimName: (name: string) => Promise<boolean>;
+    adoptName: (name: string) => Promise<boolean>;
     panel: Panel;
     setPanel: (panel: Panel) => void;
     loadVault: (name: string) => Promise<boolean>;
@@ -61,6 +64,17 @@ export function useWorkspace() {
 /* Each sidebar row fades in one step later than the row above it */
 const step = (index: number) => ({ "--i": index }) as React.CSSProperties;
 
+// 4902 is a wallet saying it has never been told about the chain, and viem nests the error that carried it
+function lacksChain(failure: unknown) {
+    let step = failure as { code?: number; message?: string; cause?: unknown } | undefined;
+    for (let depth = 0; step && depth < 5; depth++) {
+        // A proxied provider drops the numeric code on the way out, so the text it arrived with counts too
+        if (step.code === 4902 || step.message?.includes("4902")) return true;
+        step = step.cause as typeof step;
+    }
+    return false;
+}
+
 export function DashboardShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const pageTitle = pathname.includes("/2fa")
@@ -78,12 +92,25 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     const [panel, setPanel] = useState<Panel>(null);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [resolvedName, setResolvedName] = useState<{ address: string; name: string } | null>(null);
+    // The address the registry has answered for, which is what separates a guess from a confirmed name
+    const [verified, setVerified] = useState("");
     const request = useRef(0);
+    // Bumped whenever a name is adopted, so a reverse lookup that answers later cannot undo that choice
+    const adopted = useRef(0);
 
-    const { ready, authenticated, login, logout } = usePrivy();
-    const { wallets } = useWallets();
+    const { ready: privyReady, authenticated, login, logout } = usePrivy();
+    const { wallets, ready: walletsSettled } = useWallets();
     const wallet = wallets[0];
-    const account = authenticated ? (wallet?.address ?? "") : "";
+    const [lastAddress, setLastAddress] = useState("");
+
+    // Privy empties its wallet list while it rebuilds it and reports ready false until the list can be trusted
+    if (wallet && wallet.address !== lastAddress) setLastAddress(wallet.address);
+    else if (!wallet && walletsSettled && lastAddress) setLastAddress("");
+
+    // Gated on the session rather than the list, so a logout clears the address on the same render
+    const account = authenticated ? lastAddress : "";
+    // Privy answers before its wallet list does, so a signed in reload has no address for a beat
+    const ready = privyReady && (!authenticated || walletsSettled);
     const walletLabel =
         wallet?.walletClientType === "privy" ? "Privy wallet" : (wallet?.meta?.name ?? wallet?.walletClientType ?? "");
     const loadVault = useCallback(async (input: string) => {
@@ -96,58 +123,101 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             if (current !== request.current) return false;
             setVault(result);
             return true;
-        } catch {
-            if (current === request.current)
-                setError("We couldn’t read this vault. Check the ENS name and your connection, then try again.");
+        } catch (failure) {
+            // The thrown reason is more specific than a guess at the name or the connection
+            if (current === request.current) setError(explain(failure));
             return false;
         } finally {
             if (current === request.current) setBusy(false);
         }
     }, []);
 
+    // Seeded during render rather than in an effect, so the remembered name is on screen in the first paint
+    if (account && resolvedName?.address !== account) setResolvedName({ address: account, name: cachedName(account) });
+
     // Tied to the address it was resolved for, so disconnecting drops it without a second render
     const ownName = resolvedName?.address === account ? resolvedName.name : "";
 
-    // Derived rather than set, because disconnecting is not an event, it just means there is nothing
-    // of theirs left to show, and the lookup is still running until its answer names this address
-    const vault = account ? loadedVault : null;
-    const resolving = Boolean(account) && resolvedName?.address !== account;
-    const busy = Boolean(account) && (resolving || (Boolean(ownName) && loading));
+    // Derived rather than set, so disconnecting and a name the registry took away both clear it on the same render
+    const vault = account && ownName ? loadedVault : null;
+    const resolving = Boolean(account) && verified !== account;
+    // Nothing is known until Privy has answered, so the page waits rather than claiming it is empty
+    const busy = !ready || (Boolean(account) && (ownName ? loading : resolving));
+    // A wallet with no remembered name has nothing to show yet, so the sidebar waits rather than denying it has one
+    const naming = !ready || (Boolean(account) && !ownName && resolving);
 
-    // A connected wallet opens its own vault and nobody else's, once the registry confirms the name is theirs
+    // Started off a microtask so the read marks itself busy after this render commits rather than during it
     useEffect(() => {
+        if (!ownName) return;
         let active = true;
-        if (!account) return;
-
-        void resolveOwnName(account).then((found) => {
-            if (!active) return;
-            setResolvedName({ address: account, name: found });
-            if (found) void loadVault(found);
+        void Promise.resolve().then(() => {
+            if (active) void loadVault(ownName);
         });
         return () => {
             active = false;
         };
-    }, [account, loadVault]);
+    }, [ownName, loadVault]);
 
-    const claimName = useCallback(
+    // The registry has the last word, and a name it hands to somebody else is dropped on the spot
+    useEffect(() => {
+        let active = true;
+        if (!account) return;
+
+        const since = adopted.current;
+        void resolveOwnName(account).then((found) => {
+            // A name adopted while this read was out is the newer answer, so the read is dropped
+            if (!active || adopted.current !== since) return;
+            setResolvedName({ address: account, name: found });
+            setVerified(account);
+        });
+        return () => {
+            active = false;
+        };
+    }, [account]);
+
+    // The registry can lag a registration by a few blocks, so a name this wallet was just handed is taken
+    // on trust and dropped on the next load by resolveOwnName if the registry names somebody else
+    const adoptName = useCallback(
         async (input: string) => {
             const name = ownerName(input);
-            if (!(await ownsName(name, account))) return false;
+            adopted.current++;
             rememberName(account, name);
             setResolvedName({ address: account, name });
+            setVerified(account);
             await loadVault(name);
             return true;
         },
         [account, loadVault],
     );
 
+    const claimName = useCallback(
+        async (input: string) => {
+            const name = ownerName(input);
+            if (!(await ownsName(name, account))) return false;
+            return adoptName(name);
+        },
+        [account, adoptName],
+    );
+
     // Privy hands the provider over asynchronously, so the identity session asks for it when it needs it
-    // Its login time switch has no add chain fallback, so a wallet without Sepolia arrives still on its old one
-    // switchChain adds the chain first, and Privy's own note is that a provider taken before it keeps the old id
+    // Signing against a domain the wallet is not on costs a CHAIN_ID_MISMATCH, so the wallet itself is asked
+    // Privy's own switchChain returns early off its cached id, which a user moving the wallet leaves stale
     const getProvider = useCallback(async () => {
         if (!wallet) return null;
-        if (wallet.chainId !== `eip155:${sepolia.id}`) await wallet.switchChain(sepolia.id);
-        return (await wallet.getEthereumProvider()) as EIP1193Provider;
+        const provider = (await wallet.getEthereumProvider()) as EIP1193Provider;
+        const live = await provider.request({ method: "eth_chainId" });
+        if (Number(live) === sepolia.id) return provider;
+
+        const client = createWalletClient({ transport: custom(provider) });
+        try {
+            await client.switchChain({ id: sepolia.id });
+        } catch (failure) {
+            // Privy only adds the chain when someone logs in, so a returning session has to add it itself
+            if (!lacksChain(failure)) throw failure;
+            await client.addChain({ chain: SEPOLIA });
+            await client.switchChain({ id: sepolia.id });
+        }
+        return provider;
     }, [wallet]);
 
     const isOwnVault = Boolean(ownName) && vault?.owner === ownName;
@@ -162,6 +232,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         ownName,
         isOwnVault,
         claimName,
+        adoptName,
         panel,
         setPanel,
         loadVault,
@@ -253,6 +324,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                                 </div>
                                 <button
                                     className="sidebar-control sidebar-vault"
+                                    aria-label={!ownName && naming ? "Your vault" : undefined}
                                     id="tour-vault"
                                     style={step(10)}
                                     onClick={() => setPanel("vault")}
@@ -261,8 +333,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                                         <Icon name="lock" size={18} />
                                     </span>
                                     <span className="sidebar-control-label">
-                                        <strong className={ownName ? "mono" : ""}>{ownName || "No vault yet"}</strong>
-                                        {!ownName && <small>Set one up</small>}
+                                        <strong className={ownName ? "mono" : ""}>
+                                            {ownName || (naming ? <Skeleton width={104} /> : "No vault yet")}
+                                        </strong>
+                                        {!ownName && !naming && <small>Set one up</small>}
                                     </span>
                                     <span className="wallet-chevron">
                                         <Glyph name="chevron_right" size={18} />
@@ -270,6 +344,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                                 </button>
                                 <button
                                     className="sidebar-control sidebar-account"
+                                    aria-label={ready ? undefined : "Your wallet"}
                                     style={step(11)}
                                     onClick={() => setPanel("wallet")}
                                 >
@@ -278,11 +353,25 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                                     </span>
                                     <span>
                                         <strong className={account ? "mono" : ""}>
-                                            {account ? `${account.slice(0, 6)}…${account.slice(-4)}` : "Not connected"}
+                                            {!ready ? (
+                                                <Skeleton width={96} />
+                                            ) : account ? (
+                                                `${account.slice(0, 6)}…${account.slice(-4)}`
+                                            ) : (
+                                                "Not connected"
+                                            )}
                                         </strong>
-                                        <small>{account ? walletLabel || "Connected" : "Connect wallet"}</small>
+                                        <small>
+                                            {!ready ? (
+                                                <Skeleton width={64} height={9} />
+                                            ) : account ? (
+                                                walletLabel || "Connected"
+                                            ) : (
+                                                "Connect wallet"
+                                            )}
+                                        </small>
                                     </span>
-                                    {!account && (
+                                    {ready && !account && (
                                         <span className="wallet-chevron">
                                             <Glyph name="chevron_right" size={18} />
                                         </span>
@@ -330,8 +419,8 @@ const TITLES: Record<string, string> = {
     find: "Find a secret",
     create: "Store a secret",
     authenticator: "Add an authenticator",
-    send: "Send privately",
-    fund: "Add funds",
+    send: "Send confidential transfer",
+    fund: "Deposit",
     withdraw: "Take funds out",
 };
 
@@ -340,7 +429,6 @@ function WorkspacePanel() {
         panel,
         setPanel,
         vault,
-        loadVault,
         busy,
         error,
         account,
@@ -430,17 +518,13 @@ function WorkspacePanel() {
             setLocalError("Enter a complete ENS name ending in .eth.");
             return;
         }
-        if (panel === "vault") {
-            if (await loadVault(input)) close();
-        } else {
-            setWorking(true);
-            try {
-                setPanel(await readSecret(input));
-            } catch {
-                setLocalError("We couldn’t find a Rewall secret at that name. Check the name and try again.");
-            } finally {
-                setWorking(false);
-            }
+        setWorking(true);
+        try {
+            setPanel(await readSecret(input));
+        } catch {
+            setLocalError("We couldn’t find a Rewall secret at that name. Check the name and try again.");
+        } finally {
+            setWorking(false);
         }
     }
 
@@ -525,26 +609,29 @@ function WorkspacePanel() {
                                         >
                                             Set up a new vault
                                         </Link>
-                                        <form onSubmit={claim} className="panel-form claim-form">
-                                            <label htmlFor="own-name">Or name one you already own</label>
-                                            <input
-                                                id="own-name"
-                                                name="own"
-                                                placeholder="name.eth"
-                                                autoComplete="off"
-                                                autoCapitalize="none"
-                                                spellCheck={false}
-                                                required
-                                            />
-                                            <button className="button" disabled={claiming}>
-                                                {claiming ? "Checking the registry…" : "This one is mine"}
-                                            </button>
-                                            <p className="field-help">
-                                                Checked against the registry, so a name you do not hold will be refused.
-                                            </p>
-                                        </form>
                                     </>
                                 )}
+                                {/* A wallet can hold more than one name, so the vault it reads from is switchable */}
+                                <form onSubmit={claim} className="panel-form claim-form">
+                                    <label htmlFor="own-name">
+                                        {ownName ? "Switch to another name you own" : "Or name one you already own"}
+                                    </label>
+                                    <input
+                                        id="own-name"
+                                        name="own"
+                                        placeholder="name.eth"
+                                        autoComplete="off"
+                                        autoCapitalize="none"
+                                        spellCheck={false}
+                                        required
+                                    />
+                                    <button className="button" disabled={claiming}>
+                                        {claiming ? "Checking the registry…" : "This one is mine"}
+                                    </button>
+                                    <p className="field-help">
+                                        Checked against the registry, so a name you do not hold will be refused.
+                                    </p>
+                                </form>
                             </>
                         )}
                         {panel === "create" && <CreateSecret onDone={close} />}
@@ -592,7 +679,8 @@ function WorkspacePanel() {
                                                 className="button primary full-width"
                                                 onClick={() => {
                                                     setPanel(null);
-                                                    void identity.unlock();
+                                                    // The reason is rendered from the session below, so it is caught and dropped here
+                                                    void identity.unlock().catch(() => {});
                                                 }}
                                                 disabled={identity.unlocking}
                                             >

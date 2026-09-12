@@ -40,6 +40,9 @@ export type Vault = { owner: string; namespace: string; identityPublished: boole
 
 export const RPC_URL = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
 
+// viem's own Sepolia points at a third party endpoint, and both Privy and a wallet keep whatever they are handed
+export const SEPOLIA = { ...sepolia, rpcUrls: { default: { http: [RPC_URL] as readonly string[] } } };
+
 export const vaultClient = createPublicClient({
     chain: sepolia,
     // Batched because a single rotation read fans out to more than a dozen concurrent eth_calls
@@ -127,6 +130,8 @@ export async function readVault(input: string): Promise<Vault> {
     if (labels.length > 128)
         throw new Error("This vault is too large for the current viewer. Open an individual secret by its ENS name.");
     if (labels.some((label) => label.includes("."))) throw new Error("This vault contains an invalid secret index.");
-    const secrets = await Promise.all(labels.map((label) => readSecret(`${label}.${namespace}`)));
+    // One label that does not resolve yet must not blank out the whole vault
+    const read = await Promise.allSettled(labels.map((label) => readSecret(`${label}.${namespace}`)));
+    const secrets = read.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
     return { owner, namespace, identityPublished: Boolean(identity[RECORD.pubkey]), secrets };
 }
