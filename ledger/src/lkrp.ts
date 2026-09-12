@@ -75,8 +75,24 @@ const screenText = () =>
 // The bare action is the choice, the question above it is only a prompt
 const CONFIRM = /^(connect|approve|confirm|allow|turn on sync)$/i;
 
+// Set LEDGER_MANUAL=1 to press the buttons yourself at the Speculos web interface
+const MANUAL = process.env.LEDGER_MANUAL === "1";
+
+// The device emits Pending more than once per prompt, so the same line would otherwise repeat
+let lastSaid = "";
+const sayOnce = (message: string, onApprove: (screen: string) => void) => {
+    if (message === lastSaid) return;
+    lastSaid = message;
+    onApprove(message);
+};
+
 // Stands in for the human, which is the one thing an emulator cannot supply
 async function confirmOnDevice(onApprove: (screen: string) => void) {
+    if (MANUAL) {
+        sayOnce(`press the buttons yourself at ${SPECULOS_URL}, right to scroll and both to approve`, onApprove);
+        return;
+    }
+
     for (let step = 0; step < 12; step++) {
         await new Promise((resolve) => setTimeout(resolve, 600));
         const screen = (await screenText()).trim();

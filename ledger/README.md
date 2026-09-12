@@ -36,6 +36,17 @@ pnpm run agent          # agent reads the member off chain and uses the ring
 image, boots Speculos and waits until the screen reads ready. Each step is skipped when its output
 already exists, so the first run takes a couple of minutes and later ones take seconds.
 
+**Open <http://localhost:5000> while it runs.** Speculos serves the device itself, screen and
+buttons, so you can watch the approval arrive and press it. By default `enroll` presses for you, so
+the run is unattended. To approve by hand, which is the honest version and the one worth filming:
+
+```bash
+LEDGER_MANUAL=1 pnpm run enroll
+```
+
+It then waits on each prompt until you press. Right scrolls, both buttons approve. The two screens
+are `Connect to Ledger Sync?` → **Connect**, and `Turn on sync for Ledger Wallet?` → **Turn On sync**.
+
 `enroll` mints one member keypair for one agent, has the device approve it, then writes
 `ledger-ring.rewall.<owner>` granted to the agent's name. `agent` reads that secret with its Rewall
 identity, rebuilds the member, and authenticates with `trustchainId` and no session, which is the

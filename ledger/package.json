@@ -5,11 +5,11 @@
     "packageManager": "pnpm@9.12.2",
     "scripts": {
         "speculos": "node speculos.mjs",
+        "speculos:stop": "docker rm -f speculos",
         "enroll": "node --env-file=../tools/.env --experimental-strip-types src/enroll.ts",
         "agent": "node --env-file=../tools/.env --experimental-strip-types src/agent.ts",
         "format": "prettier --write .",
-        "format:check": "prettier --check .",
-        "speculos:stop": "docker rm -f speculos"
+        "format:check": "prettier --check ."
     },
     "dependencies": {
         "@ledgerhq/device-management-kit": "^1.9.0",
