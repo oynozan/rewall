@@ -20,17 +20,21 @@ copy.
 
 ## Running it
 
+Needs Docker running and `REWALL_TEST_MNEMONIC` in `tools/.env`.
+
 ```bash
 cd ../sdk && pnpm run build
 cd ../ledger && pnpm install
 
-# Build the real Ledger Sync app and run it in the emulator, see "no hardware" below
-pnpm run speculos
-
-pnpm run enroll     # owner, device approves, member sealed to the agent's name on chain
-docker stop speculos
-pnpm run agent      # agent, no device reachable, reads the member and uses the ring
+pnpm run speculos       # clones app-ledger-sync, builds it, starts the emulator
+pnpm run enroll         # owner, device approves, member sealed to the agent's name on chain
+pnpm run speculos:stop  # there is now no device anywhere
+pnpm run agent          # agent reads the member off chain and uses the ring
 ```
+
+`pnpm run speculos` goes from nothing to a running device. It clones the app, builds it in Ledger's
+image, boots Speculos and waits until the screen reads ready. Each step is skipped when its output
+already exists, so the first run takes a couple of minutes and later ones take seconds.
 
 `enroll` mints one member keypair for one agent, has the device approve it, then writes
 `ledger-ring.rewall.<owner>` granted to the agent's name. `agent` reads that secret with its Rewall
