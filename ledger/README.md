@@ -77,23 +77,8 @@ remembering where it was put.
 A compromised agent still loses the ring access it holds. Hardware does not fix host compromise. It
 fixes onboarding, which is where the ceremony was missing.
 
-## Rough edges found while building this
+## Rough edges
 
-Kept here because the hackathon asks for developer experience feedback and these cost real time.
-
-- **`wallet-cli` cannot reach Speculos.** Its binary carries `SPECULOS_API_PORT`, `SPECULOS_DEVICE`,
-  `COINAPPS` and `SEED` from bundled `live-env`, so they look like configuration, but the transport
-  it ships is WebUSB and nothing consults them. `DEVICE_PROXY_URL`, documented as "enable a proxy to
-  use instead of a physical device", is also ignored. The emulator-capable CLI is a different,
-  internal one that has no `ring` command.
-- **Only `OWNER` permissions enrol.** `Permissions.CAN_ENCRYPT` and `CAN_ENCRYPT | CAN_ADD_BLOCK`
-  both fail with `Security issue with bad state` after the first approval. Least privilege is in the
-  enum but not reachable on this path, so an agent has to be given the whole ring.
-- **The DMK ESM build does not run under Node.** `@ledgerhq/device-management-kit` resolves a
-  directory import, `lib/esm/src`, which Node's ESM resolver refuses, so it works only behind a
-  bundler even though the docs show a Node CLI. Everything here imports the CJS entry instead.
-- **`@ledgerhq/device-trusted-app-kit-ledger-keyring-protocol` ships an empty README.** "How it
-  works", "Initialisation", "Use Cases" and "Example" are all present as headings with no content,
-  and npm returns 403 to unauthenticated fetches, so the type definitions are the only documentation.
-- **Nothing points at staging.** The production 401 does not mention that `LKRPEnv.STAGING` exists or
-  that a self-built app needs it, and the staging host appears only in the bundle.
+Five of them cost real time, and two shaped the design above: only `OWNER` permissions enrol, and
+there is no call that adds another member's public key. Written up with versions, reproductions and
+suggested fixes in [DX.md](DX.md).
