@@ -74,9 +74,7 @@ async function main() {
 
         const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: undefined,
-            ...(ALLOWED_HOSTS.length
-                ? { allowedHosts: ALLOWED_HOSTS, enableDnsRebindingProtection: true }
-                : {}),
+            ...(ALLOWED_HOSTS.length ? { allowedHosts: ALLOWED_HOSTS, enableDnsRebindingProtection: true } : {}),
         });
         response.on("close", () => {
             void transport.close();

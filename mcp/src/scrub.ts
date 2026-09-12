@@ -22,7 +22,10 @@ export function needlesFor(secret: Uint8Array): string[] {
         raw,
         encodeURIComponent(raw),
         JSON.stringify(raw).slice(1, -1),
+        // JSON may escape a forward slash as \/, which the stringify above does not produce
+        raw.replace(/\//g, "\\/"),
         base64,
+        base64.replace(/\//g, "\\/"),
         base64.replace(/=+$/, ""),
         base64.replace(/\+/g, "-").replace(/\//g, "_"),
         base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
@@ -88,6 +91,14 @@ if (process.argv[1]?.endsWith("scrub.ts")) {
 
     // A short value is not used as a needle, or every response would come back shredded
     strictEqual(needlesFor(new TextEncoder().encode("abc")).includes("abc"), false);
+
+    // A value with a forward slash, escaped as \/ the way JSON is allowed to, is still caught
+    const slashy = new TextEncoder().encode("path/to/secret/value");
+    const slashNeedles = needlesFor(slashy);
+    ok(
+        !scrub("here is path\\/to\\/secret\\/value inline", slashNeedles).text.includes("path\\/to"),
+        "json slash escape",
+    );
 
     console.log("scrub.ts ok");
 }

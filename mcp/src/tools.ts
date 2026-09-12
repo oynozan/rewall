@@ -55,6 +55,14 @@ refused is the feature working.`;
 const say = (text: string) => ({ content: [{ type: "text" as const, text }] });
 const fail = (text: string) => ({ content: [{ type: "text" as const, text }], isError: true });
 
+// A private key or a BIP39 phrase must never leave as a bearer token whatever the unsigned type record says
+function looksLikeKeyMaterial(value: string): boolean {
+    const trimmed = value.trim();
+    if (/^0x[0-9a-fA-F]{64}$/.test(trimmed)) return true;
+    const words = trimmed.split(/\s+/);
+    return [12, 15, 18, 21, 24].includes(words.length) && words.every((word) => /^[a-z]{3,8}$/.test(word));
+}
+
 /* Guards that run once, before the server accepts anything */
 
 export function assertSafeEnvironment() {
@@ -119,6 +127,8 @@ export function register(server: McpServer, vault: Vault, options: { signing?: b
             },
         },
         async ({ secret, url, method, body }) => {
+            // Declared out here so the catch can scrub a message that quoted the secret
+            let needles: string[] = [];
             try {
                 rateLimit(secret);
                 if ((redactions.get(secret) ?? 0) >= REDACTION_LIMIT) {
@@ -136,22 +146,37 @@ export function register(server: McpServer, vault: Vault, options: { signing?: b
                 const value = await vault.rewall.get(meta.name);
                 // Built before the wipe, or the needles would be derived from zeroed bytes and
                 // every redaction below would silently match nothing
-                const needles = needlesFor(value);
+                needles = needlesFor(value);
 
                 let response: Response;
                 try {
                     // ponytail: bearer only, placement is deliberately not model controlled, a per
                     // secret placement policy goes here when a demo needs a header other than this
                     const text = new TextDecoder().decode(value);
-                    response = await fetch(url, {
-                        method,
-                        redirect: "manual",
-                        headers: {
-                            authorization: `Bearer ${text}`,
-                            ...(body ? { "content-type": "application/json" } : {}),
-                        },
-                        body,
-                    });
+
+                    // rewall.type is unsigned, so the bytes refuse to travel whatever the record claims
+                    if (looksLikeKeyMaterial(text)) {
+                        return fail(
+                            `${secret} holds what looks like a private key or seed and is never sent over HTTP`,
+                        );
+                    }
+
+                    let response2: Response;
+                    try {
+                        response2 = await fetch(url, {
+                            method,
+                            redirect: "manual",
+                            headers: {
+                                authorization: `Bearer ${text}`,
+                                ...(body ? { "content-type": "application/json" } : {}),
+                            },
+                            body,
+                        });
+                    } catch {
+                        // The failure can quote the secret, an invalid header value does, so nothing is returned
+                        return fail(`the request to ${host} could not be sent`);
+                    }
+                    response = response2;
                 } finally {
                     await wipe(value);
                 }
@@ -182,7 +207,8 @@ export function register(server: McpServer, vault: Vault, options: { signing?: b
                 return say(`${response.status} from ${host}\n\n${cleaned.text}${alarm}`);
             } catch (error) {
                 if (error instanceof HostRefused) return fail(error.message);
-                return fail((error as Error).message);
+                // Scrubbed, because a thrown message can quote the secret and this is the last exit
+                return fail(scrub((error as Error).message, needles).text);
             }
         },
     );
