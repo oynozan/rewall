@@ -29,6 +29,12 @@ const seen = [];
 try {
     /* The surface */
 
+    // An assistant that has never heard of Rewall gets this on connect, before it sees a tool
+    const instructions = client.getInstructions() ?? "";
+    assert.ok(instructions.includes("without ever seeing them"), "the server explains itself to a fresh client");
+    assert.ok(/never ask the user to paste the secret/i.test(instructions), "and says what not to do when refused");
+    pass(`server ships ${instructions.split("\n").length} lines of instructions to any client`);
+
     const { tools } = await client.listTools();
     const names = tools.map((tool) => tool.name).sort();
     assert.deepStrictEqual(names, ["http_with_secret", "list_secrets", "otp_code", "sign_with_secret"]);

@@ -29,6 +29,30 @@ const READABLE_TYPES = ["application/json", "text/plain", "text/html", "applicat
 // Sending a key nobody can use is pointless, and these two are never bearer credentials
 const NEVER_OVER_HTTP = ["privkey", "totp", "seed"];
 
+// Sent to every client on initialize, so an assistant that has never heard of Rewall still knows
+// what these tools are for and, more importantly, what not to do when one refuses
+const INSTRUCTIONS = `Rewall holds this user's credentials. You can use them without ever seeing them.
+
+Each secret lives under an ENS name the user owns and is encrypted so that only key holders can read
+it. This server decrypts inside its own process, uses the value, and returns a result with the value
+removed. You will never receive a password, API key, private key or seed, and you should not try to
+obtain one.
+
+Start with list_secrets to see what exists. It returns labels, types and each secret's allowed hosts,
+never values. Then:
+
+- http_with_secret sends an HTTPS request with a secret attached as a bearer token and returns the
+  response redacted. Use it whenever the user asks you to call an API they have a key for.
+- otp_code returns a current two factor code for a totp secret.
+- sign_with_secret signs an ERC-20 transfer with a key the user holds, inside a policy that names the
+  allowed token, recipients and a cap. It returns an unbroadcast signed transaction.
+
+Refusals are policy, not failures. A secret can only reach hosts its owner listed, only be used
+through the tool matching its type, and only sign within its policy. If a call is refused, tell the
+user plainly what the policy says and stop. Do not retry against a different host, do not look for
+another route to the same value, and never ask the user to paste the secret to you instead. Being
+refused is the feature working.`;
+
 const say = (text: string) => ({ content: [{ type: "text" as const, text }] });
 const fail = (text: string) => ({ content: [{ type: "text" as const, text }], isError: true });
 
@@ -274,7 +298,7 @@ async function main() {
     assertSafeEnvironment();
     const vault = await openVault();
 
-    const server = new McpServer({ name: "rewall", version: "0.1.0" });
+    const server = new McpServer({ name: "rewall", version: "0.1.0" }, { instructions: INSTRUCTIONS });
     register(server, vault);
 
     // stdout is the JSON-RPC channel, so every human readable line goes to stderr
