@@ -186,41 +186,91 @@ quietly.
 ## The hosted server
 
 A public server runs at `https://mcp.rewall.me/mcp` over Streamable HTTP, which is MCP carried over
-ordinary web requests. A client such as Claude Code adds it with this `.mcp.json` entry and no
-install step.
+ordinary web requests. It holds no vault of its own. Every caller brings the identity their own agent
+was granted, in two headers, and the process keeps none of them. A request builds a vault, answers,
+and drops it, so it serves your vault and someone else's at the same time without either seeing the
+other.
 
 ```json
 {
     "mcpServers": {
         "rewall": {
             "type": "http",
-            "url": "https://mcp.rewall.me/mcp"
+            "url": "https://mcp.rewall.me/mcp",
+            "headers": { "X-Rewall-Vault": "alice.eth", "X-Rewall-Seed": "the agent's seed" }
         }
     }
 }
 ```
 
-A hosted server shares one identity with everyone who connects. It holds the seed that opens its
-vault, so every caller can use every secret granted to that name. That is fine for a demo vault of
-throwaway credentials and wrong for anything else. So a public deployment should serve only a vault
-of throwaway credentials, and `sign_with_secret` is off unless the operator sets `REWALL_SIGNING=1`.
-A shared budget of `REWALL_RPM` requests a minute, 120 by default, sits on top of the per-secret
-limits.
+## Why that seed is not your wallet key
 
-To host your own, `pnpm run serve` starts the HTTP entry point in `mcp/src/http.ts`, and
-`mcp/Dockerfile` builds an image that carries the SDK with it. Build from the repo root, not from
-`mcp/`.
+This is the part worth being careful about. Your wallet identity reads every secret ever shared with
+you, and no rotation can take that back, so it must never leave your machine. An agent identity is a
+separate key with an ENS name of its own. It reads only what you granted that one name, and you take
+it back by rotating those secrets.
+
+`pnpm run agent alice.eth ci` mints one. It needs the wallet that owns the vault, so it runs where
+that wallet is, never on the agent's machine. It publishes `ci.alice.eth` with a fresh key and writes
+the client config to a file rather than printing the seed to a terminal. Then grant that name what it
+needs:
+
+```ts
+await rewall.grant("openai.rewall.alice.eth", "ci.alice.eth");
+```
+
+```mermaid
+flowchart LR
+    wallet[Your wallet] -->|publishes a key for| agent[ci.alice.eth]
+    wallet -->|grants a secret to| agent
+    agent -->|seed in a header| server[mcp.rewall.me]
+    server -->|result, value removed| model[Your assistant]
+```
+
+A seed does sit in the server's memory for the length of a request, so whoever runs that server could
+read the secrets granted to that agent. That is the trade for installing nothing, and it is why the
+credential is scoped to one agent and revocable. Grant an agent only what it needs. If you will not
+take that trade, run the same process yourself, which is the next section.
+
+Two more limits on a shared instance. `sign_with_secret` is never offered to a caller who brought
+their own identity, because signing is bounded by a policy file naming the tokens, recipients and cap
+for each secret, and that file belongs to the deployment rather than the caller. It is offered when
+you run the server yourself, where the same person owns the policy and the key. And requests are
+counted both per identity and per peer address, so neither a busy agent nor one minting fresh
+identities can spend another's budget.
+
+## Running your own
+
+Set `REWALL_NAME` and `REWALL_IDENTITY_SEED` and the server uses that one identity for callers who
+send no headers. Then the key never leaves your machine. `pnpm run serve` starts the HTTP entry point
+in `mcp/src/http.ts`, and `mcp/Dockerfile` builds an image that carries the SDK with it. Build from
+the repo root, not from `mcp/`.
 
 ```bash
 docker build -f mcp/Dockerfile -t rewall-mcp .
-docker run -p 8787:8787 -e REWALL_MCP_HOST=0.0.0.0 -e REWALL_NAME=your-name.eth -e REWALL_IDENTITY_SEED=... rewall-mcp
+docker run -p 127.0.0.1:8787:8787 -e REWALL_MCP_HOST=0.0.0.0 -e REWALL_NAME=your-name.eth -e REWALL_IDENTITY_SEED=... rewall-mcp
 ```
 
-It listens on `127.0.0.1` unless `REWALL_MCP_HOST` says otherwise. Inside a container the published
-port reaches nothing until that is `0.0.0.0`, which is why the command above sets it. Do that only
-behind TLS and an authenticating proxy. Opening the root URL in a browser returns the vault it
-serves, its fingerprint and whether signing is on. Check a deployment with
-`REWALL_MCP_URL=https://<host>/mcp pnpm run check:http`.
+The server binds `127.0.0.1` unless `REWALL_MCP_HOST` says otherwise, which is what you want behind a
+proxy. Inside a container the published port reaches nothing until that is `0.0.0.0`, which is why
+the command above sets it while still publishing only to the host's loopback.
+
+`mcp/nginx.conf` is a working reverse proxy for a public deployment. Two of its settings are not
+optional. `X-Forwarded-Proto` is how the server knows a request arrived over TLS, and it refuses
+every credential sent without it, so a seed can never cross a plain connection. Turning off
+`proxy_buffering` is what lets a streamed response reach the client as it is written.
+
+Opening the root URL in a browser says what the server is and which headers it wants. Check a
+deployment two ways:
+
+```bash
+REWALL_MCP_URL=https://mcp.rewall.me/mcp pnpm run check:tenants
+REWALL_MCP_URL=https://mcp.rewall.me/mcp pnpm run check:http
+```
+
+The first connects twice with two different identities and asserts each is answered with its own
+vault, that neither is told the other's fingerprint, and that a missing or malformed credential is
+refused. The second exercises the tools themselves.
 
 ## Not built yet
 

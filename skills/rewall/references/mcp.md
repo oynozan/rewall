@@ -84,10 +84,24 @@ Hosted, over Streamable HTTP. `pnpm run serve` speaks it, and `mcp/Dockerfile` b
 that carries the SDK. The public one answers at `https://mcp.rewall.me/mcp`:
 
 ```json
-{ "mcpServers": { "rewall": { "type": "http", "url": "https://mcp.rewall.me/mcp" } } }
+{
+    "mcpServers": {
+        "rewall": {
+            "type": "http",
+            "url": "https://mcp.rewall.me/mcp",
+            "headers": { "X-Rewall-Vault": "alice.eth", "X-Rewall-Seed": "the agent's seed" }
+        }
+    }
+}
 ```
 
-A hosted server shares one identity with everyone who connects, so it serves a demo vault of
-throwaway credentials. `sign_with_secret` is off there unless `REWALL_SIGNING=1`. Point your own
-deployment at a vault whose secrets you would not mind a stranger using, or run it for one agent
-with that agent's own seed.
+A hosted server holds no vault of its own. Every caller brings the identity their own agent was
+granted and the process keeps none of them, so one instance serves many vaults without either seeing
+the other. The seed must be an agent identity, minted with `pnpm run agent <vault.eth> <label>`, and
+never a wallet derived one, which reads every secret ever shared with that wallet and cannot be
+revoked. A seed is refused unless the request arrived over TLS.
+
+Whoever runs a hosted instance can see a seed while it answers, which is the trade for installing
+nothing, so grant an agent only what it needs. Running the same process yourself with `REWALL_NAME`
+and `REWALL_IDENTITY_SEED` keeps the key on your own machine. `sign_with_secret` is off on a shared
+instance unless `REWALL_SIGNING=1`, because its policy file is per deployment rather than per caller.

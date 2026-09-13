@@ -99,15 +99,28 @@ name. The agent runs the MCP server with its own identity and the model calls to
 | `otp_code`         | Six digits and the seconds left, from a `totp` secret.               |
 | `sign_with_secret` | A signed ERC-20 transfer, unbroadcast, inside a policy.              |
 
-Add the hosted server to Claude Code with this `.mcp.json` entry:
+Add the hosted server to Claude Code with this `.mcp.json` entry, where the seed belongs to an agent
+identity the user minted, never to their wallet:
 
 ```json
-{ "mcpServers": { "rewall": { "type": "http", "url": "https://mcp.rewall.me/mcp" } } }
+{
+    "mcpServers": {
+        "rewall": {
+            "type": "http",
+            "url": "https://mcp.rewall.me/mcp",
+            "headers": { "X-Rewall-Vault": "alice.eth", "X-Rewall-Seed": "the agent's seed" }
+        }
+    }
+}
 ```
 
-The hosted server holds one demo vault that everyone who connects shares. For real use, run your
-own with the agent's own seed. A refusal from a tool is policy, not an error. Tell the user what the
-policy says and stop. Never ask the user to paste the secret instead.
+The hosted server holds no vault of its own, so each caller reaches only what their own agent name
+was granted. `pnpm run agent <vault.eth> <label>` in `mcp/` mints an agent identity and writes that
+config. Never suggest putting a wallet derived identity in those headers, because it reads every
+secret ever shared with that wallet and no rotation can take it back.
+
+A refusal from a tool is policy, not an error. Tell the user what the policy says and stop. Never ask
+the user to paste the secret instead.
 
 ## Rules for any agent working with Rewall
 
