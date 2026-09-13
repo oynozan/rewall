@@ -17,7 +17,12 @@ export function AddSecret({
 
     if (!account) {
         return (
-            <LiquidMetalButton label={label} onClick={connect} title="Connect a wallet first" fullWidth={fullWidth} />
+            <LiquidMetalButton
+                label="Connect Wallet"
+                onClick={connect}
+                title="Connect a wallet first"
+                fullWidth={fullWidth}
+            />
         );
     }
     if (!ownName) {

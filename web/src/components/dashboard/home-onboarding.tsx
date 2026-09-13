@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Onborda, OnbordaProvider, useOnborda, type CardComponentProps } from "onborda";
+import { useWorkspace } from "./dashboard-shell";
 import { Glyph } from "./ui";
 
 const STORAGE_KEY = "rewall:onboarding:v1";
@@ -162,19 +163,30 @@ function TourCard({ step, currentStep, totalSteps, nextStep, prevStep }: CardCom
 function TourContent({ children }: { children: ReactNode }) {
     const mobile = useSyncExternalStore(subscribe, isMobile, serverMobile);
     const { startOnborda, isOnbordaVisible } = useOnborda();
+    const { account, busy, ownName } = useWorkspace();
     const started = useRef(false);
+    const [gateStep, setGateStep] = useState(false);
+
+    // Held in state so a list that loses a step under an open card cannot leave it nothing to draw
+    const settled = Boolean(account) && !busy;
+    const start = useCallback(() => {
+        started.current = true;
+        setGateStep(settled && !ownName);
+        startOnborda("home");
+    }, [settled, ownName, startOnborda]);
+
+    // The first step is the gate banner, which reaches the page only once the vault lookup has answered
     useEffect(() => {
-        if (started.current) return;
+        if (started.current || !settled) return;
         const timer = setTimeout(() => {
             if (started.current) return;
             try {
                 if (localStorage.getItem(STORAGE_KEY)) return;
             } catch {}
-            started.current = true;
-            startOnborda("home");
+            start();
         }, 800);
         return () => clearTimeout(timer);
-    }, [startOnborda]);
+    }, [settled, start]);
     useEffect(() => {
         if (!isOnbordaVisible) return;
         const previous = document.activeElement as HTMLElement | null;
@@ -187,46 +199,51 @@ function TourContent({ children }: { children: ReactNode }) {
             previous?.focus({ preventScroll: true });
         };
     }, [isOnbordaVisible]);
+    const homeSteps = [
+        {
+            icon: null,
+            title: "Set up your vault",
+            content: "Secrets live under an ENS name you own. Set one up here, or say which name is already yours.",
+            selector: "#tour-gate",
+        },
+        {
+            icon: null,
+            title: "Choose your vault",
+            content: mobile
+                ? "Open the menu and choose the vault above your wallet. Enter the ENS name you want to open."
+                : "Choose the ENS name for your vault here. Read only means you can browse its list, but cannot change it.",
+            selector: mobile ? ".account-rail > section:nth-child(2)" : "#tour-vault",
+        },
+        {
+            icon: null,
+            title: "Store your first secret",
+            content:
+                "From your own vault, choose View all, then Store a secret. You can save a private note, API key, or sign-in details.",
+            selector: "#tour-secrets",
+        },
+        {
+            icon: null,
+            title: "Copy a sign-in code",
+            content:
+                "Your 2FA codes appear here. Unlock an account, then click its code to copy it. The timer shows when it changes.",
+            selector: "#tour-otp",
+        },
+        {
+            icon: null,
+            title: "Check your transfers",
+            content:
+                "Sent receipts and receipts shared with your ENS name are listed separately. Use View all when you want the full list.",
+            selector: "#tour-transfers",
+        },
+    ];
     const steps = [
         {
             tour: "home",
-            steps: [
-                {
-                    icon: null,
-                    title: "Connect your wallet",
-                    content: "Sign in with a wallet or email. Your secrets stay locked until you unlock them.",
-                    selector: mobile ? ".account-rail > section:first-child" : "#tour-wallet",
-                },
-                {
-                    icon: null,
-                    title: "Choose your vault",
-                    content: mobile
-                        ? "Open the menu and choose the vault above your wallet. Enter the ENS name you want to open."
-                        : "Choose the ENS name for your vault here. Read only means you can browse its list, but cannot change it.",
-                    selector: mobile ? ".account-rail > section:nth-child(2)" : "#tour-vault",
-                },
-                {
-                    icon: null,
-                    title: "Store your first secret",
-                    content:
-                        "From your own vault, choose View all, then Store a secret. You can save a private note, API key, or sign-in details.",
-                    selector: "#tour-secrets",
-                },
-                {
-                    icon: null,
-                    title: "Copy a sign-in code",
-                    content:
-                        "Your 2FA codes appear here. Unlock an account, then click its code to copy it. The timer shows when it changes.",
-                    selector: "#tour-otp",
-                },
-                {
-                    icon: null,
-                    title: "Check your transfers",
-                    content:
-                        "Sent receipts and receipts shared with your ENS name are listed separately. Use View all when you want the full list.",
-                    selector: "#tour-transfers",
-                },
-            ].map((step) => ({ ...step, pointerPadding: 10, pointerRadius: 6 })),
+            steps: (gateStep ? homeSteps : homeSteps.slice(1)).map((step) => ({
+                ...step,
+                pointerPadding: 10,
+                pointerRadius: 6,
+            })),
         },
     ];
     return (
@@ -237,10 +254,7 @@ function TourContent({ children }: { children: ReactNode }) {
                 className="tour-restart"
                 aria-label="Restart the tour"
                 title="Restart the tour"
-                onClick={() => {
-                    started.current = true;
-                    startOnborda("home");
-                }}
+                onClick={start}
             >
                 <Glyph name="magic_wand" size={24} />
             </button>
