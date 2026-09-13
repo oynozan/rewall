@@ -17,13 +17,6 @@ export type GuardianSet = {
     shares: GuardianShare[];
 };
 
-export class ForgedShareError extends Error {
-    constructor(reason: string) {
-        super(`refusing a guardian share, ${reason}`);
-        this.name = "ForgedShareError";
-    }
-}
-
 export class RecoveryFailedError extends Error {
     readonly tried: number;
     constructor(tried: number) {
@@ -125,19 +118,24 @@ export async function recoverWithShares(
     }
     if (resealed.length > MAX_GUARDIANS) throw new Error(`at most ${MAX_GUARDIANS} pieces`);
 
-    const pieces = await Promise.all(
-        resealed.map((s) => unseal(fromBase64(s), newOwner.publicKey, newOwner.secretKey)),
-    );
+    // Each piece is opened on its own, so one bad reshare is dropped rather than denying recovery
+    const pieces: Uint8Array[] = [];
+    for (const s of resealed) {
+        let piece: Uint8Array;
+        try {
+            piece = await unseal(fromBase64(s), newOwner.publicKey, newOwner.secretKey);
+        } catch {
+            continue;
+        }
+        // Wrong length or a zero x coordinate is a stale or forged share, so it never enters the interpolation
+        if (piece.length !== SHARE_BYTES || piece[SHARE_BYTES - 1] === 0) {
+            sodium.memzero(piece);
+            continue;
+        }
+        pieces.push(piece);
+    }
 
     try {
-        for (const piece of pieces) {
-            if (piece.length !== SHARE_BYTES) {
-                throw new ForgedShareError(`it is ${piece.length} bytes, expected ${SHARE_BYTES}`);
-            }
-            // Zero makes every honest share vanish from the interpolation and hands the result to the forger
-            if (piece[SHARE_BYTES - 1] === 0) throw new ForgedShareError("its x coordinate is zero");
-        }
-
         // Exactly threshold at a time, so a poisoned piece is isolated rather than poisoning the whole set
         for (const combo of combinations(pieces.length, threshold)) {
             // A stale share from a replaced guardian set can collide with a current one, so route around it

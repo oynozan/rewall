@@ -3,14 +3,7 @@ import assert from "node:assert/strict";
 import sodium from "libsodium-wrappers";
 import { privateKeyToAccount } from "viem/accounts";
 import { identityFromAccount, type Identity } from "./identity.ts";
-import {
-    createGuardianSet,
-    reshare,
-    recoverWithShares,
-    ForgedShareError,
-    RecoveryFailedError,
-    type GuardianSet,
-} from "./guardians.ts";
+import { createGuardianSet, reshare, recoverWithShares, RecoveryFailedError, type GuardianSet } from "./guardians.ts";
 import { seal, toBase64 } from "./crypto.ts";
 import { planSecret, openSecret, NoWrapError, type Grantee } from "./secret.ts";
 
@@ -124,16 +117,17 @@ test("someone other than the new owner cannot use the re-shared pieces", async (
 
 /* Forged shares, the attack the audited library does not defend against */
 
-test("a share with x coordinate zero is refused", async () => {
+test("a share with x coordinate zero is dropped and the honest threshold still recovers", async () => {
     const set = await createGuardianSet(guardians, 3);
 
-    // x zero makes every honest share vanish from the interpolation, handing the result to the forger
+    // x zero makes every honest share vanish from the interpolation, so it must never enter it
     const forged = new Uint8Array(33).fill(0x41);
     forged[32] = 0;
     const sealedForgery = toBase64(await seal(forged, newOwner.publicKey));
 
     const pieces = [...(await resharedBy(set, [0, 1, 2])), sealedForgery];
-    await assert.rejects(() => recoverWithShares(pieces, newOwner, expectOf(set)), ForgedShareError);
+    const recovered = await recoverWithShares(pieces, newOwner, expectOf(set));
+    assert.equal(recovered.fingerprint, set.recoveryFingerprint);
 });
 
 test("a forged share cannot dictate the reconstructed key", async () => {
@@ -146,11 +140,20 @@ test("a forged share cannot dictate the reconstructed key", async () => {
     const attackerKey = sodium.crypto_scalarmult_base(chosen);
 
     const pieces = [...(await resharedBy(set, [0, 1, 2])), toBase64(await seal(forged, newOwner.publicKey))];
-    await assert.rejects(async () => {
-        const got = await recoverWithShares(pieces, newOwner, expectOf(set));
-        assert.notDeepEqual(got.publicKey, attackerKey);
-        throw new Error("should not have reached here");
-    }, ForgedShareError);
+    const recovered = await recoverWithShares(pieces, newOwner, expectOf(set));
+    assert.equal(recovered.fingerprint, set.recoveryFingerprint);
+    assert.notDeepEqual(recovered.publicKey, attackerKey);
+});
+
+test("an unopenable reshare among honest ones is dropped, not fatal", async () => {
+    const set = await createGuardianSet(guardians, 3);
+
+    // A guardian who resealed to the wrong replacement key produces a piece this owner cannot open
+    const sealedToOutsider = toBase64(await seal(new Uint8Array(33).fill(9), outsider.publicKey));
+    const pieces = [...(await resharedBy(set, [0, 1, 2])), sealedToOutsider];
+
+    const recovered = await recoverWithShares(pieces, newOwner, expectOf(set));
+    assert.equal(recovered.fingerprint, set.recoveryFingerprint);
 });
 
 test("a corrupted share among honest ones is isolated and recovery still succeeds", async () => {
