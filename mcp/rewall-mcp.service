@@ -1,0 +1,46 @@
+# mcp.rewall.me, the Rewall MCP server as a service
+#
+# Copy to /etc/systemd/system/rewall-mcp.service, then
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now rewall-mcp
+#   systemctl status rewall-mcp
+#
+# It binds loopback only, because nginx is what faces the network. A shared host holds no identity of
+# its own, so REWALL_NAME and REWALL_IDENTITY_SEED stay unset and every caller sends their own.
+
+[Unit]
+Description=Rewall MCP server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rewall
+WorkingDirectory=/srv/rewall/mcp
+ExecStart=/usr/bin/node --experimental-strip-types src/http.ts
+
+Environment=NODE_ENV=production
+Environment=PORT=8787
+Environment=REWALL_MCP_HOST=127.0.0.1
+
+# Without this the server reads the proxy's own loopback socket as the caller, which would hand a
+# stranger the fallback credentials and count every caller as one peer for rate limiting
+Environment=REWALL_TRUST_PROXY=1
+
+# DNS rebinding protection checks the Host header, and behind nginx that is the public name, so a
+# missing entry here refuses every real request
+Environment=REWALL_ALLOWED_HOSTS=mcp.rewall.me
+
+Restart=always
+RestartSec=2
+
+# A seed passes through this process, so nothing about it belongs on disk or in another namespace
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/rewall/mcp
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target
