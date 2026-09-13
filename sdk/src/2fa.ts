@@ -68,3 +68,32 @@ export function otpSnapshot(otp: TOTP, timestamp: number) {
         remaining: otp.period - (Math.floor(timestamp / 1000) % otp.period),
     };
 }
+
+/* Bare keys */
+
+// Base32 without padding, which is what a site prints behind its unable to scan link, often in groups of four
+const BARE = /^[A-Z2-7]+=*$/;
+
+// A sentence can be made of base32 letters alone, so length is what separates a key from prose
+// ponytail: the lengths real 10, 16, 20 and 32 byte secrets encode to, widen it when a site turns up outside them
+const LENGTHS = new Set([16, 26, 32, 52]);
+
+const bareSecret = (value: string) => {
+    const compact = value.replace(/[\s-]/g, "").toUpperCase();
+    return LENGTHS.has(compact.replace(/=+$/, "").length) && BARE.test(compact) ? compact : "";
+};
+
+// The last label goes because an issuer is a name people read, not a hostname anything matches on
+const issuerFor = (hostname: string) => {
+    const labels = hostname.split(".");
+    return labels.length > 1 ? labels.slice(0, -1).join(".") : hostname;
+};
+
+// Plenty of sites hand out the secret alone, so the rest of the URI is filled in from the site it belongs to
+export function completeOtpKey(value: string, hostname: string): string {
+    const secret = bareSecret(value);
+    if (!secret) return value.trim();
+
+    const issuer = issuerFor(hostname.trim() || "authenticator");
+    return `otpauth://totp/${encodeURIComponent(issuer)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}`;
+}
