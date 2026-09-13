@@ -59,3 +59,21 @@
 .open .caret {
     transform: rotate(90deg);
 }
+
+/* A key completed into a URI is still the user's to check, so the whole thing is shown rather than summarised */
+.filled {
+    margin: -6px 0 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #9a9a8e;
+}
+
+.filled code {
+    font-family: var(--font-ubuntu-mono), monospace;
+    font-size: 11px;
+    color: #c1c1b9;
+    word-break: break-all;
+}

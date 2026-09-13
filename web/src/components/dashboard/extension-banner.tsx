@@ -1,8 +1,9 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { toast } from "sonner";
 import { DotGrid } from "./dot-grid";
+import { useWorkspace } from "./dashboard-shell";
+import { useExtension } from "./use-extension";
 import { Glyph, Icon } from "./ui";
 
 type Browser = "Chrome" | "Firefox" | "mobile" | null;
@@ -19,6 +20,11 @@ function currentBrowser(): Browser {
 
 export function ExtensionBanner({ compact = false }: { compact?: boolean }) {
     const browser = useSyncExternalStore(subscribe, currentBrowser, serverBrowser);
+    const { setPanel } = useWorkspace();
+    const { present } = useExtension();
+
+    // Nothing to install once one is here, and PairExtension is what stands in its place
+    if (present) return null;
     // Nothing on a phone or tablet can install a desktop extension
     if (browser === "mobile") return null;
     const browsers: Exclude<Browser, "mobile" | null>[] = browser ? [browser] : ["Chrome", "Firefox"];
@@ -39,9 +45,7 @@ export function ExtensionBanner({ compact = false }: { compact?: boolean }) {
                         type="button"
                         className="button extension-install"
                         aria-label={"Add to " + name}
-                        onClick={() =>
-                            toast("The " + name + " install link will be available soon.", { id: "extension-install" })
-                        }
+                        onClick={() => setPanel("extension")}
                     >
                         <Icon name={name === "Chrome" ? "chrome" : "firefox"} size={22} />
                         {browser ? "Add to " + name : name}

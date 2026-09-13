@@ -1,0 +1,38 @@
+.install {
+    display: flex;
+    flex-direction: column;
+}
+
+/* The download carries global classes, so without :global the whole rule compiles to a selector nothing matches */
+.install a:global(.button) {
+    gap: 9px;
+    text-decoration: none;
+}
+
+/* Tailwind's reset strips every list, and these are steps someone follows in order */
+.steps {
+    list-style: decimal;
+    margin: 22px 0 20px;
+    padding-left: 21px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #c1c1b9;
+}
+
+/* Spaced by the items rather than by the list, since a flex list drops the numbers it is there to show */
+.steps li + li {
+    margin-top: 11px;
+}
+
+.steps li::marker {
+    color: #81817e;
+}
+
+.caveat {
+    margin: 0;
+    border-top: 1px solid var(--border);
+    padding-top: 18px;
+    font-size: 12px;
+    line-height: 1.8;
+    color: #9a9a8e;
+}

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { guardianRecoveryEntry, NAMESPACE_LABEL, normalizeSite } from "@rewall/sdk";
-import { describeOtpUri, type OtpAccount } from "@rewall/sdk/2fa";
+import { completeOtpKey, describeOtpUri, type OtpAccount } from "@rewall/sdk/2fa";
 import { explain } from "@/src/lib/errors";
 import { ownerName, TYPE_LABELS, type Secret } from "@/src/lib/vault";
 import { useIdentity } from "./identity";
@@ -40,19 +41,48 @@ function suggest(account: OtpAccount, taken: (label: string) => boolean): string
 
 const named = (secret: Secret) => TYPE_LABELS[secret.type as keyof typeof TYPE_LABELS] ?? secret.type;
 
+// A hostname off the URL is whatever opened this page, so it is shown rather than trusted
+const observed = (value: string | null) => {
+    try {
+        return value ? normalizeSite(value) : "";
+    } catch {
+        return "";
+    }
+};
+
 export function AddAuthenticator({ onDone }: { onDone: () => void }) {
     const { ownName, vault, refresh } = useWorkspace();
     const { write } = useIdentity();
+    const params = useSearchParams();
+
+    // The extension hands the hostname over because it watched the tab, and this is the field people get wrong
+    const [captured] = useState(() => observed(params.get("site")));
+
+    // A scanned setup code is claimed by id, because the seed itself must never appear in a URL
+    const [captureId] = useState(() => params.get("capture") || "");
+    const siteField = useRef<HTMLInputElement>(null);
     const [uri, setUri] = useState("");
-    const [decoded, setDecoded] = useState<Decoded>({ state: "empty" });
     const [label, setLabel] = useState("");
     const [labelEdited, setLabelEdited] = useState(false);
-    const [site, setSite] = useState("");
+    const [site, setSite] = useState(captured);
     const [siteError, setSiteError] = useState("");
     const [error, setError] = useState("");
     const [step, setStep] = useState("");
     const [advanced, setAdvanced] = useState(false);
     const [conflict, setConflict] = useState<Entry | null>(null);
+
+    // What actually gets stored, which is the pasted URI or the one completed from a bare key
+    const effective = useMemo(() => completeOtpKey(uri, site), [uri, site]);
+    const filledIn = Boolean(uri.trim()) && effective !== uri.trim();
+
+    const decoded = useMemo<Decoded>(() => {
+        if (!effective) return { state: "empty" };
+        try {
+            return { state: "ready", account: describeOtpUri(effective) };
+        } catch (failure) {
+            return { state: "bad", message: reason(failure) };
+        }
+    }, [effective]);
 
     const namespace = ownName ? `${NAMESPACE_LABEL}.${ownName}` : "";
     const taken = (name: string) => Boolean(vault?.secrets.some((secret) => secret.label === name));
@@ -68,18 +98,43 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
     // Every secret type shares one namespace, so an authenticator can land on an API key of the same name
     const existing = target ? vault?.secrets.find((secret) => secret.name === target) : undefined;
 
+    // Claimed once even though development remounts every effect, because the id is good for exactly one claim
+    const claimed = useRef(false);
+
+    // The extension answers on this page rather than in the link, and the id it was given is good once
+    useEffect(() => {
+        if (!captureId || claimed.current) return;
+        claimed.current = true;
+
+        const listen = (event: MessageEvent) => {
+            if (event.source !== window || event.origin !== window.location.origin) return;
+            const message = event.data as { type?: string; uri?: string; site?: string; error?: string } | undefined;
+            if (message?.type !== "rewall:capture") return;
+
+            if (!message.uri) {
+                setError(message.error || "That setup code is no longer held. Scan it again from the extension.");
+                return;
+            }
+
+            read(message.uri);
+            if (message.site && siteField.current) {
+                siteField.current.value = message.site;
+                settleSite(message.site);
+            }
+        };
+
+        window.addEventListener("message", listen);
+        window.postMessage({ type: "rewall:capture-claim", id: captureId }, window.location.origin);
+        return () => window.removeEventListener("message", listen);
+        // Claimed once for the id in the link, and the handlers it calls are stable for that render
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [captureId]);
+
     // Reads the display fields without keeping the seed, which is why it can run on every keystroke
     function read(value: string) {
         setUri(value);
         setError("");
-        if (!value.trim()) return setDecoded({ state: "empty" });
-
-        try {
-            setDecoded({ state: "ready", account: describeOtpUri(value.trim()) });
-            setConflict(null);
-        } catch (failure) {
-            setDecoded({ state: "bad", message: reason(failure) });
-        }
+        setConflict(null);
     }
 
     // Settled on blur rather than per keystroke, so a half typed hostname is not called wrong while it is typed
@@ -149,7 +204,7 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
 
         const typed = String(new FormData(event.currentTarget).get("recovery") || "").trim();
         const entry: Entry = {
-            uri: uri.trim(),
+            uri: effective,
             site: settled,
             recovery: typed || (ownRecovery ? guardianRecoveryEntry(ownName) : ""),
             target,
@@ -208,11 +263,19 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
             ) : (
                 <p className={styles.hint}>Shown behind the “can’t scan the code?” link when you turn 2FA on.</p>
             )}
+            {filledIn && (
+                <p className={styles.filled}>
+                    <span>A key on its own, so it is stored as</span>
+                    <code>{effective}</code>
+                </p>
+            )}
 
             <label htmlFor="otp-site">Site</label>
             <input
                 id="otp-site"
                 name="site"
+                ref={siteField}
+                defaultValue={captured}
                 onBlur={(event) => settleSite(event.target.value)}
                 placeholder="github.com"
                 autoComplete="off"
@@ -226,7 +289,11 @@ export function AddAuthenticator({ onDone }: { onDone: () => void }) {
                 </p>
             ) : (
                 <p className={styles.hint}>
-                    {site ? `Fills only on ${site}.` : "Matched exactly, so a different subdomain is a different site."}
+                    {site && site === captured
+                        ? `Filled in from the link that opened this page. Fills only on ${site}.`
+                        : site
+                          ? `Fills only on ${site}.`
+                          : "Matched exactly, so a different subdomain is a different site."}
                 </p>
             )}
 
