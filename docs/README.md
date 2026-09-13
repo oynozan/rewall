@@ -5,16 +5,16 @@ Markdown files into pages, styled to match the dashboard.
 
 ## What is in it
 
-| Page or folder      | What it covers                                                              |
-| ------------------- | --------------------------------------------------------------------------- |
-| `index.mdx`         | What Rewall is, the problem, who it is for, what runs where.                |
-| `get-started.mdx`   | The dashboard at rewall.me from the first click, and the developer path.    |
-| `how-it-works.mdx`  | Name, seal, share, open, then the key, the records, rotation and recovery.  |
-| `ensv2.mdx`         | What ENS and ENSv2 are and exactly how Rewall uses them, with addresses.    |
-| `built-with.mdx`    | ENS, Chainlink and Ledger, what each gives Rewall, what is real today.      |
-| `examples/`         | One page per program in `examples/`, plus an overview with setup and cast.  |
-| `components/`       | One page per folder in the repo, plus an overview of how they fit together. |
-| `faq.mdx`           | The questions people ask first.                                             |
+| Page or folder     | What it covers                                                              |
+| ------------------ | --------------------------------------------------------------------------- |
+| `index.mdx`        | What Rewall is, the problem, who it is for, what runs where.                |
+| `get-started.mdx`  | The dashboard at rewall.me from the first click, and the developer path.    |
+| `how-it-works.mdx` | Name, seal, share, open, then the key, the records, rotation and recovery.  |
+| `ensv2.mdx`        | What ENS and ENSv2 are and exactly how Rewall uses them, with addresses.    |
+| `built-with.mdx`   | ENS, Chainlink and Ledger, what each gives Rewall, what is real today.      |
+| `examples/`        | One page per program in `examples/`, plus an overview with setup and cast.  |
+| `components/`      | One page per folder in the repo, plus an overview of how they fit together. |
+| `faq.mdx`          | The questions people ask first.                                             |
 
 ## Writing a page
 

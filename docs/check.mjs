@@ -75,6 +75,8 @@ for (const [route, source] of sources) {
         const words = sentence.trim().split(/\s+/).length;
         if (words > 40) problems.push(`${route} has a ${words} word sentence: "${sentence.trim().slice(0, 60)}..."`);
     }
+    if (!served.get(route).includes("npx skills add oynozan/rewall --skill rewall"))
+        problems.push(`${route} does not open with the skill install command`);
     const diagrams = (source.match(/^```mermaid/gm) ?? []).length;
     const rendered = (served.get(route).match(/\\"chart\\":\\"/g) ?? []).length;
     if (diagrams !== rendered)

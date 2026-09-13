@@ -14,6 +14,7 @@ Permissionless secret infrastructure on ENSv2 Sepolia. `SPEC.md` is the source o
 - `mcp/` is the SPEC section 7 MCP server. `ledger/` enrols an agent into a Ledger Key Ring over ENS, and is optional hardening rather than a dependency of anything.
 - `cre/` is the Chainlink CRE Confidential Workflow that reads a secret as a granted ENS name. Its `enclave-grantee/` subfolder is managed with `bun` rather than `pnpm`, because the CRE toolchain compiles with Bun, and it is the one place in the repo that exception applies.
 - `docs/` is the Nextra documentation site served at docs.rewall.me. Pages are Markdown files in `docs/content/`, and `docs/content/_meta.ts` orders them. The MCP server is served at mcp.rewall.me.
+- `skills/rewall/` is the Agent Skill shipped to outside assistants, installed with `npx skills add oynozan/rewall --skill rewall`. The skills under `.claude/skills/` are this repo's own working rules and are not for users.
 - Design docs and TODO live outside the repo, in this project's Claude storage, in a folder that is also named `docs/`. Never add them to the repo, and never mistake that folder for the documentation site.
 
 ## Names
