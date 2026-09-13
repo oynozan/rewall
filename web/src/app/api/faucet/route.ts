@@ -15,7 +15,7 @@ import {
 import { RAIL_TOKEN } from "@/src/lib/rail";
 import { awaitReceipt, publicClient, ReceiptTimeoutError, send, serialized, sponsor } from "@/src/lib/server-chain";
 
-const DRIP = parseEther(process.env.REWALL_DRIP_ETH || "0.005");
+const DRIP = parseEther(process.env.REWALL_DRIP_ETH || "0.01");
 const CAP = parseEther(process.env.REWALL_FAUCET_CAP_ETH || "0.05");
 // USDC carries six decimals, so an ether sized amount here would hand out a trillion times too much
 const USDC_DECIMALS = 6;
