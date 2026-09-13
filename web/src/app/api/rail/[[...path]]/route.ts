@@ -7,7 +7,7 @@
  */
 
 // Loopback by literal, because Node resolves localhost to IPv6 first and the rail listens on IPv4
-const RAIL = process.env.REWALL_RAIL_URL || "http://127.0.0.1:8787";
+const RAIL = process.env.REWALL_RAIL_URL || "http://127.0.0.1:8788";
 
 // The five endpoints Chainlink documents, and nothing else the local stand in happens to serve
 const ALLOWED = new Set(["/balances", "/transactions", "/shielded-address", "/private-transfer", "/withdraw"]);
@@ -25,6 +25,10 @@ const refuse = (reason: string, status: number) => Response.json({ error: reason
 export async function POST(request: Request, { params }: { params: Promise<{ path?: string[] }> }) {
     const endpoint = `/${((await params).path ?? []).join("/")}`;
     if (!ALLOWED.has(endpoint)) return refuse("That is not a transfer endpoint.", 404);
+
+    // Refused on the declared length first, so an oversized body is not buffered before it is rejected
+    const declared = Number(request.headers.get("content-length") ?? "0");
+    if (declared > MAX_BODY_BYTES) return refuse("That is too large to be a transfer.", 413);
 
     const body = await request.arrayBuffer();
     if (body.byteLength > MAX_BODY_BYTES) return refuse("That is too large to be a transfer.", 413);

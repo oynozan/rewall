@@ -110,7 +110,7 @@ import { Transfers } from "@rewall/sdk";
 
 const transfers = new Transfers({
     account,
-    api: "http://127.0.0.1:8787",
+    api: "http://127.0.0.1:8788",
     vault: process.env.VAULT_ADDRESS,
 });
 ```

@@ -134,14 +134,14 @@ import { Transfers } from "@rewall/sdk";
 
 const transfers = new Transfers({
     account,
-    api: "http://127.0.0.1:8787",
+    api: "http://127.0.0.1:8788",
     vault: process.env.VAULT_ADDRESS,
 });
 ```
 
 The examples read `RAIL_API`, `VAULT_ADDRESS` and `TOKEN_ADDRESS` from `examples/.env`.
 `VAULT_ADDRESS` and `TOKEN_ADDRESS` are what `pnpm run deploy` prints. `RAIL_API` is where the
-server listens, `http://127.0.0.1:8787` by default.
+server listens, `http://127.0.0.1:8788` by default.
 
 ## Pointing the dashboard at it
 
@@ -152,7 +152,7 @@ signs nothing, decrypts nothing and reads no field. It refuses any path outside 
 signature this server checks is still the only thing that authorises a spend.
 
 The dashboard needs two values in `web/.env.local`. `NEXT_PUBLIC_REWALL_VAULT` is the vault address
-`pnpm run deploy` prints. `REWALL_RAIL_URL` is where the server listens, `http://127.0.0.1:8787` by
+`pnpm run deploy` prints. `REWALL_RAIL_URL` is where the server listens, `http://127.0.0.1:8788` by
 default. The token address is fixed in `web/src/lib/rail.ts` rather than configured.
 
 The token is Circle's Sepolia USDC, which nothing here can mint. The dashboard's faucet hands a new

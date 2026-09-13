@@ -9,7 +9,8 @@ export const DEPLOYER_INDEX = Number(process.env.DEPLOYER_INDEX ?? 0);
 // Redeems a withdraw ticket, which is the only leg a participant pays gas for
 export const REDEEMER_INDEX = Number(process.env.REDEEMER_INDEX ?? 1);
 
-export const PORT = Number(process.env.RAIL_PORT ?? 8787);
+// Not 8787, which the MCP server's HTTP transport takes, and a collision there answers as a stray 404
+export const PORT = Number(process.env.RAIL_PORT ?? 8788);
 
 // Without a host Node listens on every interface, which anyone on the network can then spend against
 export const HOST = process.env.RAIL_HOST ?? "127.0.0.1";
