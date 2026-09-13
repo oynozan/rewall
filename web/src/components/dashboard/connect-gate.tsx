@@ -16,7 +16,7 @@ export function useGate(): "connect" | "vault" | null {
     if (!account) return "connect";
 
     // Setting up and recovering are the two things you do precisely because you have no vault yet
-    const vaultless = ["/dashboard/setup", "/dashboard/recovery"].some((route) => pathname.startsWith(route));
+    const vaultless = pathname.startsWith("/dashboard/setup");
     return !busy && !ownName && !vaultless ? "vault" : null;
 }
 

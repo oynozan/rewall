@@ -146,18 +146,18 @@ crediting deposits at the moment, so the repo runs a local stand in described on
 
 ## If you lose your wallet
 
-The Recovery page walks a replacement wallet through recovering a vault protected by guardians.
-Connect the new wallet, unlock it, type the lost vault's name, and share the link it gives you with
-your guardians. Each guardian opens the link and clicks Approve, which publishes their piece on their
-own name as `rewall.reshare.<fingerprint>`. When enough have approved, Recover this vault rebuilds
-the key and lets you Reveal each secret. Then publish a new key and rotate every secret.
+Recovery runs through the SDK, not the dashboard. Every secret you store is sealed to your recovery
+key as well as your own, so losing the wallet never loses the secret.
 
-Guardians are set up with the SDK today, and the dashboard has no screen yet that takes the 24
-words from the wizard. The words are an ordinary wallet phrase. With the SDK,
+The 24 words from the wizard are an ordinary wallet phrase. With the SDK,
 `identityFromAccount(mnemonicToAccount(phrase))` turns them into the recovery identity, exactly as
 `web/src/lib/recovery-kit.ts` does, with `mnemonicToAccount` coming from viem. A `Rewall` client
-built with that `identity` can `get` each secret. See
-[example 5](/examples/05-recover-a-lost-wallet) for guardians.
+built with that `identity` can `get` each secret. Then publish a new key from a new wallet and
+rotate every secret.
+
+Guardians are the other way back. A recovery key is split into pieces, one sealed to each guardian's
+name, and enough of them can rebuild it for a replacement wallet. That is set up and run with the
+SDK too. See [example 5](/examples/05-recover-a-lost-wallet).
 
 ## For developers
 

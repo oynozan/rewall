@@ -16,7 +16,6 @@
         "check:unlock": "node --env-file=../tools/.env scripts/check-unlock.mjs",
         "check:create": "node --env-file=../tools/.env scripts/check-create.mjs",
         "check:sharing": "node --env-file=../tools/.env scripts/check-sharing.mjs",
-        "check:recovery": "node --env-file=../tools/.env scripts/check-recovery.mjs",
         "check:faucet": "node scripts/check-faucet.mjs",
         "check:rail": "node --env-file=.env.local scripts/check-rail.mjs",
         "check:transfers": "node --env-file=../tools/.env --env-file=.env.local scripts/check-transfers.mjs",

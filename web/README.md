@@ -1,22 +1,21 @@
 # web
 
 The Rewall dashboard. A Next.js app where you store secrets, share them by ENS name, take them back,
-recover a lost wallet, hold 2FA accounts, and send private payments.
+hold 2FA accounts, and send private payments. Recovering a lost wallet is done with the SDK.
 
 It reads and writes Sepolia directly from the browser. There is no Rewall backend. The few server
 routes it has exist to pay for a new user's setup, not to hold or see any secret.
 
 ## Pages
 
-| Route                  | What it shows                                                            |
-| ---------------------- | ------------------------------------------------------------------------ |
-| `/`                    | The landing page.                                                        |
-| `/dashboard`           | Your vault at a glance.                                                  |
-| `/dashboard/secrets`   | Every secret under your name. Store, reveal, share, revoke, rotate.      |
-| `/dashboard/2fa`       | Your authenticator accounts with live codes. Pair the extension here.    |
-| `/dashboard/transfers` | Pay a name privately and see receipts shared with you.                   |
-| `/dashboard/recovery`  | Recover a vault whose wallet is lost, with guardians approving on chain. |
-| `/dashboard/setup`     | A four step wizard for a wallet that has never used Rewall.              |
+| Route                  | What it shows                                                         |
+| ---------------------- | --------------------------------------------------------------------- |
+| `/`                    | The landing page.                                                     |
+| `/dashboard`           | Your vault at a glance.                                               |
+| `/dashboard/secrets`   | Every secret under your name. Store, reveal, share, revoke, rotate.   |
+| `/dashboard/2fa`       | Your authenticator accounts with live codes. Pair the extension here. |
+| `/dashboard/transfers` | Pay a name privately and see receipts shared with you.                |
+| `/dashboard/setup`     | A four step wizard for a wallet that has never used Rewall.           |
 
 Connect a wallet through Privy. The first time, you sign one message and that signature becomes your
 key. The dashboard keeps it in memory for the tab and never stores it.
@@ -55,7 +54,6 @@ pnpm run build && pnpm run start
 pnpm run check:dashboard        # in another shell
 pnpm run check:create
 pnpm run check:sharing
-pnpm run check:recovery
 ```
 
 There are more. `pnpm run` with no argument lists them. The wallet they use comes from `tools/.env`.
