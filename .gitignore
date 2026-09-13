@@ -38,6 +38,9 @@ out/
 *.crx
 *.zip
 
+# Except the two the dashboard offers for download, which a deploy has to carry
+!web/public/extension/*.zip
+
 # Node crash artifacts, these contain process env and argv verbatim
 report.*.json
 *.heapsnapshot
