@@ -9,7 +9,8 @@ function privy(): PrivyClient {
     const secret = process.env.PRIVY_APP_SECRET;
     if (!appId || !secret)
         throw new Error("NEXT_PUBLIC_PRIVY_APP_ID and PRIVY_APP_SECRET are required to verify a caller");
-    cached ??= new PrivyClient({ appId, appSecret: secret });
+    // Bounded, because the default minute with two retries stalls a sponsored call for three of them
+    cached ??= new PrivyClient({ appId, appSecret: secret, timeout: 15_000, maxRetries: 1 });
     return cached;
 }
 

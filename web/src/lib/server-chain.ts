@@ -26,10 +26,17 @@ export const publicClient = createPublicClient({ chain: sepolia, transport: http
 // A Sepolia block is twelve seconds, so anything still missing after this is stuck rather than slow
 export const RECEIPT_TIMEOUT = 90_000;
 
+// Its own type, because a broadcast that timed out must not be rolled back like a send that failed
+export class ReceiptTimeoutError extends Error {
+    override name = "ReceiptTimeoutError";
+}
+
 // Named so a stuck receipt reads as a stuck receipt instead of viem's three minute silence
 export function awaitReceipt(hash: Hash): Promise<TransactionReceipt> {
     return publicClient.waitForTransactionReceipt({ hash, timeout: RECEIPT_TIMEOUT }).catch(() => {
-        throw new Error(`Sepolia did not confirm ${hash} within ${RECEIPT_TIMEOUT / 1000}s, it may still land later`);
+        throw new ReceiptTimeoutError(
+            `Sepolia did not confirm ${hash} within ${RECEIPT_TIMEOUT / 1000}s, it may still land later`,
+        );
     });
 }
 
@@ -48,9 +55,12 @@ export function sponsor() {
 let tail: Promise<unknown> = Promise.resolve();
 const holding = new AsyncLocalStorage<true>();
 
+// Only submission happens under the lock, so this sits far above a slow wave and still cannot be forever
+const LOCK_CEILING = 180_000;
+
 // One predecessor that never settles would otherwise brick every later send in this process
 function turn(): Promise<unknown> {
-    return Promise.race([tail, new Promise((resolve) => setTimeout(resolve, RECEIPT_TIMEOUT + 15_000).unref())]);
+    return Promise.race([tail, new Promise((resolve) => setTimeout(resolve, LOCK_CEILING).unref())]);
 }
 
 export function serialized<T>(work: () => Promise<T>): Promise<T> {

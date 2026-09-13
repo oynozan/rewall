@@ -46,6 +46,12 @@ async function provision(request: Request) {
     // Saying done for a label nobody registered would send them to a vault that does not exist
     if (existing?.completedAt) return Response.json({ done: true, already: true, name: existing.name });
 
+    // One resolver per wallet, and its records are written at deploy against the first label only
+    // A second label would reuse that resolver and find no key under its own name, so it is refused
+    if (existing?.provisioned && existing.name && existing.name !== `${label}.eth`) {
+        return refuse(`This wallet already started setup as ${existing.name}, finish that one instead.`);
+    }
+
     // A sponsored deploy costs the project real money, so the ledger caps how many can ever run
     if (
         !existing?.provisioned &&

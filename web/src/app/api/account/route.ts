@@ -6,13 +6,20 @@ export async function GET(request: Request) {
     const address = new URL(request.url).searchParams.get("address");
     if (!address || !isAddress(address)) return Response.json({ error: "Send a wallet address." }, { status: 400 });
 
-    const account = await accountFor(address);
-    // Booleans only, because the provisioning state carries the registrar commitment secret
-    return Response.json({
-        seen: Boolean(account),
-        dripped: Boolean(account?.dripped),
-        name: account?.completedAt ? (account.name ?? null) : null,
-        started: Boolean(account?.provisioned),
-        completed: Boolean(account?.completedAt),
-    });
+    try {
+        const account = await accountFor(address);
+        // Booleans only, because the provisioning state carries the registrar commitment secret
+        return Response.json({
+            seen: Boolean(account),
+            dripped: Boolean(account?.dripped),
+            name: account?.completedAt ? (account.name ?? null) : null,
+            started: Boolean(account?.provisioned),
+            completed: Boolean(account?.completedAt),
+        });
+    } catch (failure) {
+        // An unhandled throw answers with an HTML page the caller cannot parse for a reason
+        console.error("[account]", failure);
+        const reason = (failure as Error)?.message ?? String(failure);
+        return Response.json({ error: `Could not read your account, ${reason}` }, { status: 500 });
+    }
 }

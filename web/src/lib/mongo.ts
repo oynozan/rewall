@@ -28,7 +28,11 @@ export type Account = {
 const cached = globalThis as typeof globalThis & { rewallMongo?: Promise<MongoClient> };
 
 function client(): Promise<MongoClient> {
-    cached.rewallMongo ??= new MongoClient(uri, { serverSelectionTimeoutMS: 3000 }).connect();
+    // A rejected promise is neither null nor undefined, so caching one would fail every later call forever
+    cached.rewallMongo ??= new MongoClient(uri, { serverSelectionTimeoutMS: 3000 }).connect().catch((failure) => {
+        cached.rewallMongo = undefined;
+        throw failure;
+    });
     return cached.rewallMongo;
 }
 
@@ -60,7 +64,9 @@ export async function updateAccount(address: string, fields: Partial<Omit<Accoun
 
 // Only one request can turn an absent leg into a pending one, which is what serialises a parallel drip
 export async function claimDrip(address: string, wei: string): Promise<boolean> {
-    const result = await (await accounts()).updateOne(
+    const result = await (
+        await accounts()
+    ).updateOne(
         { _id: address.toLowerCase(), dripped: { $exists: false } },
         { $set: { dripped: { hash: "", wei, at: Math.floor(Date.now() / 1000), pending: true } } },
     );
@@ -72,7 +78,9 @@ export async function releaseDrip(address: string): Promise<void> {
 }
 
 export async function claimFunding(address: string, units: string): Promise<boolean> {
-    const result = await (await accounts()).updateOne(
+    const result = await (
+        await accounts()
+    ).updateOne(
         { _id: address.toLowerCase(), funded: { $exists: false } },
         { $set: { funded: { hash: "", units, at: Math.floor(Date.now() / 1000), pending: true } } },
     );

@@ -13,7 +13,7 @@ import {
     updateAccount,
 } from "@/src/lib/mongo";
 import { RAIL_TOKEN } from "@/src/lib/rail";
-import { awaitReceipt, publicClient, send, serialized, sponsor } from "@/src/lib/server-chain";
+import { awaitReceipt, publicClient, ReceiptTimeoutError, send, serialized, sponsor } from "@/src/lib/server-chain";
 
 const DRIP = parseEther(process.env.REWALL_DRIP_ETH || "0.005");
 const CAP = parseEther(process.env.REWALL_FAUCET_CAP_ETH || "0.05");
@@ -111,16 +111,22 @@ async function drip(request: Request) {
 
         try {
             const hash = await serialized(() => client.sendTransaction({ to: address, value: DRIP, chain: sepolia }));
+            const at = Math.floor(Date.now() / 1000);
+
+            // Recorded before the wait, so a timeout leaves the hash behind rather than an empty claim
+            await updateAccount(address, { dripped: { hash, wei: DRIP.toString(), at, pending: true } });
+
             const receipt = await awaitReceipt(hash);
             if (receipt.status !== "success") {
                 await releaseDrip(address);
                 return refuse("The drip did not confirm, try again.", 502);
             }
 
-            dripped = { hash, wei: DRIP.toString(), at: Math.floor(Date.now() / 1000) };
+            dripped = { hash, wei: DRIP.toString(), at };
             await updateAccount(address, { dripped });
         } catch (failure) {
-            await releaseDrip(address);
+            // A broadcast that timed out may still land, so its claim stays and keeps counting against the cap
+            if (!(failure instanceof ReceiptTimeoutError)) await releaseDrip(address);
             throw failure;
         }
     }
