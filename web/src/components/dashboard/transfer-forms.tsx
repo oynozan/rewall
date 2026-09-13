@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { formatUnits, parseUnits, type Address } from "viem";
+import { formatUnits, getAddress, isAddress, parseUnits, type Address } from "viem";
 import {
     encodeReceipt,
     decodeReceipt,
@@ -32,7 +32,8 @@ import { CopyButton, Icon } from "./ui";
 // A payment is irreversible and its id is the only handle on it, so it outlives a failed receipt write
 const unwrittenKey = (address: string) => `rewall.unwritten.${address.toLowerCase()}`;
 
-type Unwritten = { tx: string; recipient: string; amount: string };
+// The whole write plan, so a retry replays what the payment intended instead of rebuilding a guess
+type Unwritten = { tx: string; recipient: string; amount: string; grantees?: string[]; recovery?: string };
 
 /* Shared */
 
@@ -64,7 +65,10 @@ function Amounts({ value }: { value: bigint | null }) {
 
 /* Send */
 
-type Candidate = { state: "empty" | "checking" | "missing" | "unpaid" | "unset" | "ready"; shielded?: string };
+type Candidate = {
+    state: "empty" | "checking" | "missing" | "unpaid" | "unset" | "ready" | "address";
+    shielded?: string;
+};
 
 export function SendTransfer({ onDone }: { onDone: () => void }) {
     const { ownName, account, refresh: reload } = useWorkspace();
@@ -87,10 +91,24 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
 
     // Both keys in one read, because a receipt cannot be shared with a name that publishes no key
     async function look(value: string) {
+        const typed = value.trim();
+        // An emptied field is not a name that failed to resolve, so it says nothing rather than no
+        if (!typed) {
+            setCandidate({ state: "empty" });
+            return;
+        }
         setCandidate({ state: "checking" });
+
+        // The rail credits whatever address it is given, so a raw one is payable without any ENS.
+        // Checksum off because people paste lowercase, and lowercasing first keeps getAddress safe
+        if (isAddress(typed, { strict: false })) {
+            setCandidate({ state: "address", shielded: getAddress(typed.toLowerCase()) });
+            return;
+        }
+
         let name: string;
         try {
-            name = ownerName(value);
+            name = ownerName(typed);
         } catch {
             setCandidate({ state: "missing" });
             return;
@@ -105,7 +123,11 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
         }
     }
 
-    async function store(entry: Unwritten, grantees: string[], recovery: string) {
+    async function store(entry: Unwritten) {
+        // Defaulted, because an entry written before the plan was persisted carries neither field
+        const recovery = entry.recovery || (ownRecovery ? guardianRecoveryEntry(ownName) : "");
+        if (!recovery) throw new Error("Set up a recovery phrase before writing this receipt.");
+
         setStep("Encrypting and sealing…");
         await write(async (client) => {
             setStep("Waiting for your wallet…");
@@ -118,7 +140,7 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
                     tx: entry.tx,
                     direction: "sent",
                 }),
-                { type: "receipt", recovery: [recovery], grantees },
+                { type: "receipt", recovery: [recovery], grantees: entry.grantees ?? [] },
             );
             setStep("Confirming on Sepolia…");
             return hash;
@@ -127,7 +149,8 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
             localStorage.removeItem(unwrittenKey(account));
         } catch {}
         setPending(null);
-        watchName(account, entry.recipient);
+        // Watching scans a vault under an ENS name, which an address does not have
+        if (!isAddress(entry.recipient, { strict: false })) watchName(account, entry.recipient);
         reload();
         void rail.refresh();
         onDone();
@@ -137,26 +160,30 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
         event.preventDefault();
         setError("");
         const form = new FormData(event.currentTarget);
-        const recipient = String(form.get("recipient"));
-        const typed = String(form.get("recovery") || "").trim();
-        const recovery = typed || (ownRecovery ? guardianRecoveryEntry(ownName) : "");
+        const typedRecipient = String(form.get("recipient")).trim();
+        const typedRecovery = String(form.get("recovery") || "").trim();
         const extra = String(form.get("share") || "")
             .split(",")
             .map((name) => name.trim())
             .filter(Boolean);
-        const grantees = [...(form.get("tell") ? [recipient] : []), ...extra];
+        // An address publishes no key, so there is nothing to seal a receipt to and nothing to grant
+        const toAddress = candidate.state === "address";
 
-        if (!recovery) {
+        if (!typedRecovery && !ownRecovery) {
             setError("Name someone who can recover this, or set up a recovery phrase first.");
             return;
         }
 
+        // Normalized before anything moves, so the receipt names and grants the name the payment resolved
         let amount: bigint;
+        let recipient: string;
+        let recovery: string;
+        let grantees: string[];
         try {
             amount = parse(String(form.get("amount")));
-            ownerName(recipient);
-            extra.forEach((name) => ownerName(name));
-            if (typed) ownerName(typed);
+            recipient = toAddress ? typedRecipient : ownerName(typedRecipient);
+            recovery = typedRecovery ? ownerName(typedRecovery) : guardianRecoveryEntry(ownName);
+            grantees = [...(!toAddress && form.get("tell") ? [recipient] : []), ...extra.map((n) => ownerName(n))];
         } catch (failure) {
             setError(failure instanceof Error ? failure.message : "Check the amount and the names.");
             return;
@@ -165,12 +192,12 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
         try {
             setStep("Waiting for your wallet…");
             const tx = await rail.pay(candidate.shielded as Address, amount);
-            const entry: Unwritten = { tx, recipient, amount: amount.toString() };
+            const entry: Unwritten = { tx, recipient, amount: amount.toString(), grantees, recovery };
             try {
                 localStorage.setItem(unwrittenKey(account), JSON.stringify(entry));
             } catch {}
             setPending(entry);
-            await store(entry, grantees, recovery);
+            await store(entry);
         } catch (failure) {
             setError(explain(failure));
         } finally {
@@ -181,12 +208,21 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
     async function retry() {
         setError("");
         try {
-            await store(pending!, [pending!.recipient], ownRecovery ? guardianRecoveryEntry(ownName) : "");
+            await store(pending!);
         } catch (failure) {
             setError(explain(failure));
         } finally {
             setStep("");
         }
+    }
+
+    // The payment is done and cannot be undone, so the only thing left is to stop being asked about it
+    function dismiss() {
+        try {
+            localStorage.removeItem(unwrittenKey(account));
+        } catch {}
+        setPending(null);
+        setError("");
     }
 
     if (!ownName) return <p className="field-help">Set up your vault before sending, a receipt lives under it.</p>;
@@ -206,6 +242,9 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
                 <button type="button" className="button" disabled={Boolean(step)} onClick={() => void retry()}>
                     {step || "Write the receipt"}
                 </button>
+                <button type="button" className="text-button" disabled={Boolean(step)} onClick={dismiss}>
+                    Dismiss, I have saved the id
+                </button>
                 {error && <p className="form-error">{error}</p>}
             </div>
         );
@@ -217,7 +256,7 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
             <input
                 id="send-recipient"
                 name="recipient"
-                placeholder="bob.eth"
+                placeholder="bob.eth or 0x…"
                 autoComplete="off"
                 autoCapitalize="none"
                 spellCheck={false}
@@ -240,10 +279,12 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
                 You hold <Amounts value={rail.balance} />. Nothing about this payment reaches the chain.
             </p>
 
-            <label className="check-row">
-                <input type="checkbox" name="tell" defaultChecked />
-                Let them see the receipt
-            </label>
+            {candidate.state !== "address" && (
+                <label className="check-row">
+                    <input type="checkbox" name="tell" defaultChecked />
+                    Let them see the receipt
+                </label>
+            )}
 
             <label htmlFor="send-share">Also share with</label>
             <input
@@ -275,7 +316,10 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
                 </>
             )}
 
-            <button className="button primary full-width" disabled={candidate.state !== "ready" || Boolean(step)}>
+            <button
+                className="button primary full-width"
+                disabled={!(candidate.state === "ready" || candidate.state === "address") || Boolean(step)}
+            >
                 {step || "Send"}
             </button>
 
@@ -297,6 +341,14 @@ function Resolution({ candidate }: { candidate: Candidate }) {
     }
     if (candidate.state === "unset") {
         return <p className="field-help">That name has not set up Rewall, so it could never read a receipt.</p>;
+    }
+    if (candidate.state === "address") {
+        return (
+            <p className="field-help">
+                Paying an address directly. It still leaves the chain untouched, but the rail sees who you paid, and
+                they cannot be granted the receipt because an address publishes no key.
+            </p>
+        );
     }
     return (
         <p className="field-help">
@@ -356,7 +408,7 @@ export function FundBalance({ onDone }: { onDone: () => void }) {
                 This wallet holds <Amounts value={held} />. Moving it in makes it spendable without gas.
             </p>
             <button className="button primary full-width" disabled={Boolean(step) || !token}>
-                {step || "Add funds"}
+                {step || "Deposit"}
             </button>
             <div className="notice">
                 <Icon name="lock" size={17} />

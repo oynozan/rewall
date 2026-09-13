@@ -5,13 +5,19 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { GUARDIAN_RECOVERY_PREFIX } from "@rewall/sdk";
 import { TYPE_LABELS, type Secret, type SecretType } from "@/src/lib/vault";
-import { FadeDots, FadeIn } from "./amicro";
+import { FadeIn } from "./amicro";
+import { Select } from "../select";
 import { useWorkspace } from "./dashboard-shell";
-import { Glyph, Icon, type IconName } from "./ui";
+import { Glyph, Icon, SkeletonRows, type IconName } from "./ui";
 
 // A fixed locale and zone so the server and the browser print the same string
-const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-const MOMENT = new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeStyle: "short", timeZone: "UTC" });
+export const DAY = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+});
+export const MOMENT = new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeStyle: "short", timeZone: "UTC" });
 
 const TYPE_ICONS: Record<string, IconName | undefined> = {
     totp: "authenticator",
@@ -26,14 +32,14 @@ const TYPE_ICONS: Record<string, IconName | undefined> = {
 const count = (total: number, one: string, many: string) => `${total} ${total === 1 ? one : many}`;
 
 // People and teams are different kinds of access, so the tooltip keeps them apart the way the cell does
-function sharedTitle(secret: Secret) {
+export function sharedTitle(secret: Secret) {
     const parts: string[] = [];
     if (secret.grantees.length) parts.push(`People ${secret.grantees.join(", ")}`);
     if (secret.subtrees.length) parts.push(`Teams ${secret.subtrees.join(", ")}`);
     return parts.join("\n") || undefined;
 }
 
-function sharedWith(secret: Secret) {
+export function sharedWith(secret: Secret) {
     const parts: string[] = [];
     if (secret.grantees.length) parts.push(count(secret.grantees.length, "person", "people"));
     if (secret.subtrees.length) parts.push(count(secret.subtrees.length, "team", "teams"));
@@ -205,36 +211,32 @@ export function SecretsTable({ compact = false, initialType = "all" }: { compact
                     </div>
                 ) : (
                     <>
-                        <label className="filter-control">
-                            <select
-                                aria-label="Filter by type"
-                                value={type}
-                                onChange={(event) => {
-                                    setType(event.target.value);
-                                    clearSelection();
-                                }}
-                            >
-                                <option value="all">All types</option>
-                                {Object.entries(TYPE_LABELS)
+                        <Select
+                            compact
+                            aria-label="Filter by type"
+                            value={type}
+                            onValueChange={(value) => {
+                                setType(value);
+                                clearSelection();
+                            }}
+                            options={[
+                                { value: "all", label: "All types" },
+                                ...Object.entries(TYPE_LABELS)
                                     .filter(([key]) => !["totp", "receipt"].includes(key))
-                                    .map(([key, value]) => (
-                                        <option key={key} value={key}>
-                                            {value}
-                                        </option>
-                                    ))}
-                            </select>
-                        </label>
+                                    .map(([value, label]) => ({ value, label })),
+                            ]}
+                        />
                         {!compact && (
-                            <label className="filter-control">
-                                <select
-                                    aria-label="Sort secrets"
-                                    value={sort}
-                                    onChange={(event) => setSort(event.target.value)}
-                                >
-                                    <option value="newest">Newest first</option>
-                                    <option value="name">Name A–Z</option>
-                                </select>
-                            </label>
+                            <Select
+                                compact
+                                aria-label="Sort secrets"
+                                value={sort}
+                                onValueChange={setSort}
+                                options={[
+                                    { value: "newest", label: "Newest first" },
+                                    { value: "name", label: "Name A–Z" },
+                                ]}
+                            />
                         )}
                         <button
                             className="icon-button refresh-button"
@@ -282,6 +284,7 @@ export function SecretsTable({ compact = false, initialType = "all" }: { compact
                         </tr>
                     </thead>
                     <tbody>
+                        {busy && <SkeletonRows rows={5} columns={6} offset={1} />}
                         {!busy &&
                             !error &&
                             shown.map((secret) => (
@@ -358,9 +361,9 @@ export function SecretsTable({ compact = false, initialType = "all" }: { compact
                 </table>
             </div>
             {busy ? (
-                <div className="table-state" aria-live="polite">
-                    <FadeDots />
-                </div>
+                <p className="sr-only" role="status">
+                    Loading secrets
+                </p>
             ) : error ? (
                 <div className="table-state">
                     <p role="alert">{error}</p>
@@ -370,18 +373,33 @@ export function SecretsTable({ compact = false, initialType = "all" }: { compact
                 </div>
             ) : shown.length === 0 ? (
                 <div className="table-state">
-                    <h3>{query || type !== "all" ? "No matching secrets" : "No secrets found"}</h3>
-                    <button
-                        className="button small"
-                        onClick={() => {
-                            if (query || type !== "all") {
-                                setQuery("");
-                                setType("all");
-                            } else setPanel("vault");
-                        }}
-                    >
-                        {query || type !== "all" ? "Clear filters" : "Open a vault"}
-                    </button>
+                    {query || type !== "all" ? (
+                        <>
+                            <h3>No matching secrets</h3>
+                            <button
+                                className="button small"
+                                onClick={() => {
+                                    setQuery("");
+                                    setType("all");
+                                }}
+                            >
+                                Clear filters
+                            </button>
+                        </>
+                    ) : vault ? (
+                        // An open vault that holds nothing needs no suggestion, it is simply empty
+                        <>
+                            <h3>No secrets yet</h3>
+                            <p>Anything stored under {vault.owner} shows up here.</p>
+                        </>
+                    ) : (
+                        <>
+                            <h3>No vault open</h3>
+                            <button className="button small" onClick={() => setPanel("vault")}>
+                                Open a vault
+                            </button>
+                        </>
+                    )}
                 </div>
             ) : null}
         </div>
