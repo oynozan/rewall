@@ -11,6 +11,7 @@ interface LiquidMetalButtonProps {
     className?: string;
     onClick?: () => void;
     viewMode?: "text" | "icon";
+    href?: string;
 }
 
 export function LiquidMetalButton({
@@ -22,13 +23,14 @@ export function LiquidMetalButton({
     title,
     type = "button",
     className = "",
+    href,
 }: LiquidMetalButtonProps) {
     const [isHovered, setIsHovered] = useState(false);
     const [isPressed, setIsPressed] = useState(false);
     const [ripples, setRipples] = useState<Array<{ x: number; y: number; id: number }>>([]);
     const shaderRef = useRef<HTMLDivElement>(null);
     const shaderMount = useRef<ShaderMount | null>(null);
-    const buttonRef = useRef<HTMLButtonElement>(null);
+    const buttonRef = useRef<HTMLElement>(null);
     const rippleId = useRef(0);
 
     const dimensions = useMemo(() => {
@@ -134,7 +136,7 @@ export function LiquidMetalButton({
         shaderMount.current?.setSpeed?.(0.6);
     };
 
-    const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const handleClick = (e: React.MouseEvent<HTMLElement>) => {
         if (shaderMount.current?.setSpeed) {
             shaderMount.current.setSpeed(2.4);
             setTimeout(() => {
@@ -162,9 +164,15 @@ export function LiquidMetalButton({
     };
 
     return (
+        // Isolated because the four layers below carry their own z-index, which without a context here
+        // outranks the drawer and the sidebar rather than ordering the button against itself
         <div
             className={`liquid-metal ${className}`}
-            style={{ width: fullWidth ? "100%" : undefined, opacity: disabled ? 0.45 : undefined }}
+            style={{
+                isolation: "isolate",
+                width: fullWidth ? "100%" : undefined,
+                opacity: disabled ? 0.45 : undefined,
+            }}
         >
             <div
                 style={{
@@ -237,7 +245,7 @@ export function LiquidMetalButton({
                                 height: `${dimensions.innerHeight}px`,
                                 margin: "2px",
                                 borderRadius: "4px",
-                                background: "linear-gradient(180deg, #202020 0%, #000000 100%)",
+                                background: "linear-gradient(21deg, #1c1c1c 0%, #212121 100%)",
                                 boxShadow: isPressed
                                     ? "inset 0px 2px 4px rgba(0, 0, 0, 0.4), inset 0px 1px 2px rgba(0, 0, 0, 0.3)"
                                     : "none",
@@ -291,18 +299,9 @@ export function LiquidMetalButton({
                         </div>
                     </div>
 
-                    <button
-                        ref={buttonRef}
-                        type={type}
-                        disabled={disabled}
-                        title={title}
-                        onClick={handleClick}
-                        onMouseEnter={handleMouseEnter}
-                        onMouseLeave={handleMouseLeave}
-                        onMouseDown={() => setIsPressed(true)}
-                        onMouseUp={() => setIsPressed(false)}
-                        style={{
-                            position: "absolute",
+                    {(() => {
+                        const surface = {
+                            position: "absolute" as const,
                             top: 0,
                             left: 0,
                             width: fullWidth ? "100%" : `${dimensions.width}px`,
@@ -312,15 +311,23 @@ export function LiquidMetalButton({
                             cursor: "pointer",
                             outline: "none",
                             zIndex: 40,
-                            transformStyle: "flat",
+                            transformStyle: "flat" as const,
                             transform: "translateZ(25px)",
                             transition: "all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.4s ease, height 0.4s ease",
                             overflow: "hidden",
                             borderRadius: "6px",
-                        }}
-                        aria-label={label}
-                    >
-                        {ripples.map((ripple) => (
+                        };
+                        const shared = {
+                            title,
+                            onClick: handleClick,
+                            onMouseEnter: handleMouseEnter,
+                            onMouseLeave: handleMouseLeave,
+                            onMouseDown: () => setIsPressed(true),
+                            onMouseUp: () => setIsPressed(false),
+                            style: surface,
+                            "aria-label": label,
+                        };
+                        const wash = ripples.map((ripple) => (
                             <span
                                 key={ripple.id}
                                 style={{
@@ -336,8 +343,23 @@ export function LiquidMetalButton({
                                     animation: "ripple-animation 0.6s ease-out",
                                 }}
                             />
-                        ))}
-                    </button>
+                        ));
+                        // An href turns the control into a real link, so a landing CTA keeps its navigation semantics
+                        return href ? (
+                            <a ref={buttonRef as React.RefObject<HTMLAnchorElement>} href={href} {...shared}>
+                                {wash}
+                            </a>
+                        ) : (
+                            <button
+                                ref={buttonRef as React.RefObject<HTMLButtonElement>}
+                                type={type}
+                                disabled={disabled}
+                                {...shared}
+                            >
+                                {wash}
+                            </button>
+                        );
+                    })()}
                 </div>
             </div>
         </div>

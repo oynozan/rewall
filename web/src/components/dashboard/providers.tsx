@@ -1,8 +1,7 @@
 "use client";
 
 import { PrivyProvider } from "@privy-io/react-auth";
-import { sepolia } from "viem/chains";
-import { RPC_URL } from "@/src/lib/vault";
+import { SEPOLIA } from "@/src/lib/vault";
 
 const APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 const CLIENT_ID = process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID;
@@ -27,10 +26,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
             config={{
                 // Both surfaces, because an identity derives the same way from either
                 loginMethods: ["wallet", "email", "google"],
-                defaultChain: sepolia,
-                supportedChains: [sepolia],
+                // PrivyClientConfig carries no rpcConfig, so the endpoint rides on the chain it is given
+                defaultChain: SEPOLIA,
+                supportedChains: [SEPOLIA],
                 // An embedded wallet is a plain EOA, which is the only kind Rewall can derive a key from
-                embeddedWallets: { ethereum: { createOnLogin: "users-without-wallets" } },
+                // Privy's prompt holds one request at a time, so a click that signs then sends crashes its sign screen
+                embeddedWallets: { ethereum: { createOnLogin: "users-without-wallets" }, showWalletUIs: false },
                 appearance: {
                     // Rewall's surface tone, because Privy's own dark theme is blue tinted
                     theme: "#1c1c1c",
@@ -38,7 +39,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
                     logo: "/logo.svg",
                     walletChainType: "ethereum-only",
                 },
-                ...(RPC_URL ? { rpcConfig: { rpcUrlOverrides: { [sepolia.id]: RPC_URL } } } : {}),
             }}
         >
             {children}
