@@ -39,14 +39,7 @@ const navbar = (
     </Navbar>
 );
 
-const footer = (
-    <Footer>
-        <p className="foot">
-            Permissionless secret infrastructure on ENSv2 Sepolia. Encrypted on your device, stored under your name,
-            readable only by the keys you chose.
-        </p>
-    </Footer>
-);
+const footer = <Footer />;
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
     return (

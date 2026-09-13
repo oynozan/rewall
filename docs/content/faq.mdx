@@ -1,0 +1,106 @@
+---
+title: FAQ
+---
+
+# FAQ
+
+Short answers to the questions people ask before they trust Rewall with anything. The longer
+explanations are on [How it works](/how-it-works).
+
+## Where is a secret actually stored?
+
+In ENS text records on the secret's own subname, on ENSv2 Sepolia. A text record is a small named
+string that an ENS name can publish. The encrypted value sits inline in a record called
+`rewall.blob` on a name such as `openai.rewall.alice.eth`. There is no storage off the chain, no
+content addressing, and nothing for Rewall to host.
+
+## Can Rewall read my secrets?
+
+No. There is nothing to read them with. No Rewall service holds a key that opens your secrets, and
+every decryption runs in your own browser or on your own machine. The one hosted service, the MCP
+server at `https://mcp.rewall.me/mcp`, holds the key of a single demo vault and can open only what
+was granted to that vault's name. A secret opens only for a name it was sealed to.
+
+## How is my identity key derived?
+
+Your wallet signs one fixed message. The signature is reduced to a standard form, hashed into a 32
+byte seed, and used directly as an X25519 private key. X25519 is the key exchange used by libsodium,
+the cryptography library Rewall relies on, to seal a message so only one public key can open it. The
+same wallet always produces the same signature, so the key never needs to be stored.
+
+Sign that message only in Rewall. Whoever collects the signature reads every secret shared with you,
+permanently.
+
+## Do I need an ENS name?
+
+To own secrets, yes, because a secret is a subname under your name. To be granted one, you need a
+name that publishes your key. To decrypt it afterwards, nothing but the key itself. The dashboard
+registers a name for you on Sepolia and pays for it.
+
+## What happens if I lose my wallet?
+
+The SDK refuses to create a secret sealed only to you, so a recovery holder always exists. That is
+either a second name backed by a cold wallet, or a group of guardians who each hold one piece of a
+recovery key that nobody holds whole. A set number of them, such as two of three, can bring it back.
+The dashboard wizard also gives you 24 recovery words, and secrets stored from the dashboard are
+sealed to their key by default. The dashboard has no screen yet that takes those words back, so
+using them means the SDK today. See [example 5](/examples/05-recover-a-lost-wallet).
+
+## Is revoking someone retroactive?
+
+No, and a public chain makes that plainer than usual. The transaction that granted a name is
+permanently in history and carries that name's sealed copy of the key. Whoever held the key can
+still decrypt the old value from an archive of the chain. Treat a grant as handing over a copy, and
+rotate the credential itself at the service that issued it when someone leaves.
+
+## What does an agent receive?
+
+A result, never a value. The MCP server decrypts inside its own process and attaches the secret to a
+request it was allowed to make. It sends that request and hands back the response with the value
+scrubbed out. The model never sees the secret, so it never lands in a transcript or a log.
+
+## What does it cost to run?
+
+Gas and the ENS registration. Gas is the fee for writing to the chain. Rewall charges nothing and
+has no account to open. On Sepolia the registrar is paid in a mock token anyone can mint, so a name
+costs only the gas to register it. The dashboard goes further and pays for a new user's setup, and
+its faucet sends a little test ETH.
+
+## Why Sepolia?
+
+Sepolia is Ethereum's test network. Its coins are free and worth nothing, so trying Rewall costs you
+nothing. ENSv2 is deployed there as a beta, and Rewall is built against that deployment. Everything
+on it is for trying things out, so store test values and keep real credentials elsewhere for now.
+
+## Which wallets work?
+
+MetaMask is the supported wallet, because it signs the same message the same way every time. Other
+ordinary wallets are expected to work but have not been checked. The wallet the dashboard can make
+for you from an email address is an ordinary key. It is expected to work, but it has not been
+checked the way MetaMask has. On your first unlock the dashboard asks for the signature twice and
+refuses a wallet whose answers differ. A smart contract wallet is a contract rather than one plain
+key, and an MPC wallet splits its key across several parties. Both produce a different signature
+each time, so no stable key can be derived from them.
+
+## Do I have to install anything?
+
+No. The dashboard at [rewall.me](https://rewall.me) runs in a browser. The browser extension for 2FA
+codes is optional. Developers build the SDK from the repo, and an AI agent can use the hosted MCP
+server at `https://mcp.rewall.me/mcp` with no install step. That hosted server serves one demo
+vault and shares it with everyone who connects, so do not grant it anything you care about.
+
+## What this does not protect you from
+
+Worth knowing before you trust it with anything real.
+
+- Someone who already read a secret still knows it. Revoking is not amnesia.
+- If you let someone write your records, they can swap the encrypted value for one of their own.
+  Only delegate writes to someone you would trust with the contents.
+- Everything is public except the plaintext. Who granted what, and when, is visible to anyone
+  reading the chain. So is the label of every secret.
+- Payments hide who paid whom, not that you used the vault at all. Deposits and withdrawals are
+  ordinary transactions with visible amounts, which is why Rewall calls this semi confidential
+  rather than anonymous.
+- A machine that holds a key can be read by anyone who can run code on it. The MCP server and the
+  extension defend a boundary, not the machine.
+- This runs on Sepolia, a test network. Do not put a real credential in it.

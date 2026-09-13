@@ -1,0 +1,120 @@
+---
+title: Tools
+---
+
+# Tools
+
+`tools/` holds the scripts that set up Rewall on the Sepolia test network and prove each feature
+against the real chain. Every script sends a real transaction or makes a real read. None of them
+mock anything.
+
+The folder also holds `.env`, the one file with the test wallet phrase. It is never committed.
+Sepolia money is not real, and real credentials do not belong in these wallets either.
+
+## The test names
+
+`pnpm run wallets` funds five wallets from one seed phrase, each at a fixed index. Three of them
+hold a name. `participants.ts` derives a few more from the same phrase that nobody funds.
+
+| Name                | Index | Role                                              |
+| ------------------- | ----- | ------------------------------------------------- |
+| `rewall-test-1.eth` | 0     | The owner. Sends most transactions.               |
+| `rewall-test-2.eth` | 1     | Someone the owner shares with.                    |
+| no name             | 2     | A stranger, used to prove denial.                 |
+| `rewall-test-3.eth` | 3     | The recovery holder.                              |
+| no name             | 4     | The sponsor. Pays for new users on the dashboard. |
+
+`participants.ts` is the single source for these. It also names the two subtree members,
+`ci.rewall-test-2.eth` and `deploy.rewall-test-2.eth`. It names a guardian set of four names with a
+threshold of three. And it names a replacement wallet at index 9, which stands in for an owner who
+lost theirs. Never invent a placeholder name.
+
+A secret under a test name is `<secret>.rewall.rewall-test-1.eth`. The `rewall` label reserves that
+subtree and leaves the rest of the name free.
+
+## The .env file
+
+Copy `.env.example` to `.env`. It holds five values.
+
+```bash
+SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
+REWALL_FUNDER_KEY=        # funds the test wallets, testnet only
+REWALL_TEST_MNEMONIC=     # written by pnpm run wallets if empty
+REWALL_TOTP_URI=          # an otpauth:// setup key, read by pnpm run totp
+REWALL_TOTP_SITE=         # the hostname where that code gets typed
+```
+
+The repository `.gitignore` excludes `.env` and every `.env.*` file except the examples, so the
+phrase cannot be committed by accident. The RPC endpoint is the one free Sepolia endpoint that
+serves `eth_simulateV1`.
+
+Every script runs as `node --env-file=.env --experimental-strip-types`, so it reads `.env` directly
+and needs no build step of its own. The SDK must be built first, since the scripts import
+`@rewall/sdk` from its `dist` folder.
+
+## Setup, run once
+
+```bash
+pnpm run wallets     # makes the wallets and funds them from the funder key
+pnpm run bootstrap   # registers the three names, one shared 60 second wait
+pnpm run deploy      # deploys one resolver per name and the owner's registry tree
+pnpm run verify      # writes one record and reads it back through the Universal Resolver
+pnpm run status      # shows what is on chain for each name
+```
+
+```mermaid
+flowchart LR
+    wallets[wallets] --> bootstrap[bootstrap] --> deploy[deploy] --> verify[verify] --> status[status]
+```
+
+`wallets` generates a seed phrase if `.env` has none and writes it straight into the file, so it
+never passes through a shell argument or a log line. It then tops each wallet up to a target balance
+from the funder, and hands any surplus back first.
+
+`bootstrap` registers each name through the `ETHRegistrar` commit and reveal flow. It mints
+`MockUSDC` to pay, approves the registrar, commits for every name, then waits once for
+`MIN_COMMITMENT_AGE` before revealing all of them.
+
+`deploy` deploys one `PermissionedResolver` per name through the `VerifiableFactory`, then a
+`UserRegistry` for the owner and a second one for the `rewall` label, and registers
+`rewall.rewall-test-1.eth`. Addresses land in `deployments.json`. The factory refuses a repeated
+salt, so running it again without that file would fail instead of skipping.
+
+`verify` writes two records in one `multicall` and reads one back through `UniversalResolverV2`,
+which is the path every real client uses. `status` prints each wallet's balance, and for each name
+who holds it, when it expires, its resolver and its subregistry.
+
+## Proofs, run any time
+
+Each one is a small program that checks one part of the SPEC against Sepolia and fails loudly if
+the chain disagrees.
+
+| Script                | What it proves                                                                                                                                        |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm run e2e`        | The whole surface. Create, get, grant, revoke, rotate and list, plus a subtree grant, a copied blob refusing to open, and revoking a recovery entry.  |
+| `pnpm run guardians`  | A lost wallet is recovered by a threshold of guardians. Too few are refused, a forged share is refused, and approvals read off chain rebuild the key. |
+| `pnpm run escalation` | A write delegate adds itself to `rewall.grantees`, and the owner's next rotation refuses the tampered list.                                           |
+| `pnpm run subtree`    | One key shared with every subname under a name, and a stranger outside it still refused.                                                              |
+| `pnpm run rotate`     | A revoked reader keeps its old sealed copy and still cannot open the new value.                                                                       |
+| `pnpm run delegate`   | Write access on exactly one record of the resolver, and none on the record next to it.                                                                |
+| `pnpm run sponsor`    | A new user gets a whole vault, name, resolver and registry, with zero transactions of their own, and the project keeps no role.                       |
+| `pnpm run totp`       | Stores a real 2FA setup key and checks that the code computed from chain matches the one from the source.                                             |
+| `pnpm run identity`   | Publishes each name's public key as `rewall.pubkey` and reads it back. Needs `deploy` to have run.                                                    |
+| `pnpm run secret`     | Creates one secret, reads it back as the grantee and the recovery holder, and refuses the stranger.                                                   |
+
+They share wallets, so run them one at a time. Two at once collide on the nonce and waste gas.
+`rotate` and `subtree` expect the secret that `secret` creates, so run that first.
+
+`REWALL_SECRET_LABEL` overrides the label a proof uses. `totp` needs `REWALL_TOTP_URI` and
+`REWALL_TOTP_SITE`, and a demo account rather than a real one.
+
+## Other scripts
+
+```bash
+pnpm run sponsor-key   # writes the sponsor key into web/.env.local without printing it
+pnpm run format
+pnpm run format:check
+```
+
+`chain.ts` builds viem clients for the test wallets and reads `deployments.json`. The scripts import
+it rather than each building their own.

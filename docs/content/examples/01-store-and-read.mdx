@@ -1,0 +1,118 @@
+---
+title: "1. Store a secret and read it back"
+---
+
+# 1. Store a secret and read it back
+
+Alice keeps her database connection string in Rewall instead of a `.env` file. This is the smallest
+complete use of the SDK. One person, one secret, one write and one read. Every other example builds
+on it. It runs on the Sepolia test network, and the connection string is made up. Real credentials do
+not belong here.
+
+## Who is involved
+
+- Alice, `rewall-test-1.eth`. She owns the secret and pays for the one transaction.
+- Cold storage, `rewall-test-3.eth`. A backup wallet Alice keeps offline. It is named as recovery and
+  never used in this example.
+
+The secret lives at `database.rewall.rewall-test-1.eth`. Its type is `generic`.
+
+## What happens, step by step
+
+Follow along in `examples/01-store-and-read/index.ts`.
+
+**Connect.** The script turns the phrase in `.env` into a wallet with viem's `mnemonicToAccount`,
+at position 0. It then builds a `Rewall` client with a `publicClient` for reads, a `walletClient`
+for writes, `name: "rewall-test-1.eth"`, and the address of `UniversalResolverV2`. The universal
+resolver is the ENS contract that finds the records of any name. In a real app the wallet would be
+the one in the browser.
+
+**Store.** Alice calls `alice.create`. She passes the name, the value as bytes, `type: "generic"`,
+`recovery: ["rewall-test-3.eth"]` and `overwrite: true`. Before anything is sent, the SDK does this
+on her machine:
+
+1. Reads `rewall.pubkey` on `rewall-test-3.eth`. That is the public key cold storage published
+   during setup. Alice's own public key comes from her wallet signature, not from a record.
+2. Checks whether a secret already sits at that name. If one does, it refuses with
+   `SecretExistsError` unless `overwrite: true` was passed. The example passes it so it can run more
+   than once.
+3. Makes a random 32 byte key. This is the data key.
+4. Pads the connection string to a multiple of 256 bytes and encrypts it with AES-256-GCM under the
+   data key. The result becomes `rewall.blob`.
+5. Seals the data key to Alice's public key and to cold storage's public key. Each seal becomes one
+   record, `rewall.key.<fingerprint>`, where the fingerprint is a short hash of that reader's key.
+6. Signs the list of readers with Alice's wallet and stores the result as `rewall.auth.sig`.
+7. Adds `database` to `rewall.index` on `rewall.rewall-test-1.eth`, so `list` can find it later.
+8. Writes all of it in one transaction.
+
+The connection string is never sent anywhere in the clear. Only the encrypted form goes on chain.
+
+```mermaid
+flowchart LR
+    plain[Connection string] --> enc[AES 256 GCM]
+    dek[Random data key] --> enc
+    enc --> blob[Encrypted blob]
+    dek --> wa[Sealed to Alice]
+    dek --> wc[Sealed to cold storage]
+    blob --> ens[ENS records]
+    wa --> ens
+    wc --> ens
+```
+
+**Read.** Alice calls `alice.get`. Her wallet signs one fixed message. That signature is hashed and
+becomes her private key, in memory only. The SDK reads `rewall.blob`, `rewall.v`, `rewall.enc` and
+the `rewall.key.<fingerprint>` record for her fingerprint. It refuses the secret if `rewall.v` is
+not `3` or `rewall.enc` is not `aes-256-gcm`. Then it unseals her copy of the data key, checks the
+key commitment inside the blob, decrypts, and removes the padding. `get` returns a `Uint8Array`.
+
+**Compare.** The script decodes the bytes and compares them to the original string.
+
+## What to notice in the output
+
+```
+Stored a secret at database.rewall.rewall-test-1.eth
+Read it back: postgres://app:hunter2@db.internal:5432/production
+
+It matches.
+```
+
+The example prints the value because it is a fake one. A real program would hand the bytes to a
+database driver and never print them. Nothing touched disk. The plaintext lived in memory, went
+through the console, and was gone when the process ended.
+
+## What is on chain now
+
+Go and look. The records are public. Alice's resolver on Sepolia is at
+[0x1A0578825afDf388F5107117F81A57375cf7060f](https://sepolia.etherscan.io/address/0x1A0578825afDf388F5107117F81A57375cf7060f).
+
+You will see the encrypted blob and one sealed key per reader. You will not see the connection
+string, because it is not there.
+
+## Why recovery is required
+
+Look at the `recovery` option. It is not optional. The SDK refuses to create a secret with only the
+owner's copy of the key.
+
+If Alice loses her wallet, her key is gone. The encrypted value stays on chain forever, readable by
+nobody. Naming a second holder is the only thing that prevents that.
+[Example 5](/examples/05-recover-a-lost-wallet) shows a stronger version of this.
+
+## The important part
+
+Nobody had to trust a server. There is no Rewall backend. The encryption happened on Alice's laptop
+and the storage is ENS, which anyone can read and nobody can read through.
+
+## How to run it
+
+From the `examples/` folder, after `pnpm run setup`:
+
+```bash
+pnpm run 01
+```
+
+It sends one transaction from Alice's wallet, so that wallet needs a little Sepolia ETH.
+
+## Next
+
+[2. Share a secret with one person](/examples/02-share-with-a-teammate) gives Bob access using
+nothing but his ENS name.
