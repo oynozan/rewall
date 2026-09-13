@@ -12,8 +12,8 @@ importers:
         specifier: ^1.30.0
         version: 1.30.0(zod@4.6.2)
       '@rewall/sdk':
-        specifier: link:../sdk
-        version: link:../sdk
+        specifier: ^0.1.0
+        version: 0.1.0(zod@4.6.2)
       viem:
         specifier: ^2.56.3
         version: 2.56.3(zod@4.6.2)
@@ -57,6 +57,13 @@ packages:
   '@noble/hashes@1.8.0':
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
     engines: {node: ^14.21.3 || >=16}
+
+  '@noble/hashes@2.4.0':
+    resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
+    engines: {node: '>= 20.19.0'}
+
+  '@rewall/sdk@0.1.0':
+    resolution: {integrity: sha512-r+UK34SHmO7Hjb2YDMMZDTH82hhOC9ftnrT9DXylKKgxDpYYfVpsVafvGEXE+mI/RO/TC+h+lLn2TU0tzumDQQ==}
 
   '@scure/base@1.2.6':
     resolution: {integrity: sha512-g/nm5FgUa//MCj1gV09zTJTaM6KBAHqLN907YVQqf7zC49+DcO4B1so4ZX07Ef10Twr6nuqYEH9GEggFXA4Fmg==}
@@ -285,6 +292,12 @@ packages:
   json-schema-typed@8.0.2:
     resolution: {integrity: sha512-fQhoXdcvc3V28x7C7BMs4P5+kNlgUURe2jmUT1T//oBRMDrqy1QPelJimwZGo7Hg9VPV3EQV5Bnq4hbFy2vetA==}
 
+  libsodium-wrappers@0.8.4:
+    resolution: {integrity: sha512-mu8aAWucZjTB5O/BtGXtW4e1agy7uHxNYG7zPthmmD1jU43LCDmSWZLN4JhflbdPXj3yDO4lxM1O9hLDgIOXDw==}
+
+  libsodium@0.8.4:
+    resolution: {integrity: sha512-lMcYaRi0zcs7tarATsQUYC7rstliIXZuoq0c6zXSgNtSNtdvBgkSegjWhpMJAXzKX3SUSwIp7+zEsob+j3LuRw==}
+
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
@@ -326,6 +339,9 @@ packages:
 
   once@1.4.0:
     resolution: {integrity: sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==}
+
+  otpauth@9.5.2:
+    resolution: {integrity: sha512-GQ5emWR/x1tcExT62IBT0UfO95wZzJZyxYOJOGVeQF47SYEN9vmh0vISvDZaNMuFJRG+IaWCKtfm+t9Bfoal6w==}
 
   ox@0.14.44:
     resolution: {integrity: sha512-O54qXXHEk4ySamMSyBpI0AeBegS5frxU6+LA6Jb9Sf6kMOxcTNaxYmwZfpOu22DIQsdKfgQxHq8EsAGaoBQScA==}
@@ -392,6 +408,9 @@ packages:
 
   setprototypeof@1.2.0:
     resolution: {integrity: sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw==}
+
+  shamir-secret-sharing@0.0.4:
+    resolution: {integrity: sha512-ui8u/cIg2j16b9on/LH3V/glL6wHdwiTo/Iajzqx0STniBvuOzl6VYUxhrow3waF0dggovJfYiBZSWfTAN4XLQ==}
 
   shebang-command@2.0.0:
     resolution: {integrity: sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==}
@@ -510,6 +529,20 @@ snapshots:
       '@noble/hashes': 1.8.0
 
   '@noble/hashes@1.8.0': {}
+
+  '@noble/hashes@2.4.0': {}
+
+  '@rewall/sdk@0.1.0(zod@4.6.2)':
+    dependencies:
+      libsodium-wrappers: 0.8.4
+      otpauth: 9.5.2
+      shamir-secret-sharing: 0.0.4
+      viem: 2.56.3(zod@4.6.2)
+    transitivePeerDependencies:
+      - bufferutil
+      - typescript
+      - utf-8-validate
+      - zod
 
   '@scure/base@1.2.6': {}
 
@@ -749,6 +782,12 @@ snapshots:
 
   json-schema-typed@8.0.2: {}
 
+  libsodium-wrappers@0.8.4:
+    dependencies:
+      libsodium: 0.8.4
+
+  libsodium@0.8.4: {}
+
   math-intrinsics@1.1.0: {}
 
   media-typer@1.1.1: {}
@@ -778,6 +817,10 @@ snapshots:
   once@1.4.0:
     dependencies:
       wrappy: 1.0.2
+
+  otpauth@9.5.2:
+    dependencies:
+      '@noble/hashes': 2.4.0
 
   ox@0.14.44(zod@4.6.2):
     dependencies:
@@ -861,6 +904,8 @@ snapshots:
       - supports-color
 
   setprototypeof@1.2.0: {}
+
+  shamir-secret-sharing@0.0.4: {}
 
   shebang-command@2.0.0:
     dependencies:

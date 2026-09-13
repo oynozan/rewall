@@ -30,7 +30,8 @@ described under [Examples](/examples). `docs/` is this site.
 
 ## How they fit together
 
-Every folder links the SDK as `@rewall/sdk` and imports its built `dist` folder. The SDK talks to
+The dashboard and the MCP server install the SDK from npm as `@rewall/sdk`. The folders developed
+alongside it link it from the repo instead and import its built `dist` folder. The SDK talks to
 ENSv2 on Sepolia. It reads through the `UniversalResolverV2` contract and writes through each
 account's own `PermissionedResolver`. No component sends a secret to a Rewall server, because there
 is none. The dashboard has a few server routes that pay for a new user's setup, and they hold no

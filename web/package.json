@@ -35,7 +35,7 @@
         "@privy-io/node": "^0.34.0",
         "@privy-io/react-auth": "^3.42.0",
         "@radix-ui/react-select": "^2.3.7",
-        "@rewall/sdk": "link:../sdk",
+        "@rewall/sdk": "^0.1.0",
         "canvas-confetti": "^1.9.4",
         "mongodb": "^7.6.0",
         "motion": "^13.2.0",
