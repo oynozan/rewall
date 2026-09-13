@@ -18,8 +18,8 @@ A secret is a subname under an ENS name you own, such as `openai.rewall.alice.et
 name under a name, the way `alice.eth` sits under `eth`. The `rewall` label keeps every secret in
 one place and leaves `openai.alice.eth` free for anything else.
 
-The subname points at the one resolver your account owns. A resolver is the contract that stores a
-name's records. Every record a secret needs lives on that resolver under the subname's namehash,
+The subname resolves through the one resolver your account owns. A resolver is the contract that
+stores a name's records. Every record a secret needs lives on that resolver under the subname's namehash,
 which is the fixed hash ENS makes from a full name. So one resolver holds every secret without them
 colliding.
 

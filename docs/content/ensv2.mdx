@@ -56,8 +56,9 @@ name to another account, and `authorizeTextRoles` does it for one key on one nam
 Enhanced Access Control. `pnpm run delegate` in `tools/` proves the per key form against Sepolia.
 
 **Roles are bitmaps.** A role is one bit in a 256 bit number. The admin variant of a role is the
-same bit shifted left by 128. Rewall uses `bigint` for them. A secret subname is registered with
-`SET_RESOLVER` and its admin variant and nothing else, because a secret needs no children.
+same bit shifted left by 128. Rewall uses `bigint` for them. When a secret subname is given an entry
+of its own, it gets `SET_RESOLVER` and its admin variant and nothing else, because a secret needs no
+children.
 
 **`VerifiableFactory` deploys proxies.** A resolver is a UUPS proxy over one shared implementation,
 deployed with `deployProxy(implementation, salt, initData)`, and registries come from the same
@@ -87,12 +88,14 @@ label and registers `rewall.alice.eth` in the first one, pointing at the second,
 resolver and the same expiry as `alice.eth`. That label reserves the subtree, so `openai.alice.eth`
 stays free for whatever alice wants.
 
-From then on the SDK mints secrets by itself. `ensureSecretName` in `sdk/src/client.ts` asks
-`findParentRegistry` which registry holds `openai.rewall.alice.eth`, then checks `getResolver` for
-the label. If that is empty it calls `register` with the caller as owner, no subregistry, the
-parent's resolver, the `SET_RESOLVER` roles and the parent's expiry. Registering happens before any
-record is written, because a record on an unregistered subname reads back fine but has no owner, and
-then nothing could ever rotate it.
+From then on a secret needs no registry call at all. Its records are written to the namespace's
+resolver under the namehash of the full secret name. `UniversalResolverV2` resolves an unregistered
+subname through the nearest registered name above it, so `openai.rewall.alice.eth` reads back
+exactly as if it had an entry of its own. Ownership anchors the same way. Before a
+rotation, the reader list check walks up to the nearest registered name, `rewall.alice.eth`, and
+compares the signer to its owner. Storing a secret is therefore one transaction. `ensureSecretName`
+in `sdk/src/client.ts` can still give a secret its own entry with `register`, which only a transfer
+of that one secret to a different owner would need.
 
 ## One resolver per account
 

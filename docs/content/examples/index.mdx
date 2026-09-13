@@ -66,7 +66,7 @@ pnpm run setup
 
 `setup.ts` registers five subnames under `rewall.rewall-test-1.eth`, one for each secret examples 1
 to 5 create: `database`, `stripe-key`, `deploy-token`, `team-secret` and `lost-wallet-demo`.
-Examples 6, 7 and 8 use other names, which `create` registers on its own when they are missing.
+Examples 6, 7 and 8 use other names, which need no registration, since a secret resolves through its namespace.
 Setup then publishes a public key as `rewall.pubkey` on every name in the cast. It skips anything
 that already exists, so it is safe to run again.
 
