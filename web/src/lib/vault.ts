@@ -36,7 +36,14 @@ export type Secret = {
     recovery: string[];
     site: string;
 };
-export type Vault = { owner: string; namespace: string; identityPublished: boolean; secrets: Secret[] };
+export type Vault = {
+    owner: string;
+    namespace: string;
+    identityPublished: boolean;
+    secrets: Secret[];
+    // Labels the index lists that do not read back as a supported secret, so the view can say so
+    unreadable: string[];
+};
 
 export const RPC_URL = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
 
@@ -46,7 +53,9 @@ export const SEPOLIA = { ...sepolia, rpcUrls: { default: { http: [RPC_URL] as re
 export const vaultClient = createPublicClient({
     chain: sepolia,
     // Batched because a single rotation read fans out to more than a dozen concurrent eth_calls
-    transport: http(RPC_URL, { timeout: 15000, retryCount: 1, batch: true }),
+    // Retried with a real gap, since one rate limited answer would otherwise blank the whole vault and
+    // viem's default retry lands inside the same window the limit is counting
+    transport: http(RPC_URL, { timeout: 15000, retryCount: 3, retryDelay: 300, batch: true }),
 });
 
 export function ownerName(input: string) {
@@ -116,7 +125,9 @@ export async function readReceipts(input: string): Promise<Secret[]> {
     const labels = [...new Set((index[RECORD.index] || "").split(",").filter(Boolean))]
         .filter((label) => label.startsWith("r-") && !label.includes("."))
         .slice(0, 32);
-    return Promise.all(labels.map((label) => readSecret(`${label}.${namespace}`)));
+    // One unreadable receipt must not blank the whole list, the same way readVault survives one
+    const read = await Promise.allSettled(labels.map((label) => readSecret(`${label}.${namespace}`)));
+    return read.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
 }
 
 export async function readVault(input: string): Promise<Vault> {
@@ -133,5 +144,6 @@ export async function readVault(input: string): Promise<Vault> {
     // One label that does not resolve yet must not blank out the whole vault
     const read = await Promise.allSettled(labels.map((label) => readSecret(`${label}.${namespace}`)));
     const secrets = read.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
-    return { owner, namespace, identityPublished: Boolean(identity[RECORD.pubkey]), secrets };
+    const unreadable = labels.filter((_, index) => read[index]!.status === "rejected");
+    return { owner, namespace, identityPublished: Boolean(identity[RECORD.pubkey]), secrets, unreadable };
 }

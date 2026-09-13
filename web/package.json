@@ -22,7 +22,12 @@
         "check:chain": "node --env-file=../tools/.env scripts/check-chain.mjs",
         "check:gate": "node --env-file=../tools/.env scripts/check-gate.mjs",
         "check:onboarding": "node --env-file=../tools/.env --env-file=.env.local scripts/check-onboarding.mjs",
-        "check:2fa": "node --env-file=../tools/.env scripts/check-2fa-create.mjs"
+        "check:2fa": "node --env-file=../tools/.env scripts/check-2fa-create.mjs",
+        "check:panels": "node --env-file=../tools/.env scripts/check-panels.mjs",
+        "check:install": "node --env-file=../tools/.env scripts/check-install.mjs",
+        "check:landing": "node scripts/check-landing.mjs",
+        "check:errors": "node --experimental-strip-types --no-warnings scripts/check-errors.mjs",
+        "check:owned": "node --experimental-strip-types --no-warnings --env-file=.env.local scripts/check-owned-names.mjs"
     },
     "dependencies": {
         "@paper-design/shaders": "^0.0.80",
@@ -34,6 +39,7 @@
         "mongodb": "^7.6.0",
         "motion": "^13.2.0",
         "next": "16.3.4",
+        "ogl": "^1.0.11",
         "onborda": "^1.2.5",
         "react": "19.2.8",
         "react-dom": "19.2.8",
