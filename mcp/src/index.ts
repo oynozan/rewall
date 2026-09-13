@@ -5,15 +5,16 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { openVault } from "./vault.ts";
+import { credentialsFromEnv, openVault } from "./vault.ts";
 import { assertSafeEnvironment, register, INSTRUCTIONS } from "./tools.ts";
 
 async function main() {
     assertSafeEnvironment();
-    const vault = await openVault();
+    const vault = openVault(await credentialsFromEnv());
 
     const server = new McpServer({ name: "rewall", version: "0.1.0" }, { instructions: INSTRUCTIONS });
-    register(server, vault);
+    // Offered here because policy.json is the real gate and a secret with no entry cannot sign at all
+    register(server, vault, { signing: true });
 
     // stdout is the JSON-RPC channel, so every human readable line goes to stderr
     process.stderr.write(`rewall mcp ready, ${vault.name} as ${vault.fingerprint}\n`);

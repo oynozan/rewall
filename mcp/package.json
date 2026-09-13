@@ -10,10 +10,13 @@
         "check:scrub": "node --experimental-strip-types src/scrub.ts",
         "check:sign": "node --experimental-strip-types src/sign.ts",
         "seed": "node --env-file=.env seed.mjs",
+        "agent": "node --env-file=.env agent.mjs",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "serve": "node --env-file=.env --experimental-strip-types src/http.ts",
-        "check:http": "node check-http.mjs"
+        "check:http": "node check-http.mjs",
+        "check:tenants": "node check-tenants.mjs",
+        "check:exfil": "node --env-file=.env --env-file=../tools/.env check-exfil.mjs"
     },
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.30.0",

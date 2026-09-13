@@ -77,20 +77,36 @@ export function assertSafeEnvironment() {
 
 /* Rate limiting, per secret rather than global so one busy secret cannot starve the rest */
 
+// Keyed by the caller too, or one agent would spend another's budget and disable another's secret
 const calls = new Map<string, number[]>();
 const redactions = new Map<string, number>();
 
-function rateLimit(label: string) {
+// Every key here is chosen by a caller, so both maps are capped and evict the least recently touched
+const CAP = 4096;
+const keep = <T>(map: Map<string, T>, key: string, value: T) => {
+    map.delete(key);
+    map.set(key, value);
+    if (map.size > CAP) map.delete(map.keys().next().value as string);
+};
+
+// A label that could never be an ENS label is refused before it can take a slot in either map
+const LABEL = /^[a-z0-9-]{1,63}$/;
+
+function rateLimit(key: string, label: string) {
+    if (!LABEL.test(label)) throw new Error(`${label} is not a secret label`);
     const now = Date.now();
-    const recent = (calls.get(label) ?? []).filter((at) => now - at < 60_000);
+    const recent = (calls.get(key) ?? []).filter((at) => now - at < 60_000);
     if (recent.length >= CALLS_PER_MINUTE) throw new Error(`rate limit reached for ${label}, wait a minute`);
     recent.push(now);
-    calls.set(label, recent);
+    keep(calls, key, recent);
 }
 
 /* Tools */
 
 export function register(server: McpServer, vault: Vault, options: { signing?: boolean } = {}) {
+    // Every counter is keyed by the agent asking and the vault asked of, not by the label alone
+    const per = (label: string) => `${vault.fingerprint}:${vault.name}:${label}`;
+
     server.registerTool(
         "list_secrets",
         {
@@ -130,8 +146,8 @@ export function register(server: McpServer, vault: Vault, options: { signing?: b
             // Declared out here so the catch can scrub a message that quoted the secret
             let needles: string[] = [];
             try {
-                rateLimit(secret);
-                if ((redactions.get(secret) ?? 0) >= REDACTION_LIMIT) {
+                rateLimit(per(secret), secret);
+                if ((redactions.get(per(secret)) ?? 0) >= REDACTION_LIMIT) {
                     return fail(`${secret} is disabled for this session, a host kept echoing it back`);
                 }
 
@@ -201,7 +217,7 @@ export function register(server: McpServer, vault: Vault, options: { signing?: b
 
                 const cleaned = scrub(raw, needles);
                 const total = cleaned.redactions + head.redactions;
-                if (total) redactions.set(secret, (redactions.get(secret) ?? 0) + 1);
+                if (total) keep(redactions, per(secret), (redactions.get(per(secret)) ?? 0) + 1);
 
                 const alarm = total ? `\n\n[${total} redactions, ${host} echoed the secret back]` : "";
                 return say(`${response.status} from ${host}\n\n${cleaned.text}${alarm}`);
@@ -213,7 +229,7 @@ export function register(server: McpServer, vault: Vault, options: { signing?: b
         },
     );
 
-    if (options.signing !== false)
+    if (options.signing === true)
         server.registerTool(
             "sign_with_secret",
             {
@@ -229,7 +245,7 @@ export function register(server: McpServer, vault: Vault, options: { signing?: b
             },
             async ({ secret, token, to, amount }) => {
                 try {
-                    rateLimit(secret);
+                    rateLimit(per(secret), secret);
                     const meta = await vault.metaOf(secret);
                     if (!meta.readable) return fail(`this agent holds no key for ${secret}`);
                     if (meta.type !== "privkey") return fail(`${secret} is a ${meta.type}, not a signing key`);
@@ -297,7 +313,7 @@ export function register(server: McpServer, vault: Vault, options: { signing?: b
         },
         async ({ secret }) => {
             try {
-                rateLimit(secret);
+                rateLimit(per(secret), secret);
                 const meta = await vault.metaOf(secret);
                 if (!meta.readable) return fail(`this agent holds no key for ${secret}`);
                 if (meta.type !== "totp") return fail(`${secret} is a ${meta.type}, not an authenticator secret`);

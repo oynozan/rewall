@@ -41,34 +41,41 @@ export type Vault = {
     metaOf(label: string): Promise<Meta>;
 };
 
+// Which vault this process is acting as, from its environment locally or from a header when hosted
+export type Credentials = { name: string; identity: Identity; identityAddress: string };
+
 function required(key: string): string {
     const value = process.env[key];
     if (!value) throw new Error(`${key} is not set, see .env.example`);
     return value;
 }
 
-export async function openVault(): Promise<Vault> {
+// The whole capability, so a host holding one decrypts what was granted and can do nothing else
+export async function credentialsFromSeed(name: string, seed: string): Promise<Credentials> {
+    const scalar = fromBase64(seed);
+    if (scalar.length !== 32) throw new Error("an identity seed is 32 bytes of standard base64");
+    return { name, identity: await identityFromSeed(scalar), identityAddress: "" };
+}
+
+export async function credentialsFromEnv(): Promise<Credentials> {
     const name = required("REWALL_NAME");
+
+    const seed = process.env.REWALL_IDENTITY_SEED;
+    if (seed) return credentialsFromSeed(name, seed);
+
+    // The wallet key stays supported only because that is how an identity is first derived
+    const account = privateKeyToAccount(required("REWALL_AGENT_KEY") as `0x${string}`);
+    return { name, identity: await identityFromAccount(account), identityAddress: account.address };
+}
+
+// Nothing here touches the network, so a hosted server builds one per request rather than caching
+export function openVault({ name, identity, identityAddress }: Credentials): Vault {
     const rpc = process.env.SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
 
-    // A seed is the whole capability this server needs, so a host holding one can decrypt what was
-    // granted to it and nothing else, no signing, no gas, no ENS writes, no forged authorizations
-    // The wallet key stays supported only because that is how an identity is first derived
-    const seed = process.env.REWALL_IDENTITY_SEED;
-    let identity: Identity;
-    let identityAddress = "";
-    if (seed) {
-        identity = await identityFromSeed(fromBase64(seed));
-    } else {
-        const account = privateKeyToAccount(required("REWALL_AGENT_KEY") as `0x${string}`);
-        identity = await identityFromAccount(account);
-        identityAddress = account.address;
-    }
-
-    // Batched because one metadata read fans out to six keys and a listing multiplies that by the vault
+    // The fragment keys viem's module level batch scheduler per identity and never reaches the wire
     const publicClient = createPublicClient({
         chain: sepolia,
-        transport: http(rpc, { timeout: 15000, retryCount: 1, batch: true }),
+        transport: http(`${rpc}#${identity.fingerprint}`, { timeout: 15000, retryCount: 1, batch: true }),
     });
 
     const rewall = new Rewall({ publicClient, name, universalResolver: UNIVERSAL_RESOLVER, identity });
