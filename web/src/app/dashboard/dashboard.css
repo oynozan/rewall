@@ -2730,3 +2730,54 @@ body[data-home-tour="active"] .tour-restart {
     justify-content: flex-end;
     gap: 9px;
 }
+
+/* A payment that landed with no receipt is unfinished business rather than a failure, so it reads as a task */
+.unfinished {
+    border-left: 2px solid #d6b868;
+    padding-left: 16px;
+    margin-top: 20px;
+}
+.unfinished-title {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #dbdbc9;
+}
+.unfinished-title .glyph {
+    flex-shrink: 0;
+    margin-top: 3px;
+    stroke-width: 2.2;
+    color: #d6b868;
+}
+.unfinished .field-help {
+    margin-top: 8px;
+}
+.unfinished-id {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--hover);
+}
+.unfinished-id .mono {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+    color: #dbdbc9;
+}
+/* Subordinate to the headline above it, which stays true whatever the retry reports */
+.unfinished-note {
+    margin-top: 14px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #8f8f83;
+}
+.unfinished .text-button {
+    margin-top: 14px;
+}

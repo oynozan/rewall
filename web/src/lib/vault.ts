@@ -1,4 +1,4 @@
-import { createPublicClient, decodeFunctionResult, encodeFunctionData, http, namehash } from "viem";
+import { createPublicClient, decodeFunctionResult, encodeFunctionData, http, namehash, type Address } from "viem";
 import { normalize } from "viem/ens";
 import { sepolia } from "viem/chains";
 import { dnsEncode, RECORD, resolverAbi, splitNames, universalResolverAbi, SCHEMA_VERSION } from "@rewall/sdk";
@@ -57,6 +57,20 @@ export const vaultClient = createPublicClient({
     // viem's default retry lands inside the same window the limit is counting
     transport: http(RPC_URL, { timeout: 15000, retryCount: 3, retryDelay: 300, batch: true }),
 });
+
+// Measured on Sepolia, a subname registration is about 170k and the record multicall about 780k
+export const CREATE_GAS = BigInt(950_000);
+
+export type GasCheck = { ok: boolean; held: bigint; needed: bigint };
+
+// Asked before anything irreversible, since a free action that strands a paid one is the worst order
+export async function affordsGas(address: Address, gas: bigint): Promise<GasCheck> {
+    const [held, price] = await Promise.all([vaultClient.getBalance({ address }), vaultClient.getGasPrice()]);
+
+    // Half again, because the price moves between this check and the wallet actually signing
+    const needed = (gas * price * BigInt(3)) / BigInt(2);
+    return { ok: held >= needed, held, needed };
+}
 
 export function ownerName(input: string) {
     const name = normalize(input.trim());

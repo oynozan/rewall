@@ -39,6 +39,9 @@ const RAIL: Record<string, string> = {
     internal_error: "The transfer rail is having trouble. Try again in a moment.",
 };
 
+// The RPC phrases this several ways and viem passes the sentence through whole
+const SHORT_OF_GAS = /insufficient funds|exceeds the balance of the account/i;
+
 const FALLBACK = "Something went wrong. Try again.";
 
 export function explain(error: unknown): string {
@@ -52,6 +55,12 @@ export function explain(error: unknown): string {
     // viem nests the cause the user actually triggered, most often a rejected prompt
     const cause = (error as { cause?: unknown }).cause;
     if (cause instanceof Error && MESSAGES[cause.name]) return MESSAGES[cause.name];
+
+    // Named before anything generic, because the fallback tells them to retry and retrying cannot work
+    const nested = cause instanceof Error ? cause.message : "";
+    if (SHORT_OF_GAS.test(error.message) || SHORT_OF_GAS.test(nested)) {
+        return "This wallet does not hold enough Sepolia ETH to pay for this transaction. Top it up, then try again.";
+    }
 
     // The rail client carries a status and a body but sets no name, so its failures are read off those
     const status = (error as { status?: number }).status;

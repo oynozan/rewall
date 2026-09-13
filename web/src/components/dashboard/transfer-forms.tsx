@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { formatUnits, getAddress, isAddress, parseUnits, type Address } from "viem";
+import { formatEther, formatUnits, getAddress, isAddress, parseUnits, type Address } from "viem";
 import {
     encodeReceipt,
     decodeReceipt,
@@ -22,12 +22,20 @@ import {
 } from "@rewall/sdk";
 import { explain } from "@/src/lib/errors";
 import { watchName } from "@/src/lib/account";
-import { ownerName, UNIVERSAL_RESOLVER, vaultClient, type Secret } from "@/src/lib/vault";
+import {
+    affordsGas,
+    CREATE_GAS,
+    ownerName,
+    UNIVERSAL_RESOLVER,
+    vaultClient,
+    type GasCheck,
+    type Secret,
+} from "@/src/lib/vault";
 import { useIdentity } from "./identity";
 import { useWorkspace } from "./dashboard-shell";
 import { useOwnRecovery } from "./create-secret";
 import { useRail, type Token } from "./rail";
-import { CopyButton, Icon } from "./ui";
+import { CopyButton, Glyph, Icon } from "./ui";
 
 // A payment is irreversible and its id is the only handle on it, so it outlives a failed receipt write
 const unwrittenKey = (address: string) => `rewall.unwritten.${address.toLowerCase()}`;
@@ -79,6 +87,8 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
     const [candidate, setCandidate] = useState<Candidate>({ state: "empty" });
     const [step, setStep] = useState("");
     const [error, setError] = useState("");
+    // The balance below the amount is the rail token, so a wallet out of gas looks fully funded without this
+    const [gas, setGas] = useState<GasCheck | null>(null);
     // Read at mount, because a payment whose receipt never landed has to be the first thing shown
     const [pending, setPending] = useState<Unwritten | null>(() => {
         try {
@@ -88,6 +98,19 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
             return null;
         }
     });
+
+    useEffect(() => {
+        if (!account) return;
+        let active = true;
+        void affordsGas(account as Address, CREATE_GAS)
+            .then((result) => {
+                if (active) setGas(result);
+            })
+            .catch(() => {});
+        return () => {
+            active = false;
+        };
+    }, [account]);
 
     // Both keys in one read, because a receipt cannot be shared with a name that publishes no key
     async function look(value: string) {
@@ -189,6 +212,24 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
             return;
         }
 
+        // The payment is free and irreversible and the receipt is not, so a short wallet stops it here
+        try {
+            setStep("Checking you can write the receipt…");
+            const gas = await affordsGas(account as Address, CREATE_GAS);
+            if (!gas.ok) {
+                setError(
+                    `This wallet holds ${formatEther(gas.held)} Sepolia ETH and writing the receipt needs about ${formatEther(gas.needed)}. Top it up first, because the payment cannot be undone and the receipt is the only record of it.`,
+                );
+                return;
+            }
+        } catch {
+            // A balance that cannot be read is not a balance that is too low, so this only warns
+            setError("Could not check this wallet's gas. Retry, or top it up before sending.");
+            return;
+        } finally {
+            setStep("");
+        }
+
         try {
             setStep("Waiting for your wallet…");
             const tx = await rail.pay(candidate.shielded as Address, amount);
@@ -232,20 +273,34 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
     // still running is not a write that failed
     if (pending && !step) {
         return (
-            <div className="form-error" role="alert">
-                <p>The payment went through. The receipt did not.</p>
+            <div className="unfinished" role="alert">
+                <p className="unfinished-title">
+                    <Glyph name="warning" size={16} />
+                    <span>The payment went through. The receipt did not.</span>
+                </p>
                 <p className="field-help">
                     Nothing else records this, so write it before you close the tab. The id is the only handle.
                 </p>
-                <p className="mono">{pending.tx}</p>
-                <CopyButton value={pending.tx} label="Copy transaction id" />
-                <button type="button" className="button" disabled={Boolean(step)} onClick={() => void retry()}>
+
+                <div className="unfinished-id">
+                    <span className="mono">{pending.tx}</span>
+                    <CopyButton value={pending.tx} label="Copy transaction id" />
+                </div>
+
+                <button
+                    type="button"
+                    className="button primary full-width"
+                    disabled={Boolean(step)}
+                    onClick={() => void retry()}
+                >
                     {step || "Write the receipt"}
                 </button>
+
+                {error && <p className="unfinished-note">{error}</p>}
+
                 <button type="button" className="text-button" disabled={Boolean(step)} onClick={dismiss}>
                     Dismiss, I have saved the id
                 </button>
-                {error && <p className="form-error">{error}</p>}
             </div>
         );
     }
@@ -278,6 +333,15 @@ export function SendTransfer({ onDone }: { onDone: () => void }) {
             <p className="field-help">
                 You hold <Amounts value={rail.balance} />. Nothing about this payment reaches the chain.
             </p>
+            {gas && !gas.ok && (
+                <p className="unfinished-title">
+                    <Glyph name="warning" size={16} />
+                    <span>
+                        The receipt does, and it costs gas. This wallet holds {formatEther(gas.held)} Sepolia ETH, which
+                        will not cover writing one. Top it up before sending, because the payment cannot be undone.
+                    </span>
+                </p>
+            )}
 
             {candidate.state !== "address" && (
                 <label className="check-row">
