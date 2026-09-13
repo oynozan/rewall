@@ -3,6 +3,7 @@
 import { chromium } from "playwright";
 import { build } from "esbuild";
 import { fixtures } from "./fixtures.mjs";
+import QRCode from "qrcode";
 
 let passed = 0;
 const pass = (message) => {
@@ -31,7 +32,9 @@ const here = new URL(".", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$
 const detector = await bundle(
     `import { detectOtpField } from "../src/detect.ts";
      import { fillOtp, fillField } from "../src/fill.ts";
-     window.rewall = { detectOtpField, fillOtp, fillField };`,
+     import { visitedHostname } from "../src/capture.ts";
+     import { scanOtpauth, readOtpauth } from "../src/qr.ts";
+     window.rewall = { detectOtpField, fillOtp, fillField, visitedHostname, scanOtpauth, readOtpauth };`,
     here,
 );
 
@@ -123,6 +126,70 @@ const reactResult = await page.evaluate(() => {
 if (reactResult.dom !== "424242") fail(`React input holds ${reactResult.dom}`);
 if (reactResult.state !== "424242") fail(`React state holds ${reactResult.state}, so onChange never fired`);
 pass("a React controlled input updates its state, not just the DOM");
+
+/* The hostname the popup offers to save, which decides whether a hand off is offered at all */
+
+await page.setContent(`<!doctype html><meta charset="utf-8"><body>`);
+await page.addScriptTag({ content: detector });
+const hostnames = await page.evaluate(() =>
+    [
+        "https://github.com/login",
+        "http://localhost:3000/dashboard",
+        "https://accounts.google.com",
+        "chrome://extensions",
+        "about:blank",
+        "file:///C:/x.html",
+        "moz-extension://abc/popup.html",
+        "",
+        "not a url",
+    ].map((url) => window.rewall.visitedHostname(url)),
+);
+const expected = ["github.com", "localhost", "accounts.google.com", "", "", "", "", "", ""];
+if (hostnames.join("|") !== expected.join("|")) fail(`the popup read ${hostnames.join(", ")}`);
+pass("only an http page offers its hostname to save");
+
+/* The setup QR, generated for real and read back by the same decoder the popup uses */
+
+const SETUP =
+    "otpauth://totp/RFC%206238:Test?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=RFC%206238&digits=8&period=30";
+
+// Rendered at the size a real setup page uses, so this proves the decoder at the resolution it will meet
+const setupQr = await QRCode.toDataURL(SETUP, { width: 220, margin: 2 });
+const otherQr = await QRCode.toDataURL("https://example.com/not-a-setup-code", { width: 220, margin: 2 });
+
+await page.setContent(`<!doctype html><meta charset="utf-8"><body>`);
+await page.addScriptTag({ content: detector });
+
+const scanned = await page.evaluate((url) => window.rewall.scanOtpauth(url), setupQr);
+if (scanned !== SETUP) fail(`the setup QR decoded to ${scanned}`);
+pass("a real setup QR decodes to the URI it was made from");
+
+const refused = await page.evaluate(
+    (url) =>
+        window.rewall
+            .scanOtpauth(url)
+            .then(() => "")
+            .catch((failure) => failure.name),
+    otherQr,
+);
+if (refused !== "NoQrError") fail(`a QR holding a link was answered with ${refused}`);
+pass("a QR holding something other than a setup code is refused");
+
+// A screen with no code on it at all, which is what most of these attempts will be
+const blank = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 320;
+    canvas.height = 200;
+    const context = canvas.getContext("2d");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, 320, 200);
+    return window.rewall
+        .scanOtpauth(canvas.toDataURL())
+        .then(() => "")
+        .catch((failure) => failure.message);
+});
+if (!/no setup code/i.test(blank)) fail(`a blank screen said ${blank}`);
+pass("a screen with no code on it says so rather than failing silently");
 
 await browser.close();
 console.log(`\n${passed} checks passed against a real browser`);
