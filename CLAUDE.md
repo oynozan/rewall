@@ -12,7 +12,9 @@ Permissionless secret infrastructure on ENSv2 Sepolia. `SPEC.md` is the source o
 - `sdk/` is `@rewall/sdk`, the core. `tools/` holds the setup and inspection scripts and `.env`. `examples/` holds the runnable examples. `web/` is the Next.js dApp. `rail/` is an original reimplementation of the private transfer service for local testing only, never a Rewall component. The upstream it was written against is Chainlink's demo, cloned into the gitignored `sandbox/`.
 - Clients per SPEC: TypeScript SDK (core, everything builds on it), CLI, MCP server, browser extension.
 - `mcp/` is the SPEC section 7 MCP server. `ledger/` enrols an agent into a Ledger Key Ring over ENS, and is optional hardening rather than a dependency of anything.
-- Design docs and TODO live outside the repo, in this project's Claude storage under `docs/`. Never add them here.
+- `cre/` is the Chainlink CRE Confidential Workflow that reads a secret as a granted ENS name. Its `enclave-grantee/` subfolder is managed with `bun` rather than `pnpm`, because the CRE toolchain compiles with Bun, and it is the one place in the repo that exception applies.
+- `docs/` is the Nextra documentation site served at docs.rewall.me. Pages are Markdown files in `docs/content/`, and `docs/content/_meta.ts` orders them. The MCP server is served at mcp.rewall.me.
+- Design docs and TODO live outside the repo, in this project's Claude storage, in a folder that is also named `docs/`. Never add them to the repo, and never mistake that folder for the documentation site.
 
 ## Names
 

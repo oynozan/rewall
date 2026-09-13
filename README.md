@@ -29,6 +29,7 @@ it is needed.
 | `ledger/`    | Puts a server into a Ledger Key Ring with no USB port, using Rewall to deliver the credential.    |
 | `cre/`       | A Chainlink workflow that reads a Rewall secret inside a secure enclave.                          |
 | `rail/`      | A local copy of the private payment service, for testing only. Not part of Rewall.                |
+| `docs/`      | The documentation site at docs.rewall.me. Pages are Markdown files in its `content/` folder.      |
 
 Each folder owns its own dependencies. There is no root `package.json`. `sdk/` must be built before
 anything that uses it, because the others import its `dist` folder.
