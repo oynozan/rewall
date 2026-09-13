@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { wipe } from "@rewall/sdk";
+import { describeOtpUri } from "@rewall/sdk/2fa";
 import { explain } from "@/src/lib/errors";
 import type { Secret } from "@/src/lib/vault";
 import { useIdentity } from "./identity";
@@ -10,7 +11,9 @@ import { CopyButton, Icon } from "./ui";
 
 export function SecretValue({ secret }: { secret: Secret }) {
     const { decrypt, write, unlocked } = useIdentity();
-    const { account, isOwnVault, refresh, setPanel } = useWorkspace();
+    const { account, isOwnVault, ownName, refresh, setPanel } = useWorkspace();
+    // The opened secret, not the loaded vault, since finding one by name can reach somebody else's
+    const mine = isOwnVault && secret.owner === ownName;
     const [revealed, setRevealed] = useState<{ name: string; text: string } | null>(null);
     const [revealing, setRevealing] = useState(false);
     const [replacing, setReplacing] = useState(false);
@@ -51,6 +54,17 @@ export function SecretValue({ secret }: { secret: Secret }) {
     async function replace(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         const next = String(new FormData(event.currentTarget).get("value"));
+
+        // The 2FA row generates codes from this value, so free text here would break it for good
+        if (secret.type === "totp") {
+            try {
+                describeOtpUri(next.trim());
+            } catch {
+                setError("That is not an authenticator setup key, it has to start with otpauth://.");
+                return;
+            }
+        }
+
         setRotating(true);
         setError("");
         try {
@@ -85,11 +99,18 @@ export function SecretValue({ secret }: { secret: Secret }) {
                     </button>
                 </div>
             )}
-            {isOwnVault &&
+            {mine &&
                 (replacing ? (
                     <form onSubmit={replace} className="panel-form replace-form">
-                        <label htmlFor="replacement">New value</label>
-                        <textarea id="replacement" name="value" rows={3} required autoFocus />
+                        <label htmlFor="replacement">{secret.type === "totp" ? "New setup key" : "New value"}</label>
+                        <textarea
+                            id="replacement"
+                            name="value"
+                            rows={3}
+                            required
+                            autoFocus
+                            placeholder={secret.type === "totp" ? "otpauth://totp/…" : undefined}
+                        />
                         <div className="revealed-actions">
                             <button className="button primary" disabled={rotating}>
                                 {rotating ? "Rotating…" : "Replace"}

@@ -1,0 +1,33 @@
+.panel {
+    display: flex;
+    flex-direction: column;
+    margin-top: 28px;
+}
+
+.lead {
+    margin: 0 0 16px;
+    font-size: 14px;
+    line-height: 1.7;
+}
+
+.lead .mono {
+    word-break: break-all;
+}
+
+/* Said before the button rather than after it, because removal is the thing it does not do */
+.warning {
+    margin: 4px 0 22px;
+    padding: 11px 13px;
+    border: 1px solid #4a3a33;
+    border-radius: var(--radius);
+    background: #241c19;
+    font-size: 12px;
+    line-height: 1.75;
+    color: #e0b5a6;
+}
+
+/* :global, or the module hashes the shared class and the rule matches nothing */
+.panel :global(.text-button) {
+    align-self: center;
+    margin-top: 14px;
+}

@@ -281,6 +281,10 @@
     background: #fffef7;
     border-color: #fffef7;
 }
+/* Arcticons are drawn in white, which vanishes on the one button surface in here that is light */
+.button.primary .arc-icon {
+    filter: invert(1);
+}
 .button.small {
     font-size: 13px;
     min-height: 30px;
@@ -296,6 +300,22 @@
 }
 .text-button:hover {
     color: #f2f2ed;
+}
+/* A plus that turns into a cross, so a toggle that opens more fields reads as one */
+.disclose {
+    gap: 8px;
+}
+.disclose::after {
+    content: "";
+    width: 9px;
+    height: 9px;
+    background:
+        linear-gradient(currentColor 0 0) center / 9px 1px no-repeat,
+        linear-gradient(currentColor 0 0) center / 1px 9px no-repeat;
+    transition: transform 220ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+.disclose[aria-expanded="true"]::after {
+    transform: rotate(45deg);
 }
 .icon-button {
     width: 32px;
@@ -380,6 +400,26 @@
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
     font-weight: 400;
+}
+.spinner {
+    display: inline-block;
+    flex-shrink: 0;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    opacity: 0.5;
+    animation: spinner-turn 700ms linear infinite;
+}
+@keyframes spinner-turn {
+    to {
+        transform: rotate(360deg);
+    }
+}
+/* Slowed rather than stopped, because a still ring reads as a control that has given up */
+@media (prefers-reduced-motion: reduce) {
+    .spinner {
+        animation-duration: 2.4s;
+    }
 }
 .segmented-progress {
     display: flex;
@@ -574,8 +614,25 @@ input[type="checkbox"]:checked::after {
 }
 /* Dimmer than the cell it sits in, because an absence has to read as one rather than as another value */
 .access-cell .unset,
-.recovery-cell .unset {
+.recovery-cell .unset,
+.secret-site .unset {
     color: #6e6e66;
+}
+.secret-site {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+.secret-site-form {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+.secret-site-form input {
+    flex: 1 1 160px;
+    min-width: 0;
 }
 .date-cell {
     font-size: 12px;
@@ -754,7 +811,47 @@ input[type="checkbox"]:indeterminate::after {
     flex-direction: column;
     margin-top: 28px;
 }
+/* The names the connected wallet already holds, offered so nobody has to type one they own */
+.owned-names {
+    display: grid;
+    gap: 8px;
+    margin: 20px 0 0;
+    padding: 0;
+    list-style: none;
+}
+.owned-name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    font-size: 14px;
+    color: #dbdbd6;
+    text-align: left;
+}
+.owned-name:hover:not(:disabled) {
+    border-color: var(--border-hover);
+    background: var(--hover);
+}
+.owned-name:disabled {
+    color: var(--muted);
+}
+.owned-name em {
+    margin-left: auto;
+    font-size: 12px;
+    font-style: normal;
+    color: var(--subtle);
+}
+/* A disclosure with no margin touches the section it opens, so it reads as that section's first line */
+.panel-form > button[aria-expanded]:not([role="combobox"]) {
+    margin-bottom: 14px;
+}
+/* Block, because a label nested in any container is inline and drops the margin below it */
 .panel-form label {
+    display: block;
     font-size: 14px;
     margin-bottom: 9px;
 }
@@ -800,6 +897,10 @@ input[type="checkbox"]:indeterminate::after {
 .full-width {
     width: 100%;
     margin-top: 26px;
+}
+/* The copy above a full width button already opens the gap, so the button must not open a second one */
+.field-help + .full-width {
+    margin-top: 0;
 }
 .form-error {
     border: 1px solid var(--border-hover);
@@ -920,7 +1021,7 @@ input[type="checkbox"]:indeterminate::after {
         margin-left: 210px;
     }
     .brand-row {
-        padding: 0 18px;
+        padding: 0 22px;
     }
     .workspace-switcher {
         gap: 7px;
@@ -959,9 +1060,12 @@ input[type="checkbox"]:indeterminate::after {
     .workspace-main {
         margin-left: 0;
     }
-    .topbar,
-    .mobile-menu {
+    .topbar {
         display: flex;
+    }
+    /* inline-grid, because .icon-button centres its glyph with place-items and flex ignores that */
+    .mobile-menu {
+        display: inline-grid;
     }
     .mobile-scrim {
         position: fixed;
@@ -1187,8 +1291,26 @@ input[type="checkbox"]:indeterminate::after {
     font-size: 12px;
     white-space: normal;
 }
-.transfer-table {
-    min-width: 380px;
+/* Specific enough to beat the 680px shared floor, which six columns do not fit inside */
+.dashboard-app .secrets-browser .transfer-table {
+    min-width: 880px;
+}
+/* Every column takes a share of the width so the slack spreads instead of pooling behind one of them */
+/* The party column is the widest because a full 0x address is the longest thing any row holds */
+.transfer-table .table-name-col {
+    width: 28%;
+}
+.transfer-party-col {
+    width: 30%;
+}
+.transfer-shared-col {
+    width: 15%;
+}
+.transfer-date-col {
+    width: 14%;
+}
+.transfer-amount-col {
+    width: 13%;
 }
 .transfer-locked {
     display: inline-flex;
@@ -1197,34 +1319,101 @@ input[type="checkbox"]:indeterminate::after {
     color: var(--muted);
     font-size: 12px;
 }
-.balance-actions,
-.balance-extra {
-    padding: 0 12px 14px;
-}
-.balance-actions {
+.balance-label {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
+    gap: 2px;
+    font-family: var(--font-lexend-deca), sans-serif;
+    font-weight: 200;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+}
+.balance-label .icon-button {
+    width: 24px;
+    height: 24px;
+}
+/* A visible gap is what separates paying somebody from moving your own money about */
+.balance-banner .extension-actions {
+    align-items: center;
+    gap: 28px;
+}
+.balance-pair {
+    display: flex;
     gap: 8px;
 }
+/* Without this the box inherits the full width every other field in the panel gets */
 .panel-form .check-row {
     display: flex;
     align-items: center;
     gap: 9px;
     margin-bottom: 18px;
+    font-size: 14px;
 }
 .panel-form .check-row input {
     width: 15px;
     height: 15px;
+    min-height: 0;
     padding: 0;
     margin: 0;
     accent-color: #929288;
 }
-.transfer-recipient {
-    max-width: 200px;
+/* Matched to the metal button beside them, which sets its own height */
+.balance-banner .button {
+    min-height: 46px;
+}
+/* Sits under the banner on the same right edge the Deposit pair ends on */
+.balance-banner {
+    margin-bottom: 14px;
+}
+.balance-send {
+    width: 236px;
+    margin: 0 0 26px auto;
+}
+.balance-wallet {
+    color: #e8e8e5;
+}
+.balance-banner .balance-figure {
+    font-size: 40px;
+    font-weight: 400;
+    line-height: 1;
+    margin-bottom: 12px;
+}
+.balance-banner .extension-copy p {
+    max-width: 62ch;
+}
+.watch-input {
+    max-width: 260px;
+}
+.watch-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 0 12px;
+}
+.watch-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 2px 2px 9px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    color: #c1c1b9;
+}
+.watch-chip .icon-button {
+    width: 20px;
+    height: 20px;
+}
+.transfer-party {
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: 12px;
+    color: #a2a29a;
+}
+/* Dimmer than the cell it sits in, because an absence has to read as one rather than as another value */
+.transfer-party .unset {
+    color: #6e6e66;
 }
 
 /* Authenticator */
@@ -1365,10 +1554,6 @@ input[type="checkbox"]:indeterminate::after {
     .secrets-page .otp-table,
     .otp-table {
         min-width: 630px;
-    }
-    .secrets-page .transfer-table,
-    .transfer-table {
-        min-width: 370px;
     }
     .otp-code .otp-tooltip {
         opacity: 1;
@@ -1588,7 +1773,7 @@ input[type="checkbox"]:indeterminate::after {
 .terminal-overview {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     grid-template-areas: "secrets otp volume volume" "transfers transfers volume volume";
-    grid-template-rows: 150px 96px;
+    grid-template-rows: 150px 106px;
 }
 .terminal-overview > .secrets-card {
     grid-area: secrets;
@@ -1651,22 +1836,41 @@ input[type="checkbox"]:indeterminate::after {
 .table-end-col {
     width: 96px;
 }
-/* The secrets table splits the same 280px tail into three, so every table still breaks at the same offsets */
-/* Sized off the longest real values, "2 people, 1 team" and a full ENS name, with room for a fallback font */
+/* Shares rather than fixed widths, so the slack spreads instead of pooling behind the name */
+/* Weighted by the longest real values, a full ENS name and "2 people, 1 team" */
+.secrets-table .table-name-col {
+    width: 28%;
+}
+.secrets-table .table-data-col {
+    width: 17%;
+}
 .secrets-access-col {
-    width: 126px;
+    width: 20%;
 }
 .secrets-recovery-col {
-    width: 112px;
+    width: 18%;
 }
 .secrets-date-col {
-    width: 94px;
+    width: 17%;
 }
 .otp-table th:first-child,
 .otp-table td:first-child,
 .transfer-table th:first-child,
 .transfer-table td:first-child {
     padding-left: 54px;
+}
+/* Shares rather than fixed widths, so the slack spreads instead of pooling behind the account name */
+.otp-table .table-name-col {
+    width: 30%;
+}
+.otp-table .table-data-col {
+    width: 27%;
+}
+.otp-table .table-status-col {
+    width: 22%;
+}
+.otp-table .table-end-col {
+    width: 21%;
 }
 .otp-table .row-action {
     width: auto;
@@ -2113,6 +2317,31 @@ input[type="checkbox"]:indeterminate::after {
     margin-top: 8px;
     overflow-wrap: anywhere;
 }
+.recovery-opened {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.recovery-opened li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+}
+.recovery-opened-value {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
 .recovery-guide {
     padding-top: 12px;
 }
@@ -2366,6 +2595,10 @@ body[data-home-tour="active"] .tour-restart {
     align-items: stretch;
     gap: 24px;
 }
+/* Both asides take themselves off once an extension is paired, and the column they sat in goes with them */
+.home-otp-grid:not(:has(.extension-banner)) {
+    grid-template-columns: minmax(0, 1fr);
+}
 .home-otp-table {
     min-width: 0;
 }
@@ -2403,7 +2636,7 @@ body[data-home-tour="active"] .tour-restart {
     .extension-banner-compact {
         flex-direction: column;
         align-items: flex-start;
-        justify-content: flex-end;
+        justify-content: center;
         padding: 24px 20px;
         gap: 22px;
         min-height: 190px;
@@ -2423,4 +2656,64 @@ body[data-home-tour="active"] .tour-restart {
 
 .sidebar-action > .add-secret-plain {
     width: 100%;
+}
+
+/* Placeholders */
+.skel {
+    display: inline-block;
+    max-width: 100%;
+    border-radius: var(--radius-sm);
+    background: var(--border);
+    vertical-align: middle;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .skel {
+        background: linear-gradient(90deg, var(--border) 0%, var(--border-hover) 50%, var(--border) 100%);
+        background-size: 200% 100%;
+        animation: skel-sweep 1.4s ease-in-out infinite;
+    }
+}
+@keyframes skel-sweep {
+    from {
+        background-position: 200% 0;
+    }
+    to {
+        background-position: -200% 0;
+    }
+}
+
+/* Privy modal, its own DOM and its own palette, pulled onto this dashboard's borders */
+#privy-dialog [id^="headlessui-dialog-panel"],
+#privy-modal-content {
+    box-shadow: none;
+}
+#privy-modal-content {
+    border: 1px solid var(--border-strong);
+}
+/* Their palette is blue tinted, and every surface reads it from these, so the variables are what move */
+#privy-dialog {
+    --privy-color-border-default: var(--border-strong);
+    --privy-color-border-hover: var(--border-hover);
+    --privy-color-foreground-2: var(--muted);
+    --privy-color-foreground-3: var(--subtle);
+    --privy-color-foreground-4: var(--border-strong);
+    --privy-color-background-2: var(--hover);
+    --privy-color-background-hover: var(--hover);
+    --privy-color-background-clicked: var(--hover);
+    --privy-color-info-bg: var(--surface);
+    --privy-color-info-bg-hover: var(--hover);
+    --privy-color-background-disabled: var(--background);
+    --privy-color-background-interactive-disabled: var(--surface);
+}
+
+/* An actions block whose every control is conditional still took its own row when they all sat out */
+.page-actions:empty {
+    display: none;
+}
+/* Two actions where the table plans for one, so they sit together rather than stacking the row */
+.otp-row-actions {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 9px;
 }
