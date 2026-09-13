@@ -18,9 +18,14 @@ import {
     addToIndex,
     GUARDIAN_RECOVERY_PREFIX,
     guardianRecoveryEntry,
+    clearSecretRecords,
     removeFromIndex,
     dnsEncode,
     WRAP_PREFIX,
+    joinApprovals,
+    splitApprovals,
+    type Approval,
+    type ApprovalRole,
     type SecretRecords,
 } from "./records.ts";
 import {
@@ -30,14 +35,21 @@ import {
     openSecret,
     wrapFingerprints,
     SecretExistsError,
+    SecretMissingError,
     type Grantee,
 } from "./secret.ts";
 import { deriveSubtreeKey, sealSubtreeKey, openSubtreeKey } from "./subtree.ts";
 import { createGuardianSet, reshare, recoverWithShares } from "./guardians.ts";
 import {
+    assertApproved,
+    assertCanonical,
     authorizationPayload,
+    KeyChangedError,
     authorizationSigner,
     isAuthorizedBy,
+    isLegacyAuthorizedBy,
+    LegacyAuthorizationError,
+    unacceptedChanges,
     UnauthorizedListError,
     type Authorization,
 } from "./authorization.ts";
@@ -70,17 +82,6 @@ export type CreateOptions = {
 };
 
 export const NAMESPACE_LABEL = "rewall";
-
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-
-// SET_RESOLVER plus its admin variant, which is what a secret subname needs and nothing more
-const SET_RESOLVER_ROLES = (1n << 24n) | ((1n << 24n) << 128n);
-
-const subnameAbi = parseAbi([
-    "function register(string label, address owner, address registry, address resolver, uint256 roleBitmap, uint64 expiry) returns (uint256)",
-    "function getResolver(string label) view returns (address)",
-    "function getExpiry(uint256 anyId) view returns (uint64)",
-]);
 
 export class Rewall {
     readonly name: string;
@@ -204,16 +205,14 @@ export class Rewall {
     async create(secretName: string, plaintext: Uint8Array, options: CreateOptions): Promise<Hash> {
         const owner = await this.selfAsGrantee();
         const recovery = await Promise.all(options.recovery.map((n) => this.resolveRecovery(n)));
-        const grantees = [
-            ...(await Promise.all((options.grantees ?? []).map((n) => this.publicKeyOf(n)))),
-            ...(await Promise.all((options.subtreeGrantees ?? []).map((n) => this.subtreeKeyOf(n)))),
-        ];
+        const directNames = options.grantees ?? [];
+        const subtreeNames = options.subtreeGrantees ?? [];
+        const direct = await Promise.all(directNames.map((n) => this.publicKeyOf(n)));
+        const subtrees = await Promise.all(subtreeNames.map((n) => this.subtreeKeyOf(n)));
+        const grantees = [...direct, ...subtrees];
 
         const existing = await this.read(secretName, [RECORD.holders, RECORD.blob]);
         if (existing[RECORD.blob] && !options.overwrite) throw new SecretExistsError(secretName);
-
-        // Registered before anything is written, or ownerOf stays empty and the secret can never be rotated
-        await this.ensureSecretName(secretName);
 
         const records = await planSecret({
             secretName,
@@ -236,14 +235,20 @@ export class Rewall {
             .filter((fingerprint) => !kept.has(fingerprint))
             .map((fingerprint) => ({ key: RECORD.wrap(fingerprint), value: "" }));
 
-        const named = (list: Grantee[]) => list.map((g) => g.name).filter((n): n is string => Boolean(n));
+        // A creator that is not the anchor would sign a list no rotation could ever verify, so it stops here
+        const anchor = await this.ownerAddressOf(secretName);
+        if (this.address().toLowerCase() !== anchor.toLowerCase()) {
+            throw new Error(`${secretName} sits under a name held by ${anchor}, not by this wallet`);
+        }
+
+        // The source lists, not the resolved ones, so every approval lines up with the entry it came from
+        const lists = { grantees: directNames, subtrees: subtreeNames, recovery: options.recovery };
         const authorization = await this.signAuthorization({
             secretName,
             counter: 1,
             owner: this.name,
-            grantees: named(grantees.filter((g) => !g.subtree)),
-            subtrees: named(grantees.filter((g) => g.subtree)),
-            recovery: named(recovery),
+            ...lists,
+            approvals: this.approvalsFor(this.name, owner, lists, { grantees: direct, subtrees, recovery }),
         });
 
         // The index rides the same transaction, or a rejected second prompt would hide a secret that exists
@@ -258,63 +263,9 @@ export class Rewall {
         ]);
     }
 
-    // Records under an unregistered subname read back fine but leave ownerOf empty, so nothing can rotate
-    async ensureSecretName(secretName: string): Promise<Hash | null> {
-        // Checked before the registry lookups, so a read only client fails clearly instead of after a round trip
-        const { walletClient, account } = this.signer("registering a subname");
-
-        const label = secretName.split(".")[0]!;
-        const parent = secretName.split(".").slice(1).join(".");
-
-        const registry = await this.parentRegistryOf(secretName);
-        const configured = await this.publicClient.readContract({
-            address: registry,
-            abi: subnameAbi,
-            functionName: "getResolver",
-            args: [label],
-        });
-        if (configured !== ZERO_ADDRESS) return null;
-
-        const resolver = await resolverFor(this.publicClient, this.universalResolver, parent);
-        if (!resolver) throw new Error(`no resolver configured for ${parent}`);
-
-        // The subname inherits the parent's expiry, because a secret outliving its namespace is unreachable
-        const parentLabel = parent.split(".")[0]!;
-        const expiry = await this.publicClient.readContract({
-            address: await this.parentRegistryOf(parent),
-            abi: subnameAbi,
-            functionName: "getExpiry",
-            args: [BigInt(keccak256(toBytes(parentLabel)))],
-        });
-
-        const hash = await walletClient.writeContract({
-            address: registry,
-            abi: subnameAbi,
-            functionName: "register",
-            args: [label, this.address(), ZERO_ADDRESS, resolver, SET_RESOLVER_ROLES, expiry],
-            account,
-            chain: walletClient.chain,
-        });
-
-        const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
-        if (receipt.status !== "success") throw new Error(`registering ${secretName} reverted, ${hash}`);
-        return hash;
-    }
-
     private address(): Address {
         const { account } = this.signer("reading the caller's address");
         return (typeof account === "string" ? account : account.address) as Address;
-    }
-
-    private async parentRegistryOf(name: string): Promise<Address> {
-        const registry = (await this.publicClient.readContract({
-            address: this.universalResolver,
-            abi: registryLookupAbi,
-            functionName: "findParentRegistry",
-            args: [dnsEncode(name)],
-        })) as Address;
-        if (!registry || registry === ZERO_ADDRESS) throw new Error(`no registry holds ${name}`);
-        return registry;
     }
 
     async get(secretName: string): Promise<Uint8Array> {
@@ -345,18 +296,22 @@ export class Rewall {
 
     async grant(secretName: string, granteeName: string, options?: { subtree?: boolean }): Promise<Hash> {
         const current = await this.readForRotate(secretName);
-        await this.assertAuthorized(secretName, current);
+        this.assertIsOwner(secretName, await this.assertAuthorized(secretName, current));
         const listKey = options?.subtree ? RECORD.subtrees : RECORD.grantees;
+        const role: ApprovalRole = options?.subtree ? "subtree" : "grantee";
+        const grantee = options?.subtree ? await this.subtreeKeyOf(granteeName) : await this.publicKeyOf(granteeName);
+        const approval: Approval = { role, name: granteeName, fingerprint: grantee.fingerprint };
 
         // A bare re-grant would leave the old key's wrap live on an unchanged data key
         if (splitNames(current[listKey]).includes(granteeName)) {
+            // Naming it here is the owner approving this key, which is what lets a bumped subtree version re-grant
             return this.rotateTo(secretName, current, {
                 grantees: splitNames(current[RECORD.grantees]),
                 subtrees: splitNames(current[RECORD.subtrees]),
+                accept: [approval],
             });
         }
 
-        const grantee = options?.subtree ? await this.subtreeKeyOf(granteeName) : await this.publicKeyOf(granteeName);
         const keys = await this.heldKeys();
         const wrapped = await planGrant(current, keys, grantee);
 
@@ -367,6 +322,7 @@ export class Rewall {
             counter: auth.counter + 1,
             grantees: options?.subtree ? auth.grantees : nextList,
             subtrees: options?.subtree ? nextList : auth.subtrees,
+            approvals: [...auth.approvals, approval],
         });
 
         return this.write(secretName, [
@@ -428,24 +384,76 @@ export class Rewall {
         return this.write(secretName, [{ key: RECORD.site, value: site ? normalizeSite(site) : "" }]);
     }
 
-    // Only the owner signature verifies, so this deliberately does not verify before writing
+    // The one repair path, so the baseline it trusts must verify or a delegate list is laundered into a signature
     async reauthorize(
         secretName: string,
         lists?: { grantees?: string[]; subtrees?: string[]; recovery?: string[] },
+        options?: { accept?: Approval[] },
     ): Promise<Hash> {
         const current = await this.readForRotate(secretName);
+
+        // Appended junk rides under a signature that does not cover it, so the record has to be canonical
+        assertCanonical(secretName, current);
         const auth = this.authorizationOf(secretName, current);
+        const signature = current[RECORD.authSig];
+        const ownerAddress = await this.ownerAddressOf(secretName);
+
+        // A verified or legacy signature is a trustworthy baseline, neither means a tampered record so refuse
+        const verifies = Boolean(signature) && (await isAuthorizedBy(auth, signature!, ownerAddress));
+        const legacy = !verifies && Boolean(signature) && (await isLegacyAuthorizedBy(auth, signature!, ownerAddress));
+        if (!verifies && !legacy) {
+            throw new UnauthorizedListError(
+                secretName,
+                signature ? await authorizationSigner(auth, signature) : null,
+                ownerAddress,
+            );
+        }
+
+        // Only the owner produces a signature that verifies, so a delegate re-signing would only brick it
+        if (this.address().toLowerCase() !== ownerAddress.toLowerCase()) {
+            throw new Error(`only the owner of ${secretName} can reauthorize it`);
+        }
+
+        // Deduped and sorted up front, so the approvals line up with the lists that actually get written
+        const settle = (names: string[]) => [...new Set(names)].sort();
+        const nextLists = {
+            grantees: settle(lists?.grantees ?? auth.grantees),
+            subtrees: settle(lists?.subtrees ?? auth.subtrees),
+            recovery: settle(lists?.recovery ?? auth.recovery),
+        };
+
+        // SPEC section 5 requires a recovery holder, so this cannot sign a list that strands the secret
+        if (nextLists.recovery.length === 0) {
+            throw new Error(`${secretName} would be left with no recovery entry, add one before reauthorizing`);
+        }
+
+        const ownerName = current[RECORD.owner] || this.name;
+        const owner = ownerName === this.name ? await this.selfAsGrantee() : await this.publicKeyOf(ownerName);
+        const resolved = {
+            grantees: await Promise.all(nextLists.grantees.map((n) => this.publicKeyOf(n))),
+            subtrees: await Promise.all(nextLists.subtrees.map((n) => this.subtreeKeyOf(n))),
+            recovery: await Promise.all(nextLists.recovery.map((n) => this.resolveRecovery(n))),
+        };
+
+        const approvals = this.approvalsFor(ownerName, owner, nextLists, resolved);
+
+        // A legacy list bound no keys, so nothing on it is trusted and every name is taken on trust here
+        const prior = legacy ? [] : auth.approvals;
+        // Re-blessing a name already bound to another key is the whole attack, so it has to be named deliberately
+        const changes = unacceptedChanges(prior, approvals, options?.accept ?? []);
+        if (changes.length) throw new KeyChangedError(secretName, changes);
 
         const next: Authorization = {
             secretName,
             counter: auth.counter + 1,
-            owner: current[RECORD.owner] || this.name,
-            grantees: lists?.grantees ?? auth.grantees,
-            subtrees: lists?.subtrees ?? auth.subtrees,
-            recovery: lists?.recovery ?? auth.recovery,
+            owner: ownerName,
+            ...nextLists,
+            approvals,
         };
 
+        // The owner record is written too, or a blanked one leaves a signature that can never re-verify
         return this.write(secretName, [
+            { key: RECORD.owner, value: ownerName },
             { key: RECORD.grantees, value: joinNames(next.grantees) },
             { key: RECORD.subtrees, value: joinNames(next.subtrees) },
             { key: RECORD.recovery, value: joinNames(next.recovery) },
@@ -599,14 +607,17 @@ export class Rewall {
 
     // A client that cannot parse a blob refuses it rather than misreading it or overwriting it
     private assertReadable(secretName: string, records: Record<string, string>): void {
+        // An unset version is only fine with no blob, so an absent secret still surfaces as MissingBlobError
+        if (!records[RECORD.blob]) return;
+
         const version = records[RECORD.version];
-        if (version && version !== SCHEMA_VERSION) {
-            throw new Error(`${secretName} uses schema version ${version}, expected ${SCHEMA_VERSION}`);
+        if (version !== SCHEMA_VERSION) {
+            throw new Error(`${secretName} uses schema version ${version || "(unset)"}, expected ${SCHEMA_VERSION}`);
         }
 
         const encryption = records[RECORD.encryption];
-        if (encryption && encryption !== ENCRYPTION) {
-            throw new Error(`${secretName} is encrypted with ${encryption}, expected ${ENCRYPTION}`);
+        if (encryption !== ENCRYPTION) {
+            throw new Error(`${secretName} is encrypted with ${encryption || "(unset)"}, expected ${ENCRYPTION}`);
         }
     }
 
@@ -618,10 +629,16 @@ export class Rewall {
     private async rotateTo(
         secretName: string,
         current: Record<string, string>,
-        next: { grantees: string[]; subtrees: string[]; recovery?: string[]; plaintext?: Uint8Array },
+        next: {
+            grantees: string[];
+            subtrees: string[];
+            recovery?: string[];
+            plaintext?: Uint8Array;
+            accept?: Approval[];
+        },
     ): Promise<Hash> {
         // Refuses a list the owner never signed, which is what stops a write delegate steering a rotation
-        await this.assertAuthorized(secretName, current);
+        this.assertIsOwner(secretName, await this.assertAuthorized(secretName, current));
 
         // The same gate get() applies, or an older client silently overwrites a newer record set
         this.assertReadable(secretName, current);
@@ -636,10 +653,16 @@ export class Rewall {
         // Strict. A name that no longer resolves must stop the rotation, not vanish from the keep set
         const recoveryNames = next.recovery ?? splitNames(current[RECORD.recovery]);
         const recovery = await Promise.all(recoveryNames.map((n) => this.resolveRecovery(n)));
-        const grantees = [
-            ...(await Promise.all(next.grantees.map((n) => this.publicKeyOf(n)))),
-            ...(await Promise.all(next.subtrees.map((n) => this.subtreeKeyOf(n)))),
-        ];
+        const direct = await Promise.all(next.grantees.map((n) => this.publicKeyOf(n)));
+        const subtrees = await Promise.all(next.subtrees.map((n) => this.subtreeKeyOf(n)));
+        const grantees = [...direct, ...subtrees];
+
+        const auth = this.authorizationOf(secretName, current);
+        const lists = { grantees: next.grantees, subtrees: next.subtrees, recovery: recoveryNames };
+        const approvals = this.approvalsFor(ownerName, owner, lists, { grantees: direct, subtrees, recovery });
+
+        // Checked before anything is sealed, so a swapped pubkey cannot pick up the fresh data key
+        assertApproved(secretName, [...auth.approvals, ...(next.accept ?? [])], approvals);
 
         // A name whose key changed resolves to a new fingerprint, so re-deriving leaves the old wrap live
         const previous = [...splitNames(current[RECORD.holders]), ...wrapFingerprints(current)];
@@ -658,7 +681,6 @@ export class Rewall {
             site: current[RECORD.site],
         });
 
-        const auth = this.authorizationOf(secretName, current);
         const signed = await this.signAuthorization({
             secretName,
             counter: auth.counter + 1,
@@ -666,9 +688,34 @@ export class Rewall {
             grantees: next.grantees,
             subtrees: next.subtrees,
             recovery: recoveryNames,
+            approvals,
         });
 
         return this.write(secretName, [...records, ...signed]);
+    }
+
+    // Clears every record the secret owns and drops it from the index, in one transaction because one
+    // resolver serves every name an account holds
+    // What it cannot do is unpublish the blob, which stays in chain history for anyone who already held a wrap
+    async forget(secretName: string): Promise<Hash> {
+        this.signer("forgetting a secret");
+
+        const parent = secretName.split(".").slice(1).join(".");
+        const label = secretName.split(".")[0]!;
+
+        const [current, listed] = await Promise.all([
+            this.read(secretName, [RECORD.blob, RECORD.holders]),
+            this.read(parent, [RECORD.index]),
+        ]);
+        if (!current[RECORD.blob]) throw new SecretMissingError(secretName);
+
+        const index = removeFromIndex(listed[RECORD.index], label);
+        return this.writeAcross([
+            { name: secretName, records: clearSecretRecords(splitNames(current[RECORD.holders])) },
+            ...(index === listed[RECORD.index]
+                ? []
+                : [{ name: parent, records: [{ key: RECORD.index, value: index }] }]),
+        ]);
     }
 
     async unindex(secretName: string): Promise<Hash | null> {
@@ -695,21 +742,60 @@ export class Rewall {
             grantees: splitNames(records[RECORD.grantees]),
             subtrees: splitNames(records[RECORD.subtrees]),
             recovery: splitNames(records[RECORD.recovery]),
+            approvals: splitApprovals(records[RECORD.authKeys]),
         };
     }
 
-    private async assertAuthorized(secretName: string, records: Record<string, string>): Promise<void> {
+    // Returns the address holding the name, so a caller can refuse to re-sign as anyone but the owner
+    private async assertAuthorized(secretName: string, records: Record<string, string>): Promise<Address> {
         const signature = records[RECORD.authSig];
         if (!signature) {
             throw new Error(`${secretName} carries no ${RECORD.authSig}, refusing to act on an unsigned grantee list`);
         }
 
+        assertCanonical(secretName, records);
+
         const auth = this.authorizationOf(secretName, records);
         const owner = await this.ownerAddressOf(secretName);
 
-        if (!(await isAuthorizedBy(auth, signature, owner))) {
-            throw new UnauthorizedListError(secretName, await authorizationSigner(auth, signature), owner);
+        if (await isAuthorizedBy(auth, signature, owner)) return owner;
+
+        // Only a signature over the old payload gets the migration path, so a stripped record still reads as a forgery
+        if (await isLegacyAuthorizedBy(auth, signature, owner)) throw new LegacyAuthorizationError(secretName);
+
+        throw new UnauthorizedListError(secretName, await authorizationSigner(auth, signature), owner);
+    }
+
+    // Only the owner produces a signature that verifies, so a delegate re-sign would brick later owner actions
+    private assertIsOwner(secretName: string, owner: Address): void {
+        if (this.address().toLowerCase() !== owner.toLowerCase()) {
+            throw new Error(`only the owner of ${secretName} can re-sign its authorization`);
         }
+    }
+
+    // Every party a rotation resolves by name, so each one is checked against the key the owner signed for
+    private approvalsFor(
+        ownerName: string,
+        owner: Grantee,
+        lists: { grantees: string[]; subtrees: string[]; recovery: string[] },
+        resolved: { grantees: Grantee[]; subtrees: Grantee[]; recovery: Grantee[] },
+    ): Approval[] {
+        // A desync here would sign a binding for the wrong name, so it stops rather than trusting the index
+        const pair = (role: ApprovalRole, names: string[], keys: Grantee[]): Approval[] => {
+            if (names.length !== keys.length) throw new Error(`${role} names and keys are out of step on ${ownerName}`);
+            return keys.map((g, i) => {
+                const name = names[i];
+                if (!name) throw new Error(`${role} entry ${i} on ${ownerName} has no name`);
+                return { role, name, fingerprint: g.fingerprint };
+            });
+        };
+
+        return [
+            { role: "owner", name: ownerName, fingerprint: owner.fingerprint },
+            ...pair("grantee", lists.grantees, resolved.grantees),
+            ...pair("subtree", lists.subtrees, resolved.subtrees),
+            ...pair("recovery", lists.recovery, resolved.recovery),
+        ];
     }
 
     private async signAuthorization(auth: Authorization): Promise<SecretRecords> {
@@ -720,6 +806,7 @@ export class Rewall {
         });
         return [
             { key: RECORD.authCounter, value: String(auth.counter) },
+            { key: RECORD.authKeys, value: joinApprovals(auth.approvals) },
             { key: RECORD.authSig, value: signature },
         ];
     }

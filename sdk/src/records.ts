@@ -37,6 +37,8 @@ export const RECORD = {
     holders: "rewall.holders",
     // Signed by the address holding the name, which is the one thing a write delegate cannot rewrite
     authCounter: "rewall.auth.n",
+    // Binds each authorized name to the key it was approved with, so a swapped pubkey cannot inherit a grant
+    authKeys: "rewall.auth.keys",
     authSig: "rewall.auth.sig",
     subtreePubkey: "rewall.subtree.pubkey",
     subtreeKey: "rewall.subtree.key",
@@ -69,6 +71,7 @@ export const ROTATE_KEYS = [
     RECORD.recovery,
     RECORD.holders,
     RECORD.authCounter,
+    RECORD.authKeys,
     RECORD.authSig,
 ];
 
@@ -104,6 +107,40 @@ export const splitNames = (value: string | undefined) =>
         .map((n) => n.trim())
         .filter(Boolean);
 
+// One name can hold a direct grant and a subtree grant on different keys, so the role is part of the identity
+export type ApprovalRole = "owner" | "grantee" | "subtree" | "recovery";
+
+export type Approval = { role: ApprovalRole; name: string; fingerprint: string };
+
+export const FINGERPRINT = /^[0-9a-f]{16}$/;
+
+const ROLES: ApprovalRole[] = ["owner", "grantee", "subtree", "recovery"];
+
+export const approvalKey = (role: ApprovalRole, name: string) => `${role}:${name}`;
+
+export const joinApprovals = (approvals: Approval[]) =>
+    [...new Map(approvals.map((a) => [approvalKey(a.role, a.name), a])).values()]
+        .map((a) => `${a.role}:${a.name}:${a.fingerprint}`)
+        .sort()
+        .join(",");
+
+// The name sits in the middle, so a guardian entry keeps its own colon instead of splitting into the wrong fields
+export const splitApprovals = (value: string | undefined): Approval[] =>
+    splitNames(value)
+        .map((entry) => entry.split(":"))
+        .filter(
+            (parts) =>
+                parts.length >= 3 &&
+                ROLES.includes(parts[0] as ApprovalRole) &&
+                FINGERPRINT.test(parts[parts.length - 1]!) &&
+                parts.slice(1, -1).join(":").length > 0,
+        )
+        .map((parts) => ({
+            role: parts[0] as ApprovalRole,
+            name: parts.slice(1, -1).join(":"),
+            fingerprint: parts[parts.length - 1]!,
+        }));
+
 export function buildSecretRecords(input: {
     type: string;
     blob: string;
@@ -122,7 +159,7 @@ export function buildSecretRecords(input: {
 
     const seen = new Set<string>();
     for (const w of input.wraps) {
-        if (!/^[0-9a-f]{16}$/.test(w.fingerprint)) {
+        if (!FINGERPRINT.test(w.fingerprint)) {
             throw new Error(`fingerprint must be 16 lowercase hex characters, got ${w.fingerprint}`);
         }
         if (seen.has(w.fingerprint)) throw new Error(`duplicate wrap for ${w.fingerprint}`);
@@ -150,6 +187,32 @@ export function buildSecretRecords(input: {
     for (const w of input.wraps) records.push({ key: RECORD.wrap(w.fingerprint), value: w.wrapped });
 
     return records;
+}
+
+// Every key a secret owns, so what is left behind is a name with nothing on it rather than a half erased one
+// The blob stays in chain history either way, which is why the caller has to say so out loud
+export function clearSecretRecords(holders: string[]): SecretRecords {
+    const keys = [
+        RECORD.version,
+        RECORD.type,
+        RECORD.encryption,
+        RECORD.blob,
+        RECORD.cid,
+        RECORD.created,
+        RECORD.allow,
+        RECORD.site,
+        RECORD.shielded,
+        RECORD.owner,
+        RECORD.recovery,
+        RECORD.grantees,
+        RECORD.subtrees,
+        RECORD.holders,
+        RECORD.authCounter,
+        RECORD.authKeys,
+        RECORD.authSig,
+    ];
+
+    return [...keys, ...holders.map((fingerprint) => RECORD.wrap(fingerprint))].map((key) => ({ key, value: "" }));
 }
 
 export function encodeSetTextCalls(node: Hex, records: SecretRecords): Hex[] {
@@ -218,17 +281,30 @@ export const registryLookupAbi = parseAbi([
     "function ownerOf(uint256 tokenId) view returns (address)",
 ]);
 
-// The address holding a name is the one thing about it a write delegate cannot rewrite
+const NOBODY = "0x0000000000000000000000000000000000000000" as Address;
+
+// The address holding the nearest registered name, since a secret needs no registry entry of its own
 export async function ownerAddressOf(client: ReadClient, universalResolver: Address, name: string): Promise<Address> {
+    for (let current = name; current.split(".").length >= 2; current = current.split(".").slice(1).join(".")) {
+        const owner = await registeredOwnerOf(client, universalResolver, current);
+        if (owner !== NOBODY) return owner;
+    }
+    throw new Error(`no registered name holds ${name}`);
+}
+
+// Zero for a label with no live entry in the registry that would hold it, which a write delegate cannot change
+export async function registeredOwnerOf(
+    client: ReadClient,
+    universalResolver: Address,
+    name: string,
+): Promise<Address> {
     const registry = await client.readContract({
         address: universalResolver,
         abi: registryLookupAbi,
         functionName: "findParentRegistry",
         args: [dnsEncode(name)],
     });
-    if (!registry || registry === "0x0000000000000000000000000000000000000000") {
-        throw new Error(`no registry holds ${name}`);
-    }
+    if (!registry || registry === NOBODY) return NOBODY;
 
     const tokenId = await client.readContract({
         address: registry,

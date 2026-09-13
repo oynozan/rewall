@@ -11,6 +11,9 @@ import {
     WRAP_PREFIX,
     SCHEMA_VERSION,
     ENCRYPTION,
+    joinApprovals,
+    splitApprovals,
+    type Approval,
 } from "./records.ts";
 
 const FP_A = "aaaaaaaaaaaaaaaa";
@@ -158,4 +161,66 @@ test("dnsEncode writes length prefixed labels ending in a root byte", () => {
 
 test("dnsEncode of a two label name is shorter than a three label one", () => {
     assert.ok(hexToBytes(dnsEncode("alice.eth")).length < hexToBytes(dnsEncode("rewall.alice.eth")).length);
+});
+
+test("approvals round trip through the record value", () => {
+    const approvals: Approval[] = [
+        { role: "owner", name: "alice.eth", fingerprint: "a".repeat(16) },
+        { role: "grantee", name: "bob.eth", fingerprint: "b".repeat(16) },
+        { role: "subtree", name: "team.eth", fingerprint: "c".repeat(16) },
+    ];
+
+    assert.deepEqual(
+        splitApprovals(joinApprovals(approvals)),
+        [...approvals].sort((x, y) => (x.role < y.role ? -1 : 1)),
+    );
+});
+
+test("a guardian recovery entry keeps its own colon", () => {
+    const approvals: Approval[] = [{ role: "recovery", name: "guardians:alice.eth", fingerprint: "d".repeat(16) }];
+
+    assert.deepEqual(splitApprovals(joinApprovals(approvals)), approvals);
+});
+
+test("one name in two roles survives serialization as two entries", () => {
+    const approvals: Approval[] = [
+        { role: "grantee", name: "team.eth", fingerprint: "1".repeat(16) },
+        { role: "subtree", name: "team.eth", fingerprint: "2".repeat(16) },
+    ];
+
+    assert.equal(splitApprovals(joinApprovals(approvals)).length, 2);
+});
+
+test("joinApprovals is canonical regardless of order", () => {
+    const approvals: Approval[] = [
+        { role: "grantee", name: "bob.eth", fingerprint: "b".repeat(16) },
+        { role: "owner", name: "alice.eth", fingerprint: "a".repeat(16) },
+    ];
+
+    assert.equal(joinApprovals(approvals), joinApprovals([...approvals].reverse()));
+});
+
+test("a malformed approval entry is dropped rather than parsed into a wrong binding", () => {
+    for (const bad of ["", "bob.eth", "bob.eth:abc", "nonsense:bob.eth:abc", ":::"]) {
+        assert.deepEqual(splitApprovals(bad), []);
+    }
+});
+
+test("the approved keys record is read back before a rotation rewrites the set", () => {
+    assert.ok(ROTATE_KEYS.includes(RECORD.authKeys));
+});
+
+test("an approval fingerprint must be sixteen lowercase hex characters", () => {
+    for (const bad of [
+        "owner:alice.eth:",
+        "owner:alice.eth:xyz",
+        `owner:alice.eth:${"A".repeat(16)}`,
+        "owner:alice.eth:abc",
+    ]) {
+        assert.deepEqual(splitApprovals(bad), []);
+    }
+});
+
+test("an approval with an empty name is dropped", () => {
+    assert.deepEqual(splitApprovals(`owner::${"a".repeat(16)}`), []);
 });

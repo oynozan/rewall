@@ -38,6 +38,14 @@ export class SecretExistsError extends Error {
     }
 }
 
+// Removing what is not there says so, rather than spending a transaction writing empty over empty
+export class SecretMissingError extends Error {
+    constructor(secretName: string) {
+        super(`${secretName} holds no secret`);
+        this.name = "SecretMissingError";
+    }
+}
+
 /* Grantee sets */
 
 function assertRecovery(recovery: Grantee[]): void {
@@ -70,6 +78,12 @@ export async function planSecret(input: {
 
     const grantees = input.grantees ?? [];
     const holders = dedupe([input.owner, ...input.recovery, ...grantees]);
+
+    // SPEC section 5 needs a holder other than the owner, or key loss strands the secret
+    if (holders.every((h) => h.fingerprint === input.owner.fingerprint)) {
+        throw new Error("recovery resolves to the owner's own key, so nothing but the owner could recover this");
+    }
+
     const named = (list: Grantee[]) => list.map((g) => g.name).filter((n): n is string => Boolean(n));
     const dek = randomDek();
 

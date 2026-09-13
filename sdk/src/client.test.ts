@@ -40,14 +40,10 @@ test("writing a record without a wallet is refused before any lookup", async () 
     );
 });
 
-test("registering a subname without a wallet is refused before any lookup", async () => {
-    await assert.rejects(() => readOnly({ identity }).ensureSecretName("x.rewall.rewall-test-1.eth"), ReadOnlyError);
-});
-
 test("the refusal names the operation, so a caller knows which half is missing", async () => {
     await assert.rejects(() => readOnly().identity(), /deriving an identity/);
     await assert.rejects(
-        () => readOnly({ identity }).ensureSecretName("x.rewall.rewall-test-1.eth"),
-        /registering a subname/,
+        () => readOnly({ identity }).setSite("x.rewall.rewall-test-1.eth", "github.com"),
+        /writing records/,
     );
 });

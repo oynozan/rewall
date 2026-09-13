@@ -98,9 +98,8 @@ test("allow is written even when empty, so dropping every host actually drops th
     assert.equal(withHosts[RECORD.allow], "api.example.com,api.openai.com");
 });
 
-test("an owner who is also the recovery holder still yields one wrap", async () => {
-    const records = await planSecret({ ...baseInput, recovery: [asGrantee(owner)] });
-    assert.equal(wrapFingerprints(toMap(records)).length, 1);
+test("an owner naming their own key as recovery is refused, since only the owner could then read it", async () => {
+    await assert.rejects(() => planSecret({ ...baseInput, recovery: [asGrantee(owner)] }), /owner's own key/);
 });
 
 test("a secret lifted onto another name refuses to open, even for a real holder", async () => {
