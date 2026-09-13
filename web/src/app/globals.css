@@ -118,6 +118,42 @@ select {
 .muted {
     color: var(--muted);
 }
+
+/* Not found, styled here because dashboard.css only loads under the dashboard layout */
+.not-found {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+    text-align: center;
+}
+.not-found h1 {
+    margin: 0;
+    font-size: 24px;
+}
+.not-found p {
+    margin: 0;
+    color: var(--muted);
+}
+.not-found-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+.not-found-actions a {
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    padding: 8px 14px;
+    color: var(--foreground);
+    text-decoration: none;
+}
+.not-found-actions a:hover {
+    background: var(--hover);
+    border-color: var(--border-hover);
+}
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

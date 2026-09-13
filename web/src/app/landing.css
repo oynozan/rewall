@@ -1,0 +1,1474 @@
+/*
+ * Landing page shell. The page is one centred column held between two hairline rails that run
+ * unbroken from the nav to the footer. Every section is a full bleed band whose bottom border
+ * crosses those rails, so each boundary draws its own crosshair without a single absolute
+ * position. Sections stack with no gap, which is what keeps the rails continuous.
+ */
+
+.lp {
+    --lp-page: #161616;
+    --lp-sheet: #161616;
+    --lp-raise: #1a1a1a54;
+    --lp-rail: #272727;
+    --lp-hair: #202020;
+    --lp-ink: #ededeb;
+    --lp-dim: #9a9a97;
+    --lp-faint: #8a8a87;
+    /* Ghost clears 3:1 as a non-text indicator only, so nothing with words in it may use it */
+    --lp-ghost: #565654;
+    --lp-gap-2: 8px;
+    --lp-gap-3: 12px;
+    --lp-gap-4: 16px;
+    --lp-gap-6: 24px;
+    --lp-gap-8: 32px;
+    --lp-gap-12: 48px;
+    --lp-gap-16: 64px;
+    --lp-gap-24: 96px;
+    --lp-frame: 1360px;
+    --lp-pad: clamp(20px, 3.4vw, 46px);
+    --lp-band: clamp(44px, 4.4vw, 72px);
+    background: var(--lp-page);
+    color: var(--lp-ink);
+    font-size: 15px;
+}
+
+/* Frame */
+
+.band {
+    border-bottom: 1px solid var(--lp-rail);
+    scroll-margin-top: 62px;
+}
+.band:last-child {
+    border-bottom: 0;
+}
+/* The seam is the boundary wherever one exists, so the hairline above it would just double the line */
+.band:has(+ .band .wall) {
+    border-bottom: 0;
+}
+.frame {
+    max-width: var(--lp-frame);
+    margin-inline: auto;
+    border-inline: 1px solid var(--lp-rail);
+    background: var(--lp-sheet);
+}
+
+/* Type */
+
+.lp h1,
+.lp h2,
+.lp h3,
+.lp h4 {
+    margin: 0;
+    font-weight: 400;
+}
+.lp h2 {
+    font-family: var(--font-lexend-deca), sans-serif;
+    font-size: clamp(27px, 3.3vw, 44px);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    font-weight: 300;
+    text-wrap: balance;
+}
+.lp h3 {
+    font-family: var(--font-lexend-deca), sans-serif;
+    font-size: 17px;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    font-weight: 400;
+}
+.lp p {
+    margin: 0;
+    color: var(--lp-dim);
+    line-height: 1.65;
+}
+.lead {
+    max-width: 62ch;
+    font-size: clamp(15px, 1.15vw, 16px);
+}
+.kicker {
+    font-family: var(--font-ubuntu-mono), monospace;
+    font-size: 11px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--lp-faint);
+}
+
+/* Nav */
+
+.nav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--lp-page);
+}
+.nav .frame {
+    display: flex;
+    align-items: center;
+    gap: var(--lp-gap-6);
+    height: 62px;
+    padding-inline: var(--lp-pad);
+    background: var(--lp-page);
+}
+.nav-mark {
+    display: block;
+    width: 104px;
+    height: auto;
+}
+.nav-links {
+    display: flex;
+    gap: 26px;
+    margin-inline: auto;
+    font-size: 13.5px;
+    color: var(--lp-dim);
+}
+.nav-links a:hover {
+    color: var(--lp-ink);
+}
+.nav-cta {
+    display: flex;
+    align-items: center;
+    gap: var(--lp-gap-2);
+}
+
+/* Buttons */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--lp-gap-2);
+    height: 34px;
+    padding-inline: 15px;
+    border: 1px solid #3a3a38;
+    border-radius: 6px;
+    background: linear-gradient(#212121, #1a1a1a);
+    font-size: 13.5px;
+    white-space: nowrap;
+}
+.btn:hover {
+    border-color: #575754;
+    background: linear-gradient(#282828, #202020);
+}
+.btn-solid {
+    border-color: var(--lp-ink);
+    background: var(--lp-ink);
+    color: #131313;
+    font-weight: 600;
+}
+.btn-solid:hover {
+    border-color: #fff;
+    background: #fff;
+}
+.btn-lg {
+    height: 46px;
+    padding-inline: 22px;
+    font-size: 14px;
+}
+.hero-metal {
+    display: block;
+    width: 196px;
+}
+
+/* Hero */
+
+.hero-frame {
+    position: relative;
+    isolation: isolate;
+}
+.hero-dither {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    width: 100%;
+    height: 100%;
+    /* The texture reads as ground, so it fades out before it reaches the brand row */
+    mask-image: linear-gradient(to bottom, #000 58%, transparent 92%);
+}
+.hero {
+    padding: clamp(56px, 7vw, 108px) var(--lp-pad) 0;
+    text-align: center;
+}
+.hero h1 {
+    font-family: var(--font-akt), sans-serif;
+    font-size: clamp(36px, 6vw, 78px);
+    line-height: 1.04;
+    letter-spacing: -0.03em;
+    font-weight: 400;
+    text-wrap: balance;
+}
+.hero h1 span {
+    display: block;
+    font-weight: 500;
+    letter-spacing: -0.038em;
+}
+.hero .lead {
+    margin: var(--lp-gap-6) auto 0;
+    max-width: 54ch;
+}
+.hero-cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--lp-gap-3);
+    justify-content: center;
+    margin-top: var(--lp-gap-8);
+}
+/* The render is bright enough to float off the page, so it is dimmed to sit inside it */
+/* It overlaps the buttons it sits under, so it must never take a click or start a drag */
+.hero-art {
+    display: block;
+    width: min(780px, 76vw);
+    height: auto;
+    margin: clamp(-56px, -3vw, -16px) auto clamp(-86px, -6vw, -28px);
+    filter: brightness(0.86) contrast(1.03);
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+/* The marks Rewall is built on, held grey until a hover returns each to its own brand colour */
+
+.brands {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(24px, 4vw, 56px);
+    padding: var(--lp-gap-12) var(--lp-pad);
+    border-top: 1px solid var(--lp-rail);
+}
+.brands ul {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: clamp(28px, 5vw, 72px);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.brands li {
+    color: #6e6e6b;
+    transition:
+        color 240ms ease,
+        opacity 240ms ease;
+}
+.brands li:hover {
+    color: var(--brand);
+}
+.brand-mark {
+    display: block;
+    height: 31px;
+    width: auto;
+    max-width: 190px;
+}
+
+/* A two row checkerboard seam that opens every section below the hero */
+
+.wall {
+    height: 16px;
+    background-image: conic-gradient(#fff 25%, #0000 0 50%, #fff 0 75%, #0000 0);
+    background-size: 16px 16px;
+    opacity: 0.13;
+}
+
+/* Flowchart over the wave backdrop, four boxes arrowed left to right, one under another on a phone */
+
+.works-frame {
+    position: relative;
+    isolation: isolate;
+}
+.waves {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    /* The waves roll in under the copy rather than across it, and carry on to the bottom edge */
+    mask-image: linear-gradient(to bottom, transparent 44%, #000 72%, #000 100%);
+}
+/* Room under the row for an open card, so it covers nothing but the backdrop */
+.works {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 32px;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 var(--lp-pad) calc(var(--lp-band) + 120px);
+}
+.wk-step {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--lp-gap-3);
+    padding: var(--lp-gap-6);
+    border: 1px solid #3a3a3a;
+    background: #181818;
+    transition:
+        border-color 180ms,
+        background-color 180ms;
+}
+.wk-step:hover,
+.wk-step:focus-visible {
+    z-index: 2;
+    border-color: #5a5a5a;
+    background: #1f1f1f;
+}
+.wk-step p {
+    font-size: 13.5px;
+}
+
+/* The docs preview under a step, there while the pointer or focus is on it and gone the moment it is not */
+
+.wk-card {
+    --wk-x: -50%;
+    --wk-arrow: 50%;
+    position: absolute;
+    top: calc(100% + 12px);
+    left: 50%;
+    z-index: 3;
+    display: none;
+    gap: 14px;
+    width: 340px;
+    padding: 16px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    background: #1c1c1c;
+    box-shadow: 0 16px 40px #00000080;
+    text-align: left;
+    transform: translateX(var(--wk-x));
+}
+@media (hover: hover) {
+    .wk-step:hover .wk-card {
+        display: flex;
+    }
+}
+.wk-step:focus-visible .wk-card {
+    display: flex;
+}
+/* The end cards hang off the row's own edge, so an open one never widens the page */
+.wk-step:first-child .wk-card {
+    --wk-x: 0;
+    --wk-arrow: 28px;
+    left: -1px;
+}
+.wk-step:last-child .wk-card {
+    --wk-x: 0;
+    --wk-arrow: calc(100% - 28px);
+    left: auto;
+    right: -1px;
+}
+/* Covers the gap above the card, so crossing from the step onto it does not drop the hover */
+.wk-card::after {
+    content: "";
+    position: absolute;
+    top: -12px;
+    right: 0;
+    left: 0;
+    height: 12px;
+}
+.wk-card::before {
+    content: "";
+    position: absolute;
+    top: -6px;
+    left: var(--wk-arrow);
+    width: 10px;
+    height: 10px;
+    border-top: 1px solid #3a3a3a;
+    border-left: 1px solid #3a3a3a;
+    background: #1c1c1c;
+    transform: translateX(-50%) rotate(45deg);
+}
+.wk-card-icon {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    background: #242424;
+}
+.wk-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+}
+.wk-card-body b {
+    font-family: var(--font-lexend-deca), sans-serif;
+    font-size: 15px;
+    font-weight: 400;
+    color: var(--lp-ink);
+}
+.wk-card-body span {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--lp-dim);
+}
+.wk-card-body small {
+    margin-top: 3px;
+    font-family: var(--font-ubuntu-mono), monospace;
+    font-size: 11px;
+    color: var(--lp-faint);
+    overflow-wrap: anywhere;
+}
+/* The rail across the gap, then the head that lands on the next box's edge */
+.wk-step:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: -33px;
+    width: 32px;
+    height: 1px;
+    background: #6a6a64;
+}
+@media (max-width: 860px) {
+    .works {
+        grid-template-columns: 1fr;
+        max-width: 520px;
+    }
+    .wk-step:not(:last-child)::before {
+        top: auto;
+        right: auto;
+        bottom: -32px;
+        left: 50%;
+        width: 1px;
+        height: 32px;
+        transform: translateX(-50%);
+    }
+    .wk-step:not(:last-child)::after {
+        top: auto;
+        right: auto;
+        bottom: -31px;
+        left: 50%;
+        transform: translateX(-50%) rotate(135deg);
+    }
+    .wk-step:hover .wk-card,
+    .wk-step:focus-visible .wk-card {
+        display: none;
+    }
+}
+/* Section heads */
+
+.head {
+    padding: var(--lp-band) var(--lp-pad) var(--lp-gap-8);
+    max-width: 1000px;
+}
+.head p {
+    margin-top: var(--lp-gap-4);
+}
+.head-center {
+    margin-inline: auto;
+    text-align: center;
+}
+.head-center p {
+    margin-inline: auto;
+}
+
+/* Feature grid, a code panel beside a two by two of marks */
+
+/* Grid items floor at their min-content by default, which the code block alone would push past the viewport */
+.feat-panel,
+.feat-cells,
+.cell,
+.code {
+    min-width: 0;
+}
+.feat {
+    display: grid;
+    grid-template-columns: 0.94fr 1.06fr;
+    border-top: 1px solid var(--lp-rail);
+}
+.feat-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--lp-gap-8);
+    padding: var(--lp-gap-12) var(--lp-pad) var(--lp-gap-16);
+    border-right: 1px solid var(--lp-rail);
+}
+.feat-cells {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-content: start;
+}
+.cell {
+    display: flex;
+    flex-direction: column;
+    gap: var(--lp-gap-4);
+    padding: var(--lp-gap-8) clamp(18px, 1.8vw, 28px) var(--lp-gap-12);
+}
+.feat-cells .cell:nth-child(even) {
+    border-left: 1px solid var(--lp-hair);
+}
+.feat-cells .cell:nth-child(n + 3) {
+    border-top: 1px solid var(--lp-hair);
+}
+.cell h4 {
+    font-family: var(--font-ubuntu-mono), monospace;
+    font-size: 12px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--lp-ink);
+}
+.cell p {
+    font-size: 13px;
+    line-height: 1.6;
+}
+.mark {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+/* One dash the length of the whole path, so an offset of zero leaves the line solid without motion */
+.a-draw {
+    stroke-dasharray: 1;
+}
+/* Transforms inside an svg resolve against the viewBox unless the box is the element's own fill */
+.a-col-l,
+.a-col-r {
+    transform-box: fill-box;
+}
+/* The rider is drawn around its own origin so the motion path centres it on the stroke */
+.a-rider {
+    offset-rotate: 0deg;
+    offset-distance: 100%;
+}
+
+/* Code panel */
+
+.code {
+    border: 1px solid var(--lp-rail);
+    background: #121212;
+    overflow: hidden;
+}
+.code-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--lp-gap-2);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--lp-hair);
+}
+.code-bar i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--lp-ghost);
+}
+.code-bar span {
+    margin-left: auto;
+    font-family: var(--font-ubuntu-mono), monospace;
+    font-size: 12px;
+    color: var(--lp-faint);
+}
+.code pre {
+    margin: 0;
+    padding: 18px 16px 22px;
+    overflow-x: auto;
+    font-family: var(--font-ubuntu-mono), monospace;
+    font-size: 12.5px;
+    line-height: 1.75;
+    tab-size: 4;
+}
+
+/* The one place the page is allowed hue, because code is read faster when the tokens differ by colour */
+
+.t-key {
+    color: #c586c0;
+}
+.t-fn {
+    color: #dcdcaa;
+}
+.t-id {
+    color: #9cdcfe;
+}
+.t-str {
+    color: #ce9178;
+}
+.t-prop {
+    color: #9cdcfe;
+}
+.t-punc {
+    color: #a9a9a6;
+}
+.t-com {
+    color: #6a9955;
+}
+
+/* Diagrams. Three columns of equal weight, each one idea deep */
+
+.flow-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: auto auto;
+}
+/* Subgrid, so the three captions share one height and the three drawings start on the same line */
+.flow {
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+    row-gap: var(--lp-gap-8);
+    min-width: 0;
+    margin: 0;
+    padding: var(--lp-band) clamp(20px, 2.2vw, 36px) var(--lp-gap-16);
+}
+.flow + .flow {
+    border-left: 1px solid var(--lp-hair);
+}
+.flow figcaption {
+    display: flex;
+    flex-direction: column;
+    gap: var(--lp-gap-3);
+}
+.flow h2 {
+    font-size: clamp(21px, 1.9vw, 28px);
+}
+.flow p {
+    font-size: 14px;
+}
+/* Every flow reads left to right, one person, the mark where Rewall operates, then what it reaches */
+
+.fl-wrap {
+    position: relative;
+    align-self: start;
+    isolation: isolate;
+}
+.beam-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+    overflow: visible;
+    pointer-events: none;
+}
+.fl-stage {
+    --fl-gap: clamp(22px, 2.8vw, 42px);
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: max-content max-content minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--fl-gap);
+    row-gap: clamp(34px, 4vw, 58px);
+}
+/* Two rows instead of three, so the drop takes the height the third row would have used */
+.fl-twofactor,
+.fl-agent {
+    row-gap: clamp(76px, 9vw, 140px);
+}
+.fl-stage > :nth-child(1) {
+    grid-area: 1 / 1;
+}
+.fl-stage > :nth-child(2) {
+    grid-area: 1 / 2;
+}
+/* Everything the mark reaches stacks down the third column, right aligned on one edge */
+.fl-stage > :nth-child(n + 3) {
+    grid-column: 3;
+    justify-self: end;
+}
+.fl-stage > .fl-slab {
+    width: 100%;
+}
+/* Stretched, because a justify-self of end spends a negative margin on the margin box and moves nothing */
+.fl-stage > .fl-refused {
+    justify-self: stretch;
+    margin-left: calc(-1 * var(--fl-gap));
+}
+
+.fl-node {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+}
+.fl-mark {
+    width: clamp(46px, 4vw, 58px);
+    color: var(--lp-ink);
+}
+.fl-mark svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+.fl-person {
+    flex-direction: column;
+    gap: 9px;
+}
+.fl-stage > :nth-child(1).fl-person {
+    align-items: center;
+}
+.fl-stage > :nth-child(n + 3).fl-person,
+.fl-stage > :nth-child(n + 3) .fl-person {
+    min-width: 6rem;
+    align-items: center;
+}
+.fl-person-anchor {
+    position: absolute;
+    inset: 0;
+    width: 32px;
+    margin-inline: auto;
+    pointer-events: none;
+}
+.fl-transfers .fl-break::before {
+    right: -32px;
+}
+.fl-person svg {
+    width: 32px;
+    height: 36px;
+    fill: none;
+    stroke: var(--lp-ink);
+    stroke-width: 2;
+}
+.fl-person span {
+    font-family: var(--font-lexend-deca), sans-serif;
+    font-size: 14.5px;
+    text-align: center;
+}
+.fl-person.is-dim svg {
+    stroke: #4a4a48;
+}
+.fl-person.is-dim span {
+    color: #6e6e6b;
+}
+.fl-slab {
+    flex-direction: column;
+    gap: 5px;
+    padding: 15px 16px;
+    border: 1px solid #34342f;
+    background: #1b1b1a;
+    font-family: var(--font-lexend-deca), sans-serif;
+    font-size: 15px;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+.fl-slab.is-dim {
+    border-color: #292928;
+    background: transparent;
+    color: #6e6e6b;
+}
+
+/* The refused route, drawn and then struck so it can never be mistaken for a beam */
+
+.fl-refused {
+    display: flex;
+    align-items: center;
+}
+.fl-refused > .fl-node {
+    flex: 0 1 auto;
+}
+/* The refused box is the column's own width, so it stands on the edge the carrying box stands on */
+.fl-refused > .fl-slab {
+    flex: 0 0 calc(100% - var(--fl-gap));
+}
+.fl-break {
+    position: relative;
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--fl-gap);
+    height: 15px;
+}
+.fl-break::before {
+    content: "";
+    position: absolute;
+    inset: 50% 0 auto;
+    border-top: 1px dashed #3a3a37;
+}
+.fl-break svg {
+    position: relative;
+    width: 14px;
+    height: 14px;
+    fill: none;
+    background: var(--lp-sheet);
+    stroke: #6f6f6c;
+    stroke-width: 1.6;
+}
+
+/* Rays sit behind the section head, fading out before the cells start */
+
+.rays-frame {
+    position: relative;
+    isolation: isolate;
+}
+.rays {
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: -1;
+    height: clamp(280px, 34vw, 460px);
+    pointer-events: none;
+    opacity: 0.8;
+    mask-image: linear-gradient(to bottom, #000 34%, transparent);
+}
+.rays > div {
+    width: 100%;
+    height: 100%;
+}
+
+/* Client cells. One panel language across all four, with only the contents differing */
+
+.bento {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-top: 1px solid var(--lp-rail);
+}
+.b-cell {
+    display: flex;
+    flex-direction: column;
+    gap: var(--lp-gap-3);
+    min-width: 0;
+    padding: var(--lp-gap-12) clamp(24px, 2.6vw, 40px) var(--lp-gap-12);
+    border-bottom: 1px solid var(--lp-hair);
+}
+.b-cell:nth-child(even) {
+    border-left: 1px solid var(--lp-hair);
+}
+.b-cell:nth-child(n + 3) {
+    border-bottom: 0;
+}
+.b-cell h3 {
+    font-family: var(--font-lexend-deca), sans-serif;
+    font-size: 22px;
+    font-weight: 300;
+    letter-spacing: -0.02em;
+}
+.b-cell p {
+    max-width: 46ch;
+    font-size: 14px;
+}
+.b-panel {
+    display: flex;
+    flex-direction: column;
+    /* The cells in a row are the same height, so the panels take the slack and end on the same line */
+    flex: 1;
+    margin-top: var(--lp-gap-6);
+    min-height: 178px;
+    border: 1px solid var(--lp-rail);
+    background: var(--lp-raise);
+    overflow: hidden;
+}
+.b-panel-body {
+    flex: 1;
+    padding: 20px;
+}
+.b-code-body {
+    /* Content height inside a panel that is taller, so the shorter snippet centres rather than hangs */
+    flex: none;
+    overflow-x: auto;
+    font-family: var(--font-ubuntu-mono), monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    color: #c4c4c0;
+}
+
+/* The agent exchange is a wire log, one row out and one row back */
+
+.b-chat {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 9px;
+}
+/* Every turn keeps its place from the first render, so the panel never resizes as the talk arrives */
+.b-turn {
+    transition:
+        opacity 300ms ease-out,
+        transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.b-turn.is-waiting {
+    opacity: 0;
+    transform: translateY(7px);
+}
+@media (prefers-reduced-motion: reduce) {
+    .b-turn,
+    .b-turn.is-waiting {
+        opacity: 1;
+        transform: none;
+        transition: none;
+    }
+}
+.b-msg {
+    max-width: 86%;
+    margin: 0;
+    padding: 9px 13px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.b-msg.from-user {
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+    background: #2c2c2a;
+    color: var(--lp-ink);
+}
+.b-msg.from-agent {
+    align-self: flex-start;
+    border: 1px solid #2c2c2a;
+    border-bottom-left-radius: 4px;
+    background: #1c1c1b;
+    color: #c2c2be;
+}
+.b-tool {
+    display: grid;
+    gap: 3px;
+    padding: 10px 12px;
+    border: 1px dashed #35352f;
+    border-radius: 8px;
+    font-family: var(--font-ubuntu-mono), monospace;
+    font-size: 11.5px;
+    line-height: 1.6;
+}
+.b-tool code {
+    color: #c4c4c0;
+    overflow-wrap: anywhere;
+}
+.b-tool span {
+    color: var(--lp-faint);
+}
+.b-tool mark {
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: #2f2f2e;
+    color: var(--lp-ink);
+}
+
+/* Popup */
+
+.b-popup {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--lp-gap-4);
+}
+.b-popup-row {
+    display: flex;
+    align-items: center;
+    gap: var(--lp-gap-4);
+}
+.b-popup-row div {
+    min-width: 0;
+}
+.b-popup-row strong {
+    display: block;
+    font-family: var(--font-lexend-deca), sans-serif;
+    font-size: 16px;
+    font-weight: 400;
+    color: var(--lp-ink);
+}
+.b-popup-row em {
+    display: block;
+    overflow: hidden;
+    font-family: var(--font-ubuntu-mono), monospace;
+    font-size: 11.5px;
+    font-style: normal;
+    color: var(--lp-faint);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.b-code {
+    margin-left: auto;
+    font-family: var(--font-ubuntu-mono), monospace;
+    font-size: 27px;
+    letter-spacing: 0.08em;
+    color: var(--lp-ink);
+    white-space: nowrap;
+}
+/* The dashboard's own segmented bar, carrying the colour it uses there as a code runs out */
+.b-meter {
+    display: flex;
+    align-items: center;
+    gap: var(--lp-gap-3);
+}
+.b-meter .segmented-progress {
+    display: flex;
+    gap: 2px;
+    width: 100%;
+    height: 9px;
+}
+.b-meter .segmented-progress > span {
+    flex: 1;
+    min-width: 0;
+    transition: background-color 200ms ease-out;
+}
+.b-meter-count {
+    min-width: 26px;
+    font-family: var(--font-ubuntu-mono), monospace;
+    font-size: 12px;
+    text-align: right;
+    color: var(--lp-faint);
+}
+.b-meter[data-urgency="high"] {
+    --progress-fill: #70b58c;
+}
+.b-meter[data-urgency="medium"] {
+    --progress-fill: #d6b868;
+}
+.b-meter[data-urgency="low"] {
+    --progress-fill: #d97878;
+}
+
+/* Client cells */
+
+.clients {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--lp-rail);
+}
+.clients .cell + .cell {
+    border-left: 1px solid var(--lp-hair);
+}
+.clients .cell {
+    gap: var(--lp-gap-3);
+    padding-block: var(--lp-gap-12) var(--lp-gap-16);
+}
+.clients h3 {
+    font-family: var(--font-lexend-deca), sans-serif;
+}
+.clients .kicker {
+    margin-bottom: var(--lp-gap-3);
+}
+.tag {
+    display: inline-block;
+    margin-top: auto;
+    padding: 3px 8px;
+    border: 1px solid var(--lp-rail);
+    border-radius: 4px;
+    font-family: var(--font-ubuntu-mono), monospace;
+    font-size: 11.5px;
+    color: var(--lp-faint);
+}
+
+/* Skill band, one command centred under the head, a click copies it */
+
+.skill-row {
+    display: flex;
+    justify-content: center;
+    padding: 0 var(--lp-pad) var(--lp-band);
+}
+.cmd {
+    display: inline-block;
+    max-width: 100%;
+    padding: 12px 16px;
+    border: 1px solid var(--lp-rail);
+    border-radius: 6px;
+    background: #121212;
+    color: var(--lp-ink);
+    font-family: var(--font-ubuntu-mono), monospace;
+    font-size: 13.5px;
+    text-align: left;
+}
+.cmd:hover {
+    border-color: #575754;
+    background: #171717;
+}
+.cmd[data-copied] {
+    border-color: var(--lp-ink);
+}
+.cmd code {
+    overflow-wrap: anywhere;
+}
+
+/* FAQ, native disclosure so the page ships no javascript of its own */
+
+.faq {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-top: 1px solid var(--lp-rail);
+}
+.faq > div {
+    padding: var(--lp-gap-12) var(--lp-pad) var(--lp-gap-16);
+}
+.faq > div + div {
+    border-left: 1px solid var(--lp-rail);
+}
+.faq details {
+    border-top: 1px solid var(--lp-hair);
+}
+.faq details:last-child {
+    border-bottom: 1px solid var(--lp-hair);
+}
+.faq summary {
+    display: flex;
+    align-items: center;
+    gap: var(--lp-gap-4);
+    padding: 17px 0;
+    cursor: pointer;
+    list-style: none;
+    font-family: var(--font-lexend-deca), sans-serif;
+    font-size: 14.5px;
+    letter-spacing: -0.005em;
+}
+.faq summary::-webkit-details-marker {
+    display: none;
+}
+.faq summary::after {
+    content: "";
+    flex: none;
+    width: 11px;
+    height: 11px;
+    margin-left: auto;
+    background:
+        linear-gradient(var(--lp-faint) 0 0) center / 11px 1px no-repeat,
+        linear-gradient(var(--lp-faint) 0 0) center / 1px 11px no-repeat;
+    transition: transform 220ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+.faq details[open] summary::after {
+    transform: rotate(45deg);
+}
+.faq summary:hover {
+    color: #fff;
+}
+.faq details p {
+    padding: 0 30px 20px 0;
+    font-size: 13.5px;
+}
+/* Opening animates everywhere, closing only where the browser can interpolate the content box */
+@media (prefers-reduced-motion: no-preference) {
+    .faq details[open] p {
+        animation: lp-reveal 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    @supports (interpolate-size: allow-keywords) {
+        .lp {
+            interpolate-size: allow-keywords;
+        }
+        .faq details::details-content {
+            display: block;
+            block-size: 0;
+            overflow: hidden;
+            transition:
+                block-size 300ms cubic-bezier(0.16, 1, 0.3, 1),
+                content-visibility 300ms allow-discrete;
+        }
+        .faq details[open]::details-content {
+            block-size: auto;
+        }
+        .faq details[open] p {
+            animation: none;
+        }
+    }
+}
+@keyframes lp-reveal {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* Footer. Light rises off the bottom edge as a band of uneven vertical stripes */
+
+.closer-copy {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+}
+.stripes {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    display: flex;
+    align-items: flex-end;
+    gap: clamp(6px, 0.8vw, 14px);
+    padding-inline: clamp(6px, 0.8vw, 14px);
+    pointer-events: none;
+}
+.stripes span {
+    flex: 1;
+    /* Transparent at the top of each bar, so the light reads as rising off the bottom edge */
+    background: linear-gradient(to bottom, transparent, #fff);
+}
+.closer-copy {
+    /* Deep enough below the buttons that the bars read as bars and not as a glow on the edge */
+    padding: var(--lp-gap-24) var(--lp-pad) clamp(140px, 15vw, 240px);
+    text-align: center;
+}
+.closer-copy .lead {
+    margin: var(--lp-gap-4) auto 0;
+}
+.closer-copy .hero-cta {
+    margin-top: var(--lp-gap-8);
+}
+.foot {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1.8fr 1fr 1fr;
+    gap: var(--lp-gap-8);
+    padding: var(--lp-gap-12) var(--lp-pad) var(--lp-gap-16);
+    /* Opaque, so the bars stop at the rule instead of reading through the links */
+    background: var(--lp-page);
+    border-top: 1px solid var(--lp-hair);
+}
+.foot h4 {
+    margin-bottom: var(--lp-gap-4);
+    font-family: var(--font-ubuntu-mono), monospace;
+    font-size: 11px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--lp-faint);
+}
+.foot ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 9px;
+    font-size: 13.5px;
+    color: var(--lp-dim);
+}
+.foot a:hover {
+    color: var(--lp-ink);
+}
+.foot img {
+    width: 104px;
+    height: auto;
+}
+.foot p {
+    margin-top: var(--lp-gap-4);
+    max-width: 34ch;
+    font-size: 13px;
+}
+
+/* Motion */
+
+@media (prefers-reduced-motion: no-preference) {
+    .rise {
+        animation: lp-rise 760ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .rise-1 {
+        animation-delay: 60ms;
+    }
+    .rise-2 {
+        animation-delay: 130ms;
+    }
+    .rise-3 {
+        animation-delay: 210ms;
+    }
+    .rise-4 {
+        animation-delay: 300ms;
+    }
+
+    /* Every mark runs continuously, each on its own beat, staggered by the index the figure sets */
+    .a-tone {
+        animation: lp-tone 1.1s ease-in-out infinite alternate;
+        animation-delay: calc(var(--i, 0) * -90ms);
+    }
+    .a-slot {
+        animation: lp-slot 1.8s steps(1, end) infinite;
+        animation-delay: calc(var(--i, 0) * -137ms);
+    }
+    /* Both halves are pinned to the seam they share, so widths move while the gap between them does not */
+    .a-col-l {
+        transform-origin: right;
+        animation: lp-col 1.6s ease-in-out infinite alternate;
+        animation-delay: calc(var(--i, 0) * -110ms);
+    }
+    .a-col-r {
+        transform-origin: left;
+        animation: lp-col 1.6s ease-in-out infinite alternate-reverse;
+        animation-delay: calc(var(--i, 0) * -110ms);
+    }
+    /* The rider and the stroke share one curve and one duration, so the node never leaves the line */
+    .a-draw {
+        animation: lp-draw 2.2s cubic-bezier(0.5, 0, 0.2, 1) infinite;
+    }
+    .a-rider {
+        animation: lp-ride 2.2s cubic-bezier(0.5, 0, 0.2, 1) infinite;
+    }
+    .a-node-start {
+        animation: lp-node-start 2.2s cubic-bezier(0.5, 0, 0.2, 1) infinite;
+    }
+}
+@keyframes lp-rise {
+    from {
+        opacity: 0;
+        transform: translateY(14px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+/* Opacity over the dark ground reads as a tone shift, and it composites instead of repainting the svg */
+@keyframes lp-tone {
+    from {
+        opacity: 0.32;
+    }
+    to {
+        opacity: 1;
+    }
+}
+/* A wrap is there or it is not, so steps(1) snaps the square instead of dissolving it */
+@keyframes lp-slot {
+    0%,
+    44% {
+        opacity: 1;
+    }
+    45%,
+    100% {
+        opacity: 0;
+    }
+}
+@keyframes lp-col {
+    from {
+        transform: scaleX(0.62);
+    }
+    to {
+        transform: scaleX(1);
+    }
+}
+@keyframes lp-draw {
+    0% {
+        stroke-dashoffset: 1;
+        opacity: 1;
+    }
+    45% {
+        stroke-dashoffset: 0;
+        opacity: 1;
+    }
+    88% {
+        stroke-dashoffset: 0;
+        opacity: 1;
+    }
+    100% {
+        stroke-dashoffset: 0;
+        opacity: 0;
+    }
+}
+/* offset-distance walks the same arc length the dash offset retires, so the two stay locked together */
+@keyframes lp-ride {
+    0% {
+        offset-distance: 0%;
+        opacity: 1;
+    }
+    45% {
+        offset-distance: 100%;
+        opacity: 1;
+    }
+    88% {
+        offset-distance: 100%;
+        opacity: 1;
+    }
+    100% {
+        offset-distance: 100%;
+        opacity: 0;
+    }
+}
+@keyframes lp-node-start {
+    0%,
+    88% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+/* Responsive */
+
+@media (max-width: 1080px) {
+    .clients {
+        grid-template-columns: 1fr 1fr;
+    }
+    /* Two stacked flows and a tall one do not fit a short wide screen, so they run as three rows */
+    .flow-grid {
+        grid-template-columns: 1fr;
+    }
+    /* A full row width stretches the third track to hundreds of empty pixels, so the stage keeps its own width */
+    .fl-stage {
+        max-width: 420px;
+        margin-inline: auto;
+    }
+    .flow + .flow {
+        border-left: 0;
+        border-top: 1px solid var(--lp-hair);
+    }
+    .feat {
+        grid-template-columns: 1fr;
+    }
+    .feat-panel {
+        border-right: 0;
+        border-bottom: 1px solid var(--lp-rail);
+    }
+    .clients .cell:nth-child(odd) {
+        border-left: 0;
+    }
+    .clients .cell:nth-child(n + 3) {
+        border-top: 1px solid var(--lp-hair);
+    }
+    .foot {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    /* The links wrap to their own scrolling row, so the header stops sticking and costs no height */
+    .nav {
+        position: static;
+    }
+    .nav .frame {
+        flex-wrap: wrap;
+        height: auto;
+        padding-block: 12px;
+    }
+    /* Scrolling makes this a clipping box, so it carries the room the focus ring needs */
+    .nav-links {
+        order: 3;
+        width: 100%;
+        gap: 18px;
+        margin: 0 -6px -6px;
+        padding: 6px;
+        overflow-x: auto;
+        scrollbar-width: none;
+        scroll-padding-inline: 6px;
+    }
+    .nav-cta {
+        margin-left: auto;
+    }
+    .band {
+        scroll-margin-top: 0;
+    }
+}
+@media (max-width: 720px) {
+    .lp {
+        --lp-frame: 100%;
+    }
+    .frame {
+        border-inline: 0;
+    }
+    .clients,
+    .feat-cells,
+    .faq,
+    .foot,
+    .bento {
+        grid-template-columns: 1fr;
+    }
+    .b-cell {
+        border-left: 0 !important;
+        border-bottom: 1px solid var(--lp-hair);
+    }
+    .b-cell:last-child {
+        border-bottom: 0;
+    }
+    .clients .cell,
+    .feat-cells .cell,
+    .faq > div {
+        border-left: 0 !important;
+    }
+    .clients .cell + .cell,
+    .feat-cells .cell + .cell {
+        border-top: 1px solid var(--lp-hair);
+    }
+    /* Every question already carries its own rule, so the join needs neither a second one nor the block padding */
+    .faq > div:not(:last-child) {
+        padding-bottom: 0;
+    }
+    .faq > div + div {
+        border-top: 0;
+        padding-top: 0;
+    }
+    .hero-art {
+        width: 88vw;
+    }
+}

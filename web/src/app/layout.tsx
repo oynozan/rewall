@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Manrope, Lexend_Deca, Ubuntu_Mono } from "next/font/google";
+import { Akt, Manrope, Lexend_Deca, Ubuntu_Mono } from "next/font/google";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -15,7 +15,13 @@ const ubuntuMono = Ubuntu_Mono({
 
 const lexendDeca = Lexend_Deca({
     variable: "--font-lexend-deca",
-    weight: "200",
+    weight: ["200", "300", "400", "500"],
+    subsets: ["latin"],
+});
+
+const akt = Akt({
+    variable: "--font-akt",
+    weight: ["400", "500"],
     subsets: ["latin"],
 });
 
@@ -29,7 +35,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     return (
         <html
             lang="en"
-            className={`${manrope.variable} ${ubuntuMono.variable} ${lexendDeca.variable} h-full antialiased`}
+            className={`${manrope.variable} ${ubuntuMono.variable} ${lexendDeca.variable} ${akt.variable} h-full antialiased`}
         >
             <body>{children}</body>
         </html>
