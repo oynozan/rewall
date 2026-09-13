@@ -16,8 +16,9 @@ export type Provisioned = {
 export type Account = {
     _id: string;
     firstSeen: number;
-    dripped?: { hash: string; wei: string; at: number };
-    funded?: { hash: string; units: string; at: number };
+    // pending marks a leg claimed but not yet confirmed, which stops two requests paying it twice
+    dripped?: { hash: string; wei: string; at: number; pending?: boolean };
+    funded?: { hash: string; units: string; at: number; pending?: boolean };
     name?: string;
     provisioned?: Provisioned;
     completedAt?: number;
@@ -53,6 +54,33 @@ export async function seeAccount(address: string): Promise<Account> {
 
 export async function updateAccount(address: string, fields: Partial<Omit<Account, "_id">>): Promise<void> {
     await (await accounts()).updateOne({ _id: address.toLowerCase() }, { $set: fields });
+}
+
+/* Claims, so a leg is reserved in the ledger before any money moves */
+
+// Only one request can turn an absent leg into a pending one, which is what serialises a parallel drip
+export async function claimDrip(address: string, wei: string): Promise<boolean> {
+    const result = await (await accounts()).updateOne(
+        { _id: address.toLowerCase(), dripped: { $exists: false } },
+        { $set: { dripped: { hash: "", wei, at: Math.floor(Date.now() / 1000), pending: true } } },
+    );
+    return result.modifiedCount === 1;
+}
+
+export async function releaseDrip(address: string): Promise<void> {
+    await (await accounts()).updateOne({ _id: address.toLowerCase() }, { $unset: { dripped: "" } });
+}
+
+export async function claimFunding(address: string, units: string): Promise<boolean> {
+    const result = await (await accounts()).updateOne(
+        { _id: address.toLowerCase(), funded: { $exists: false } },
+        { $set: { funded: { hash: "", units, at: Math.floor(Date.now() / 1000), pending: true } } },
+    );
+    return result.modifiedCount === 1;
+}
+
+export async function releaseFunding(address: string): Promise<void> {
+    await (await accounts()).updateOne({ _id: address.toLowerCase() }, { $unset: { funded: "" } });
 }
 
 // The cap is read back off the ledger rather than tracked in a counter, so a crash cannot lose spend
