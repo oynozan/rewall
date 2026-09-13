@@ -12,6 +12,7 @@
         "05": "node --env-file=.env --experimental-strip-types 05-recover-a-lost-wallet/index.ts",
         "06": "node --env-file=.env --experimental-strip-types 06-pay-a-name/index.ts",
         "07": "node --env-file=.env --experimental-strip-types 07-share-a-treasury/index.ts",
+        "08": "node --env-file=.env --experimental-strip-types 08-grant-a-machine/index.ts",
         "format": "prettier --write .",
         "format:check": "prettier --check ."
     },

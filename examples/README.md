@@ -1,19 +1,20 @@
 # Rewall examples
 
-Seven short programs. Each one is a real scenario, runs against real Sepolia, and
+Eight short programs. Each one is a real scenario, runs against real Sepolia, and
 fits on one screen.
 
 Read them in order. Each README explains what happened and why.
 
-|                                                      | What it shows                                                        |
-| ---------------------------------------------------- | -------------------------------------------------------------------- |
-| [1. Store and read](01-store-and-read)               | Keep a database connection string somewhere other than a `.env` file |
-| [2. Share with a teammate](02-share-with-a-teammate) | Give one person access, using only their ENS name                    |
-| [3. Take access away](03-take-access-away)           | Revoke someone, and what revoking cannot do                          |
-| [4. Share with a team](04-share-with-a-team)         | Grant to a whole group without naming anyone in it                   |
-| [5. Recover a lost wallet](05-recover-a-lost-wallet) | Get back in when your key is gone                                    |
-| [6. Pay a name](06-pay-a-name)                       | Pay by ENS name, then choose who may know you did                    |
-| [7. Share a treasury](07-share-a-treasury)           | A shared wallet whose signing key is itself a secret                 |
+|                                                      | What it shows                                                            |
+| ---------------------------------------------------- | ------------------------------------------------------------------------ |
+| [1. Store and read](01-store-and-read)               | Keep a database connection string somewhere other than a `.env` file     |
+| [2. Share with a teammate](02-share-with-a-teammate) | Give one person access, using only their ENS name                        |
+| [3. Take access away](03-take-access-away)           | Revoke someone, and what revoking cannot do                              |
+| [4. Share with a team](04-share-with-a-team)         | Grant to a whole group without naming anyone in it                       |
+| [5. Recover a lost wallet](05-recover-a-lost-wallet) | Get back in when your key is gone                                        |
+| [6. Pay a name](06-pay-a-name)                       | Pay by ENS name, then choose who may know you did                        |
+| [7. Share a treasury](07-share-a-treasury)           | A shared wallet whose signing key is itself a secret                     |
+| [8. Grant a machine](08-grant-a-machine)             | A build server reads a secret with no wallet, and why that is not enough |
 
 ## What Rewall is
 
@@ -52,6 +53,7 @@ pnpm run 02
 pnpm run 03
 pnpm run 04
 pnpm run 05
+pnpm run 08
 ```
 
 ## Examples 6 and 7 need one more thing
