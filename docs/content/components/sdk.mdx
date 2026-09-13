@@ -58,6 +58,16 @@ written too, signed by the owner, because a rotation has to know who to re-seal 
 Sharing adds one sealed copy. Revoking encrypts again with a new key and re-seals for everyone who
 stays. The old copies then open nothing. [How it works](/how-it-works#seal) draws this out.
 
+## Install
+
+```bash
+npm install @rewall/sdk
+```
+
+It ships as ES modules with its own types, and carries viem, libsodium and otpauth as dependencies,
+so nothing else has to be installed alongside it. To work on the SDK itself rather than build against
+it, clone the repo and follow [Building and testing](#building-and-testing).
+
 ## Building a client
 
 ```ts

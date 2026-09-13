@@ -5,6 +5,12 @@ The core library. Every other part of Rewall is built on it.
 It does three things. It turns a wallet signature into an encryption key. It encrypts a secret and
 seals the key to each reader's ENS name. It reads and writes the ENS records that hold all of that.
 
+```bash
+npm install @rewall/sdk
+```
+
+Full documentation is at [docs.rewall.me](https://docs.rewall.me/components/sdk).
+
 ## The key
 
 A name's private key is never stored. To get it, the wallet signs one fixed EIP-712 message. The
