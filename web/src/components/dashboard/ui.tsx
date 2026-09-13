@@ -24,6 +24,7 @@ const GLYPHS = {
     refresh: "M33.9 33.9A14 14 0 1 1 33.9 14.1M34.2 7.6L33.9 14.1L27.4 14.4",
     copy: "M17 17H35V36H17ZM11 30H9V10H28V12",
     magic_wand: "M10 36L31 15L36 20L15 41ZM27 19L32 24M13 8V16M9 12H17M35 5V11M32 8H38M38 29V37M34 33H42",
+    warning: "M24 8L43 40H5ZM24 19V29M24 34V35",
 } as const;
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
@@ -87,6 +88,37 @@ export function SegmentedProgress({
                 />
             ))}
         </div>
+    );
+}
+
+// A grey bar standing in for a value the chain has not answered for yet
+// A control that is waiting needs a mark of its own, since a changed label alone reads as a dead button
+export function Spinner({ size = 13 }: { size?: number }) {
+    return <span className="spinner" style={{ width: size, height: size }} aria-hidden="true" />;
+}
+
+export function Skeleton({ width = 60, height = 12 }: { width?: number | string; height?: number }) {
+    return <span className="skel" style={{ width, height }} aria-hidden="true" />;
+}
+
+// Grey rows hold a table at its real height, with the name bar over whichever column the real rows start it in
+export function SkeletonRows({ rows, columns, offset = 0 }: { rows: number; columns: number; offset?: number }) {
+    return (
+        <>
+            {Array.from({ length: rows }, (_, row) => (
+                <tr key={row}>
+                    {offset > 0 && <td />}
+                    <td colSpan={2 - offset}>
+                        <Skeleton width={150} />
+                    </td>
+                    {Array.from({ length: columns - 2 }, (_, cell) => (
+                        <td key={cell}>
+                            <Skeleton width={72} />
+                        </td>
+                    ))}
+                </tr>
+            ))}
+        </>
     );
 }
 

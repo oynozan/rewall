@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { useWorkspace } from "./dashboard-shell";
 import { useCapabilities } from "./identity";
 import { vaultSetup, type VaultSetup } from "@/src/lib/account";
-import { SegmentedProgress } from "./ui";
-import { LiquidMetalButton } from "./liquid-metal-button";
+import { Glyph, SegmentedProgress, Skeleton } from "./ui";
 import { SidebarFade, SidebarSection } from "./amicro";
 
 // Keyed by the name it describes, so a reply for a vault you have left is ignored
@@ -31,7 +30,7 @@ function useVaultSetup(name: string, address: string) {
 }
 
 export function AccountRail() {
-    const { vault, account, walletLabel, ownName, isOwnVault, setPanel } = useWorkspace();
+    const { vault, account, walletLabel, ownName, isOwnVault, setPanel, busy, ready } = useWorkspace();
     const { canRead, canDecrypt, canWrite } = useCapabilities(vault?.owner, account);
     const setup = useVaultSetup(isOwnVault ? ownName : "", account);
     const entries = vault?.secrets ?? [];
@@ -40,38 +39,45 @@ export function AccountRail() {
         <SidebarFade className="account-rail" label="Account and vault">
             <SidebarSection delay={0.0}>
                 <h2>Account</h2>
-                {account ? (
+                {account || !ready ? (
                     <>
-                        <p className="rail-address mono">{account}</p>
+                        <p className="rail-address mono">{account || <Skeleton width="100%" />}</p>
                         <div className="rail-row">
                             <span>Wallet</span>
-                            <span>{walletLabel || "Connected"}</span>
+                            <span>{account ? walletLabel || "Connected" : <Skeleton width={72} />}</span>
                         </div>
                     </>
                 ) : (
-                    <LiquidMetalButton fullWidth label="Connect wallet" onClick={() => setPanel("wallet")} />
+                    <button className="button small wallet-connect" onClick={() => setPanel("wallet")}>
+                        Connect wallet
+                        <Glyph name="chevron_right" size={18} />
+                    </button>
                 )}
             </SidebarSection>
             <SidebarSection delay={0.08}>
                 <h2>Vault</h2>
-                <p className="rail-namespace mono">{vault?.namespace || "—"}</p>
+                <p className="rail-namespace mono">{busy ? <Skeleton width="100%" /> : vault?.namespace || "—"}</p>
                 <div className="rail-meter">
                     <div className="rail-row">
                         <span>Encrypted entries</span>
                         <span className="mono">
-                            {encrypted} / {entries.length}
+                            {busy ? <Skeleton width={40} /> : `${encrypted} / ${entries.length}`}
                         </span>
                     </div>
-                    <SegmentedProgress
-                        value={encrypted}
-                        max={Math.max(1, entries.length)}
-                        label="Encrypted vault entries"
-                        segments={22}
-                    />
+                    {!busy && (
+                        <SegmentedProgress
+                            value={encrypted}
+                            max={Math.max(1, entries.length)}
+                            label="Encrypted vault entries"
+                            segments={22}
+                        />
+                    )}
                 </div>
                 <div className="rail-row">
                     <span>Identity key</span>
-                    <span>{vault?.identityPublished ? "Published" : "Not published"}</span>
+                    <span>
+                        {busy ? <Skeleton width={64} /> : vault?.identityPublished ? "Published" : "Not published"}
+                    </span>
                 </div>
                 {setup && !setup.ready && (
                     <>

@@ -5,18 +5,22 @@ import { HomeOnboarding } from "./home-onboarding";
 import { DitherBanner } from "./dither-banner";
 import { FadeIn } from "./amicro";
 import { useWorkspace } from "./dashboard-shell";
-import { GateBanner, useGate } from "./connect-gate";
+import { GateBanner, useLocked } from "./connect-gate";
 import { SecretsTable } from "./secrets-table";
 import { TerminalOverview } from "./terminal-overview";
 import { TwoFactorTable } from "./two-factor";
 import { TransfersTable } from "./transfers";
 import { AccountRail } from "./account-rail";
 import { ExtensionBanner } from "./extension-banner";
+import { PairExtension } from "./pair-extension";
+import { Skeleton } from "./ui";
 
 export function DashboardHome() {
-    const { vault } = useWorkspace();
+    const { vault, busy } = useWorkspace();
+    const secrets = vault?.secrets ?? [];
+    const count = (total: number) => (busy ? <Skeleton width={14} height={9} /> : vault ? total : "—");
     // The gate sits inside the page here, so home marks the rest of itself inert instead
-    const gated = Boolean(useGate());
+    const gated = useLocked();
     return (
         <HomeOnboarding>
             <div className="home-content">
@@ -35,9 +39,10 @@ export function DashboardHome() {
                                     <h2>
                                         Secrets
                                         <span className="heading-count mono">
-                                            {vault?.secrets.filter(
-                                                (secret) => !["totp", "receipt"].includes(secret.type),
-                                            ).length ?? "—"}
+                                            {count(
+                                                secrets.filter((secret) => !["totp", "receipt"].includes(secret.type))
+                                                    .length,
+                                            )}
                                         </span>
                                     </h2>
                                     <Link href="/dashboard/secrets" className="text-button">
@@ -52,8 +57,7 @@ export function DashboardHome() {
                                         <h2>
                                             2FA
                                             <span className="heading-count mono">
-                                                {vault?.secrets.filter((secret) => secret.type === "totp").length ??
-                                                    "—"}
+                                                {count(secrets.filter((secret) => secret.type === "totp").length)}
                                             </span>
                                         </h2>
                                         <Link href="/dashboard/2fa" className="text-button">
@@ -62,6 +66,7 @@ export function DashboardHome() {
                                     </div>
                                     <TwoFactorTable compact />
                                 </div>
+                                <PairExtension compact />
                                 <ExtensionBanner compact />
                             </FadeIn>
                             <FadeIn delay={0.16}>
