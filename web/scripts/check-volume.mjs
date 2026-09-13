@@ -9,7 +9,14 @@ const USDC = { address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", symbol: "U
 
 // A receipt is public metadata plus a payload that only a key holder can read
 const at = (name, daysAgo) => ({ name, created: Math.floor((NOW - daysAgo * DAY) / 1000), type: "receipt" });
-const paid = (amount, token = USDC.address) => ({ v: 1, amount, token, counterparty: "bob.eth", tx: "0x", direction: "sent" });
+const paid = (amount, token = USDC.address) => ({
+    v: 1,
+    amount,
+    token,
+    counterparty: "bob.eth",
+    tx: "0x",
+    direction: "sent",
+});
 
 const sent = [at("a.rewall.alice.eth", 0), at("b.rewall.alice.eth", 0), at("c.rewall.alice.eth", 29)];
 const shared = [at("d.rewall.bob.eth", 1)];

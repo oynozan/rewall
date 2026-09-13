@@ -140,7 +140,8 @@ export function SecretAccess({ secret }: { secret: Secret }) {
                                                     : undefined
                                             }
                                             disabled={
-                                                Boolean(pending) || (kind === "recovery" && secret.recovery.length === 1)
+                                                Boolean(pending) ||
+                                                (kind === "recovery" && secret.recovery.length === 1)
                                             }
                                             onClick={() => void revoke(kind, name)}
                                         >
