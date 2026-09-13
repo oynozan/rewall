@@ -76,10 +76,10 @@ try {
     await page.getByRole("button", { name: "Unlock to read", exact: true }).click();
     await expect(rail("Decrypt values")).toHaveClass(/granted/, { timeout: 60000 });
 
-    // Two, because a wallet unseen before is asked to sign twice to prove it signs the same way each time
-    assert.equal(wallet.calls.typedData, 2, "First unlock proves determinism, so it signs twice");
+    // One, because the derived key matches the key this name published, which already proves the signer stable
+    assert.equal(wallet.calls.typedData, 1, "First unlock of a name with a published key signs once");
     await shot("unlock-2-unlocked");
-    pass("the first unlock costs two signatures, one of them the determinism proof");
+    pass("the first unlock costs one signature, the published key stands in for the determinism proof");
 
     /* Everything after is free */
 
@@ -98,7 +98,7 @@ try {
         await expect(page.getByRole("button", { name: "Lock", exact: true })).toBeVisible();
         await closePanel();
     }
-    assert.equal(wallet.calls.typedData, 2, "A live session must not re-sign");
+    assert.equal(wallet.calls.typedData, 1, "A live session must not re-sign");
     pass("the session stays unlocked with no further signatures");
 
     /* Locking forgets the key, and the proof is remembered so the next unlock is one signature */
@@ -108,7 +108,7 @@ try {
     await expect(rail("Decrypt values")).not.toHaveClass(/granted/);
     await page.getByRole("button", { name: "Unlock to read", exact: true }).click();
     await expect(rail("Decrypt values")).toHaveClass(/granted/, { timeout: 60000 });
-    assert.equal(wallet.calls.typedData, 3, "A re-unlock costs one signature, not two");
+    assert.equal(wallet.calls.typedData, 2, "A re-unlock costs one signature, not two");
     pass("locking clears the key and re-unlocking costs a single signature");
 
     /* No derived key is ever written down */

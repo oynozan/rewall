@@ -26,7 +26,7 @@ type PrivateData = {
 const PrivateContext = createContext<PrivateData | null>(null);
 
 export function PrivateDataProvider({ children }: { children: React.ReactNode }) {
-    const { decrypt } = useIdentity();
+    const { decrypt, unlocked } = useIdentity();
     const { account, ownName } = useWorkspace();
     const [accounts, setAccounts] = useState<Record<string, TOTP>>({});
     const [shared, setShared] = useState<SharedReceipt[]>([]);
@@ -39,6 +39,16 @@ export function PrivateDataProvider({ children }: { children: React.ReactNode })
     const keys = useRef(new Map<string, TOTP>());
     const generation = useRef({ value: 0 });
     const inFlight = useRef(false);
+
+    // Locking the identity has to take the decrypted seeds, live codes and opened receipts with it
+    useEffect(() => {
+        if (unlocked) return;
+        generation.current.value++;
+        keys.current.forEach((otp) => otp.secret.bytes.fill(0));
+        keys.current.clear();
+        setAccounts({});
+        setReceipts({});
+    }, [unlocked]);
 
     // Decrypted seeds die with the provider, which remounts on any wallet or vault change
     useEffect(() => {

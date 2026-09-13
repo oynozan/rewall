@@ -69,7 +69,7 @@ try {
 
     // A signature taken on the wrong chain is what the wallet answers with CHAIN_ID_MISMATCH
     assert.equal(await chainOf(), SEPOLIA, "A drifted wallet is put back on Sepolia before it is asked to sign");
-    assert.equal(wallet.calls.typedData, 2, "The identity is derived, twice on a first unlock");
+    assert.equal(wallet.calls.typedData, 1, "The identity is derived once, the published key proves the signer stable");
     assert.deepEqual(
         wallet.calls.addedChains,
         [sepolia.id, sepolia.id],
