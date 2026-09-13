@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useIdentity } from "./identity";
 import { useExtension } from "./use-extension";
@@ -8,8 +8,18 @@ import { explain } from "@/src/lib/errors";
 
 const OFFER = "rewall:pair-offer";
 
-// Shown in place of the install banner once an extension is actually here, since installing is then done
+// Reading the query bails the tree above it out of prerendering, so the boundary belongs with the
+// reader rather than with every page that happens to render one
 export function PairExtension({ compact = false }: { compact?: boolean }) {
+    return (
+        <Suspense fallback={null}>
+            <PairOffer compact={compact} />
+        </Suspense>
+    );
+}
+
+// Shown in place of the install banner once an extension is actually here, since installing is then done
+function PairOffer({ compact }: { compact: boolean }) {
     const params = useSearchParams();
     const { handOff } = useIdentity();
     const extension = useExtension();
