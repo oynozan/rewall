@@ -8,14 +8,30 @@ import { rememberName } from "@/src/lib/account";
 import { explain } from "@/src/lib/errors";
 import { newRecoveryPhrase, phraseRows, recoveryIdentity } from "@/src/lib/recovery-kit";
 import { useIdentity } from "./identity";
-import { SegmentedProgress } from "./ui";
-import { LiquidMetalButton } from "./liquid-metal-button";
+import { Glyph, Spinner } from "./ui";
 import styles from "./setup-wizard.module.css";
 
 type Step = "gas" | "name" | "recovery" | "finishing" | "done";
 
-// The registrar makes a commitment sit for 60s before the name can be revealed
-const COMMIT_WAIT = 60;
+// Finishing shares the phrase screen, so it shares its number rather than counting past it
+const NUMBER: Record<Step, number> = { gas: 1, name: 2, recovery: 3, finishing: 3, done: 4 };
+
+// Sepolia is usually quick and sometimes is not, so a wait past this point says so rather than looking stuck
+const SLOW_AFTER = 15000;
+
+function useSlow(waiting: boolean) {
+    const [slow, setSlow] = useState(false);
+    // Cleared on the way out rather than on the way in, so the wait never sets state during a render
+    useEffect(() => {
+        if (!waiting) return;
+        const timer = window.setTimeout(() => setSlow(true), SLOW_AFTER);
+        return () => {
+            window.clearTimeout(timer);
+            setSlow(false);
+        };
+    }, [waiting]);
+    return slow;
+}
 
 async function post(path: string, body: unknown) {
     const token = await getAccessToken();
@@ -48,13 +64,13 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
     const [phrase, setPhrase] = useState("");
     const [vaultName, setVaultName] = useState("");
     const [saved, setSaved] = useState(false);
-    const [countdown, setCountdown] = useState(0);
     // Which cell flashed, where the word count marks the whole phrase and -2 a clipboard the browser refused
     const [copied, setCopied] = useState(-1);
-    const committedAt = useRef(0);
     const flash = useRef(0);
 
     const words = phrase ? phraseRows(phrase).flat() : [];
+    const waiting = Boolean(busy) || step === "finishing";
+    const slow = useSlow(waiting);
 
     useEffect(() => () => window.clearTimeout(flash.current), []);
 
@@ -100,6 +116,7 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
             setBusy("Making your recovery key…");
             const words = newRecoveryPhrase();
             const recovery = await recoveryIdentity(words);
+            const mine = toBase64(recovery.publicKey);
 
             setBusy("Reserving the name…");
             const result = await post("/api/provision", {
@@ -107,10 +124,16 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
                 address,
                 label,
                 publicKey: identityKey,
-                recoveryPublicKey: toBase64(recovery.publicKey),
+                recoveryPublicKey: mine,
             });
 
-            committedAt.current = result.committedAt ?? Math.floor(Date.now() / 1000);
+            // A retried start keeps the first phrase's key, so showing these words would strand the vault
+            if (result.recoveryPublicKey && result.recoveryPublicKey !== mine) {
+                throw new Error(
+                    "This wallet already started setup with a different recovery phrase, and that is the one that works. Use the words from the first attempt.",
+                );
+            }
+
             setPhrase(words);
             setStep("recovery");
         } catch (failure) {
@@ -119,15 +142,6 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
             setBusy("");
         }
     };
-
-    // The clock runs while the recovery key is being saved, so the wait costs the user nothing
-    useEffect(() => {
-        if (step !== "recovery" && step !== "finishing") return;
-        const tick = () => setCountdown(Math.max(0, committedAt.current + COMMIT_WAIT - Math.floor(Date.now() / 1000)));
-        tick();
-        const timer = window.setInterval(tick, 1000);
-        return () => window.clearInterval(timer);
-    }, [step]);
 
     /* Steps three and four, which need nothing from the user but a confirmation */
 
@@ -173,141 +187,143 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
         <section className={styles.wizard} aria-label="Set up Rewall">
             <header className={styles.head}>
                 <span className="tour-classifier">Getting started</span>
-                <span className="mono">{["gas", "name", "recovery"].indexOf(step) + 1 || 4} / 4</span>
+                <span className="mono">{NUMBER[step]} / 4</span>
             </header>
 
-            {step === "gas" && (
-                <div className={styles.step}>
-                    <h2>Some Sepolia ETH, on us</h2>
-                    <p>
-                        Rewall stores secrets on a real test network, so every change costs a little gas. This is free
-                        test money and has no value anywhere.
-                    </p>
-                    <LiquidMetalButton
-                        fullWidth
-                        className={styles.cta}
-                        label={busy || "Send me test ETH"}
-                        onClick={() => void drip()}
-                        disabled={Boolean(busy)}
-                    />
-                </div>
-            )}
-
-            {step === "name" && (
-                <form className={styles.step} onSubmit={claim}>
-                    <h2>Pick your name</h2>
-                    <p>This becomes your vault. Everything you store lives under it, as {label || "yourname"}.eth.</p>
-                    <div className={styles.name}>
-                        <input
-                            aria-label="Your ENS name"
-                            value={label}
-                            onChange={(event) => setLabel(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-                            placeholder="yourname"
-                            autoComplete="off"
-                            autoCapitalize="none"
-                            spellCheck={false}
-                            minLength={5}
-                            required
-                        />
-                        <span className="mono">.eth</span>
-                    </div>
-                    <p className="field-help">
-                        Five characters or more. We pay for the registration, so all you do is sign once.
-                    </p>
-                    <LiquidMetalButton
-                        fullWidth
-                        className={styles.cta}
-                        type="submit"
-                        disabled={Boolean(busy) || label.length < 5}
-                        label={busy || "Claim it"}
-                    />
-                </form>
-            )}
-
-            {(step === "recovery" || step === "finishing") && (
-                <div className={styles.step}>
-                    <h2>Your recovery phrase</h2>
-                    <p>
-                        Lose your wallet and these 24 words are the only way back into your secrets. Rewall never sees
-                        them and cannot reset them for you.
-                    </p>
-                    <ol className={styles.phrase} aria-label="Recovery phrase">
-                        {words.map((word, index) => (
-                            <li key={index}>
-                                <button
-                                    type="button"
-                                    className={`${styles.cell} ${copied === index ? styles.copied : ""}`}
-                                    aria-label={`Copy word ${index + 1}, ${word}`}
-                                    onClick={() => copy(word, index)}
-                                >
-                                    {word}
-                                </button>
-                            </li>
-                        ))}
-                    </ol>
-                    <p className={styles.note} role="status">
-                        {copied === -2
-                            ? "Your browser blocked the clipboard, select the words instead"
-                            : copied === words.length
-                              ? "Recovery phrase copied"
-                              : copied >= 0
-                                ? `Word ${copied + 1} copied`
-                                : "Click any word to copy it"}
-                    </p>
-                    <div className={styles.actions}>
-                        <button className="button" type="button" onClick={() => copy(phrase, words.length)}>
-                            Copy
-                        </button>
-                        <button className="button" type="button" onClick={download}>
-                            Download
+            <div className={styles.body}>
+                {step === "gas" && (
+                    <div className={styles.step}>
+                        <h2>Some Sepolia ETH, on us</h2>
+                        <p>
+                            Rewall stores secrets on a real test network, so every change costs a little gas. This is
+                            free test money and has no value anywhere.
+                        </p>
+                        <button
+                            className={`button primary ${styles.cta}`}
+                            onClick={() => void drip()}
+                            disabled={Boolean(busy)}
+                        >
+                            {busy && <Spinner />}
+                            {busy || "Send me test ETH"}
                         </button>
                     </div>
-                    <label className={styles.confirm}>
-                        <input type="checkbox" checked={saved} onChange={(event) => setSaved(event.target.checked)} />I
-                        have saved it somewhere safe
-                    </label>
-                    {countdown > 0 && (
-                        <div className={styles.wait}>
-                            <SegmentedProgress
-                                value={COMMIT_WAIT - countdown}
-                                max={COMMIT_WAIT}
-                                label="Time until your name can be claimed"
-                                segments={30}
+                )}
+
+                {step === "name" && (
+                    <form className={styles.step} onSubmit={claim}>
+                        <h2>Pick your name</h2>
+                        <p>
+                            This becomes your vault. Everything you store lives under it, as {label || "yourname"}.eth.
+                        </p>
+                        <div className={styles.name}>
+                            <input
+                                aria-label="Your ENS name"
+                                value={label}
+                                onChange={(event) =>
+                                    setLabel(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))
+                                }
+                                placeholder="yourname"
+                                autoComplete="off"
+                                autoCapitalize="none"
+                                spellCheck={false}
+                                minLength={5}
+                                required
                             />
-                            <p className={styles.waitNote}>
-                                <span>Your name is committed before it is revealed, so nobody can take it first</span>
-                                <span className="mono">{countdown}s</span>
-                            </p>
+                            <span className="mono">.eth</span>
                         </div>
-                    )}
-                    <LiquidMetalButton
-                        fullWidth
-                        className={styles.cta}
-                        label={step === "finishing" ? "Setting up your vault…" : "Finish setup"}
-                        onClick={() => void finish()}
-                        disabled={!saved || step === "finishing"}
-                    />
-                </div>
-            )}
+                        <p className="field-help">
+                            Five characters or more. We pay for the registration, so all you do is sign once.
+                        </p>
+                        <button className={`button primary ${styles.cta}`} disabled={Boolean(busy) || label.length < 5}>
+                            {busy && <Spinner />}
+                            {busy || "Claim it"}
+                        </button>
+                    </form>
+                )}
 
-            {step === "done" && (
-                <div className={styles.step}>
-                    <h2>{vaultName} is yours</h2>
-                    <p>The name, its resolver and its registry are all held by your wallet. Nothing is held by us.</p>
-                    <LiquidMetalButton
-                        fullWidth
-                        className={styles.cta}
-                        onClick={() => void onDone(vaultName)}
-                        label="Store your first secret"
-                    />
-                </div>
-            )}
+                {(step === "recovery" || step === "finishing") && (
+                    <div className={styles.step}>
+                        <h2>Your recovery phrase</h2>
+                        <p>
+                            Lose your wallet and these 24 words are the only way back into your secrets. Rewall never
+                            sees them and cannot reset them for you.
+                        </p>
+                        <ol className={styles.phrase} aria-label="Recovery phrase">
+                            {words.map((word, index) => (
+                                <li key={index}>
+                                    <button
+                                        type="button"
+                                        className={`${styles.cell} ${copied === index ? styles.copied : ""}`}
+                                        aria-label={`Copy word ${index + 1}, ${word}`}
+                                        onClick={() => copy(word, index)}
+                                    >
+                                        {word}
+                                    </button>
+                                </li>
+                            ))}
+                        </ol>
+                        <p className={styles.note} role="status">
+                            {copied === -2
+                                ? "Your browser blocked the clipboard, select the words instead"
+                                : copied === words.length
+                                  ? "Recovery phrase copied"
+                                  : copied >= 0
+                                    ? `Word ${copied + 1} copied`
+                                    : "Click any word to copy it"}
+                        </p>
+                        <div className={styles.actions}>
+                            <button className="button" type="button" onClick={() => copy(phrase, words.length)}>
+                                Copy
+                            </button>
+                            <button className="button" type="button" onClick={download}>
+                                Download
+                            </button>
+                        </div>
+                        <label className={styles.confirm}>
+                            <input
+                                type="checkbox"
+                                checked={saved}
+                                onChange={(event) => setSaved(event.target.checked)}
+                            />
+                            I have saved it somewhere safe
+                        </label>
+                        <button
+                            className={`button primary ${styles.cta}`}
+                            onClick={() => void finish()}
+                            disabled={!saved || step === "finishing"}
+                        >
+                            {step === "finishing" && <Spinner />}
+                            {step === "finishing" ? "Setting up your vault…" : "Finish setup"}
+                        </button>
+                    </div>
+                )}
 
-            {error && (
-                <p className="form-error" role="alert">
-                    {error}
-                </p>
-            )}
+                {step === "done" && (
+                    <div className={styles.step}>
+                        <h2>{vaultName} is yours</h2>
+                        <p>
+                            The name, its resolver and its registry are all held by your wallet. Nothing is held by us.
+                        </p>
+                        <button className={`button primary ${styles.cta}`} onClick={() => void onDone(vaultName)}>
+                            Store your first secret
+                        </button>
+                    </div>
+                )}
+
+                {slow && !error && (
+                    <p className={styles.slow} role="status">
+                        This is taking longer than usual. Sepolia is busy, so give it another moment and keep this tab
+                        open.
+                    </p>
+                )}
+
+                {error && (
+                    <p className={styles.warning} role="alert">
+                        <Glyph name="warning" size={16} />
+                        <span>{error}</span>
+                    </p>
+                )}
+            </div>
         </section>
     );
 }

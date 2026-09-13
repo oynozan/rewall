@@ -1,5 +1,12 @@
 /* Kept out of dashboard.css so onboarding can land without touching the shared stylesheet */
 
+/* The frame grows to fit the card, so centring here can never put the tallest step out of reach */
+:global(#workspace-content):has(> .wizard) {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
 .wizard {
     width: 100%;
     max-width: 520px;
@@ -19,10 +26,13 @@
     color: var(--muted);
 }
 
+.body {
+    padding: 28px 22px 26px;
+}
+
 .step {
     display: flex;
     flex-direction: column;
-    padding: 28px 22px 26px;
     animation: reveal 160ms ease-out;
 }
 
@@ -40,10 +50,10 @@
     margin-bottom: 22px;
 }
 
-/* The look comes from the global button rule, this only places it */
+/* The look comes from the global button rule, this only places it and spaces a waiting mark off the label */
 .cta {
     align-self: flex-start;
-    gap: 6px;
+    gap: 9px;
 }
 
 /* Name */
@@ -154,30 +164,14 @@
     color: var(--subtle);
 }
 
-/* Commit wait */
+/* Shown only once a wait runs past the point where it starts to look broken */
 
-.wait {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
-    padding: 12px 13px 11px;
-    margin-bottom: 22px;
-}
-
-.waitNote {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 14px;
-    margin-top: 9px;
-    font-size: 12px;
-    line-height: 1.5;
+.slow {
+    margin-top: 14px;
+    max-width: 52ch;
+    font-size: 12.5px;
+    line-height: 1.55;
     color: var(--muted);
-}
-
-.waitNote span:last-child {
-    flex-shrink: 0;
-    color: #a8a89c;
 }
 
 .actions {
@@ -202,11 +196,33 @@
     height: 15px;
 }
 
+/* Warning */
+
+/* A rule rather than a filled box, so it reads as part of the step and not a second panel */
+.warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin-top: 18px;
+    padding-left: 11px;
+    border-left: 2px solid #d6b868;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #dbdbc9;
+}
+
+.warning :global(.glyph) {
+    flex-shrink: 0;
+    margin-top: 2px;
+    stroke-width: 2.2;
+    color: #d6b868;
+}
+
 @media (max-width: 620px) {
     .wizard {
         margin: 20px auto;
     }
-    .step {
+    .body {
         padding: 22px 16px;
     }
 }

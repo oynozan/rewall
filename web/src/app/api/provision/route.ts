@@ -1,7 +1,7 @@
 import { isAddress, type Address } from "viem";
 import { assertOwns, NotYoursError } from "@/src/lib/auth";
-import { accountFor, accounts, seeAccount, updateAccount } from "@/src/lib/mongo";
-import { finishProvision, labelOk, startProvision } from "@/src/lib/provision";
+import { accountFor, accounts, seeAccount, updateAccount, type Provisioned } from "@/src/lib/mongo";
+import { finishProvision, labelOk, publicKeyOk, publishedRecoveryKey, startProvision } from "@/src/lib/provision";
 
 const CAP = Number(process.env.REWALL_PROVISION_CAP || 25);
 
@@ -17,7 +17,8 @@ const refuse = (reason: string, status = 400, extra: Record<string, unknown> = {
     Response.json({ error: reason, ...extra }, { status });
 
 export async function POST(request: Request) {
-    const body = (await request.json().catch(() => ({}))) as Body;
+    // A literal null body parses fine and would crash the destructure, so it falls back to an object
+    const body = ((await request.json().catch(() => null)) ?? {}) as Body;
     const { phase, address, label } = body;
 
     if (!address || !isAddress(address)) return refuse("Send a wallet address.");
@@ -47,17 +48,35 @@ export async function POST(request: Request) {
         const { publicKey, recoveryPublicKey } = body;
         if (!publicKey || !recoveryPublicKey)
             return refuse("Both public keys are required before anything is deployed.");
+        // Checked before any transaction, since the sponsor pays for whatever these records carry
+        if (!publicKeyOk(publicKey) || !publicKeyOk(recoveryPublicKey))
+            return refuse("Both public keys have to be 32 bytes of standard base64.");
 
         await seeAccount(address);
-        const state = await startProvision({
-            address: address as Address,
-            label,
-            publicKey,
-            recoveryPublicKey,
-            existing: existing?.provisioned,
-        });
+        let state;
+        try {
+            state = await startProvision({
+                address: address as Address,
+                label,
+                publicKey,
+                recoveryPublicKey,
+                existing: existing?.provisioned,
+            });
+        } catch (failure) {
+            // Saved before rethrowing, or a retry re-uses a salt the factory has already spent
+            const partial = (failure as { provisioned?: Provisioned }).provisioned;
+            if (partial) await updateAccount(address, { provisioned: partial, name: `${label}.eth` });
+            throw failure;
+        }
         await updateAccount(address, { provisioned: state, name: `${label}.eth` });
-        return Response.json({ committedAt: state.committedAt, resolver: state.resolver });
+
+        // The key the resolver actually holds, so the wizard can refuse to show a phrase that cannot recover
+        const published = await publishedRecoveryKey(state.resolver as Address, label);
+        return Response.json({
+            committedAt: state.committedAt,
+            resolver: state.resolver,
+            recoveryPublicKey: published,
+        });
     }
 
     if (phase === "finish") {

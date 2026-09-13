@@ -7,11 +7,12 @@ export async function GET(request: Request) {
     if (!address || !isAddress(address)) return Response.json({ error: "Send a wallet address." }, { status: 400 });
 
     const account = await accountFor(address);
+    // Booleans only, because the provisioning state carries the registrar commitment secret
     return Response.json({
         seen: Boolean(account),
         dripped: Boolean(account?.dripped),
-        name: account?.name ?? null,
-        provisioned: account?.provisioned ?? null,
+        name: account?.completedAt ? (account.name ?? null) : null,
+        started: Boolean(account?.provisioned),
         completed: Boolean(account?.completedAt),
     });
 }

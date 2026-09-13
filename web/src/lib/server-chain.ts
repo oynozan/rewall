@@ -1,5 +1,5 @@
 import "server-only";
-import { createPublicClient, createWalletClient, http, type Address } from "viem";
+import { createPublicClient, createWalletClient, http, type Address, type Hash, type TransactionReceipt } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 
@@ -19,7 +19,8 @@ const rpc =
     process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL ||
     "https://ethereum-sepolia-rpc.publicnode.com";
 
-export const publicClient = createPublicClient({ chain: sepolia, transport: http(rpc) });
+// Polled faster than the four second default, because a setup waits on receipts a dozen times over
+export const publicClient = createPublicClient({ chain: sepolia, transport: http(rpc), pollingInterval: 1000 });
 
 export function sponsor() {
     const key = process.env.REWALL_SPONSOR_KEY;
@@ -41,12 +42,31 @@ export function serialized<T>(work: () => Promise<T>): Promise<T> {
     return next;
 }
 
-export async function send(
-    request: Parameters<ReturnType<typeof sponsor>["client"]["writeContract"]>[0],
-): Promise<Address> {
-    const { client } = sponsor();
-    const hash = await client.writeContract(request);
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
-    if (receipt.status !== "success") throw new Error(`transaction reverted ${hash}`);
-    return hash as Address;
+export type WriteRequest = Parameters<ReturnType<typeof sponsor>["client"]["writeContract"]>[0];
+
+// Independent calls ride consecutive nonces, so six of them cost one block rather than six
+export async function sendAll(requests: WriteRequest[]): Promise<TransactionReceipt[]> {
+    if (!requests.length) return [];
+    const { account, client } = sponsor();
+
+    // The nonce is claimed inside the queue, the receipts are awaited outside it
+    const hashes = await serialized(async () => {
+        const first = await publicClient.getTransactionCount({ address: account.address, blockTag: "pending" });
+        const sent: Hash[] = [];
+        // Submitted in order, because a gap left by a failed send would strand every nonce above it
+        for (const [index, request] of requests.entries()) {
+            sent.push(await client.writeContract({ ...request, nonce: first + index }));
+        }
+        return sent;
+    });
+
+    const receipts = await Promise.all(hashes.map((hash) => publicClient.waitForTransactionReceipt({ hash })));
+    const reverted = receipts.findIndex((receipt) => receipt.status !== "success");
+    if (reverted >= 0) throw new Error(`transaction reverted ${hashes[reverted]}`);
+    return receipts;
+}
+
+export async function send(request: WriteRequest): Promise<Address> {
+    const [receipt] = await sendAll([request]);
+    return receipt!.transactionHash as Address;
 }
