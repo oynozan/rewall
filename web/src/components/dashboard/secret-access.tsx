@@ -20,7 +20,9 @@ const LISTS: { kind: Kind; title: string; empty: string }[] = [
 ];
 
 export function SecretAccess({ secret }: { secret: Secret }) {
-    const { isOwnVault, refresh } = useWorkspace();
+    const { isOwnVault, ownName, refresh } = useWorkspace();
+    // The opened secret, not the loaded vault, since finding one by name can reach somebody else's
+    const mine = isOwnVault && secret.owner === ownName;
     const { write } = useIdentity();
     const [adding, setAdding] = useState<Kind | null>(null);
     const [candidate, setCandidate] = useState<Candidate>({ state: "empty" });
@@ -107,7 +109,7 @@ export function SecretAccess({ secret }: { secret: Secret }) {
                 <div key={kind} className="access-group">
                     <div className="access-heading">
                         <span>{title}</span>
-                        {isOwnVault && kind !== "recovery" && (
+                        {mine && kind !== "recovery" && (
                             <button
                                 className="text-button"
                                 onClick={() => {
@@ -127,11 +129,19 @@ export function SecretAccess({ secret }: { secret: Secret }) {
                             {secret[kind].map((name) => (
                                 <li key={name}>
                                     <span className="mono">{name}</span>
-                                    {isOwnVault && (
+                                    {mine && (
                                         <button
                                             className="icon-button"
                                             aria-label={`Revoke ${name}`}
-                                            disabled={Boolean(pending)}
+                                            // SPEC section 5 needs one recovery entry, so the SDK refuses the last
+                                            title={
+                                                kind === "recovery" && secret.recovery.length === 1
+                                                    ? "A secret needs one recovery holder, add another before removing this"
+                                                    : undefined
+                                            }
+                                            disabled={
+                                                Boolean(pending) || (kind === "recovery" && secret.recovery.length === 1)
+                                            }
                                             onClick={() => void revoke(kind, name)}
                                         >
                                             <Glyph name="close" size={15} />

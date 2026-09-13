@@ -4,9 +4,6 @@ import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { artifacts } from "./lib/artifacts.mjs";
 import { skipTour } from "./lib/tour.mjs";
-import { createPublicClient, http, parseAbi } from "viem";
-import { sepolia } from "viem/chains";
-import { dnsEncode, registryLookupAbi } from "@rewall/sdk";
 import { headlessWallet, attachWallet } from "./lib/wallet.mjs";
 import { openOwnVault } from "./lib/session.mjs";
 
@@ -18,30 +15,6 @@ const OWNER = "rewall-test-1.eth";
 const RECOVERY = "rewall-test-3.eth";
 const LABEL = "web-created";
 const VALUE = `sk_live_from_the_browser_${Date.now()}`;
-
-const UNIVERSAL_RESOLVER = "0x4a1817d13e9cf196f471725176355c1234b63c70";
-const ZERO = "0x0000000000000000000000000000000000000000";
-const chain = createPublicClient({
-    chain: sepolia,
-    transport: http(process.env.SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com"),
-});
-
-// A subname that does not exist yet costs its own transaction before any record can be written
-async function registered(secretName) {
-    const registry = await chain.readContract({
-        address: UNIVERSAL_RESOLVER,
-        abi: registryLookupAbi,
-        functionName: "findParentRegistry",
-        args: [dnsEncode(secretName)],
-    });
-    const resolver = await chain.readContract({
-        address: registry,
-        abi: parseAbi(["function getResolver(string label) view returns (address)"]),
-        functionName: "getResolver",
-        args: [secretName.split(".")[0]],
-    });
-    return resolver !== ZERO;
-}
 
 const checks = [];
 const pass = (message) => checks.push(message);
@@ -96,7 +69,6 @@ try {
     await page.getByLabel("Recovery name", { exact: true }).fill(RECOVERY);
     await shot("create-1-form");
 
-    const expected = (await registered(`${LABEL}.rewall.${OWNER}`)) ? 1 : 2;
     const before = wallet.calls.transactions;
     await page.getByRole("button", { name: "Store secret", exact: true }).click();
 
@@ -122,12 +94,9 @@ try {
     await expect(page.locator(".secrets-browser").getByText(`${LABEL}.rewall.${OWNER}`)).toBeVisible({
         timeout: 180000,
     });
-    assert.equal(
-        wallet.calls.transactions - before,
-        expected,
-        `Storing must cost ${expected} transactions, ${expected === 2 ? "registering the subname then writing it" : "one write"}`,
-    );
-    pass(`the secret was stored in ${expected} transaction${expected === 1 ? "" : "s"} and appears in the listing`);
+    // A secret needs no registry entry, so the only transaction is the records write
+    assert.equal(wallet.calls.transactions - before, 1, "Storing must cost one transaction, the records write");
+    pass("the secret was stored in one transaction and appears in the listing");
 
     /* Read it back, which proves it round tripped through the chain */
 
