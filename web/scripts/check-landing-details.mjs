@@ -14,7 +14,7 @@ try {
     await page.evaluate(() => document.fonts.ready);
     for (const width of [1440, 1100, 768, 390]) {
         await page.setViewportSize({ width, height: 1000 });
-        await expect(page.locator("[data-secret-journey] [role=tab]")).toHaveCount(3);
+        await expect(page.locator("[data-works] .wk-step")).toHaveCount(4);
         await page.locator("#flows").scrollIntoViewIfNeeded();
         const result = await page.evaluate(() => ({
             overflow: document.documentElement.scrollWidth - innerWidth,
@@ -41,9 +41,58 @@ try {
             "px",
         );
     }
+    // The docs preview is there while a step is hovered or focused, gone otherwise, and stays inside its own section
+    const display = () =>
+        page
+            .locator("[data-works] .wk-card")
+            .nth(1)
+            .evaluate((el) => getComputedStyle(el).display);
+    async function preview() {
+        await page.mouse.move(0, 0);
+        await page.waitForTimeout(300);
+        assert.equal(await display(), "none", "the card shows with nothing on its step");
+        await page.locator("[data-works] .wk-step").nth(1).hover();
+        await page.waitForTimeout(300);
+        assert.equal(await display(), "flex", "the card did not show under the pointer");
+        const fit = await page.evaluate(() => {
+            const card = document.querySelectorAll("[data-works] .wk-card")[1].getBoundingClientRect();
+            const section = document.getElementById("works").getBoundingClientRect();
+            return {
+                inside: card.bottom <= section.bottom,
+                overflow: document.documentElement.scrollWidth - innerWidth,
+            };
+        });
+        assert.ok(fit.inside, "an open card reaches past its own section");
+        assert.equal(fit.overflow, 0);
+        await page.mouse.move(0, 0);
+        await page.waitForTimeout(300);
+        assert.equal(await display(), "none", "the card stayed after the pointer left");
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.locator("#works").scrollIntoViewIfNeeded();
+    await expect(page.locator("[data-works] a[target=_blank][rel~=noreferrer]")).toHaveCount(4);
+    for (const [index, side] of [
+        [0, "left"],
+        [3, "right"],
+    ]) {
+        await page.locator("[data-works] .wk-step").nth(index).hover();
+        await page.waitForTimeout(300);
+        const off = await page.evaluate(
+            ([i, s]) => {
+                const step = document.querySelectorAll("[data-works] .wk-step")[i];
+                return Math.abs(
+                    step.getBoundingClientRect()[s] - step.querySelector(".wk-card").getBoundingClientRect()[s],
+                );
+            },
+            [index, side],
+        );
+        assert.ok(off < 0.5, `the ${side} card sits ${off}px off its step`);
+    }
+    await preview();
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await expect(page.locator("[data-secret-journey] [role=tab]")).toHaveCount(3);
+    await expect(page.locator("[data-works] .wk-step")).toHaveCount(4);
+    await preview();
     assert.equal(errors.length, 0, errors.join("\n"));
     console.log("Screenshots:", output);
 } finally {

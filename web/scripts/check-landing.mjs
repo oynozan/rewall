@@ -75,7 +75,7 @@ try {
         marks: document.querySelectorAll(".feat-cells .cell").length,
         bento: document.querySelectorAll(".bento .b-cell").length,
         faq: document.querySelectorAll(".faq details").length,
-        steps: document.querySelectorAll("[data-secret-journey] [role=tab]").length,
+        steps: document.querySelectorAll("[data-works] .wk-step").length,
         bands: document.querySelectorAll(".lp > .band").length,
         diagrams: document.querySelectorAll(".flow .fl-stage").length,
         beams: document.querySelectorAll(".flow .beam-svg").length,
@@ -94,8 +94,8 @@ try {
     assert.equal(counts.marks, 4, "the feature grid holds four marks");
     assert.equal(counts.bento, 4, "the client row holds four cells");
     assert.equal(counts.faq, 8, "the faq holds eight questions");
-    assert.equal(counts.steps, 3, "how it works is three moves");
-    assert.equal(counts.bands, 8, "nav, hero, how it works, protocol, flows, clients, faq and footer");
+    assert.equal(counts.steps, 4, "how it works is four moves");
+    assert.equal(counts.bands, 9, "nav, hero, how it works, protocol, flows, clients, faq, skill and footer");
     assert.equal(counts.diagrams, 3, "the three capability diagrams are in place");
     assert.ok(counts.beams >= 6, `only ${counts.beams} animated beams mounted across the flows`);
     assert.equal(counts.flowMarks, 3, "every flow carries the mark wherever Rewall is the one operating");
@@ -118,7 +118,8 @@ try {
         const bad = [];
         for (const wrap of document.querySelectorAll(".fl-wrap")) {
             const w = wrap.getBoundingClientRect();
-            const boxes = [...wrap.querySelectorAll(".fl-node")].map((n) => {
+            // A person hangs its rail off the figure rather than the labelled box, so that is the box to stop on
+            const boxes = [...wrap.querySelectorAll(".fl-person-anchor, .fl-slab, .fl-mark")].map((n) => {
                 const b = n.getBoundingClientRect();
                 return { l: b.left - w.left, r: b.right - w.left, t: b.top - w.top, b: b.bottom - w.top };
             });
@@ -169,6 +170,50 @@ try {
     });
     assert.ok(counts.tokens > 40, `the sdk sample lost its highlighting, only ${counts.tokens} tokens`);
     assert.ok(counts.kinds >= 6, `highlighting collapsed to ${counts.kinds} token kinds`);
+
+    // The extension popup runs on a real thirty second step, so the bar has to drain and the code has to roll
+    const popup = () =>
+        page.evaluate(() => {
+            const meter = document.querySelector(".b-meter");
+            const segments = [...meter.querySelectorAll(".segmented-progress > span")];
+            return {
+                code: document.querySelector(".b-code").textContent,
+                urgency: meter.dataset.urgency,
+                segments: segments.length,
+                lit: segments.filter((s) => getComputedStyle(s).backgroundColor !== "rgb(47, 47, 47)").length,
+            };
+        });
+    // The agent exchange plays itself, so the turns have to arrive rather than sit there finished
+    const turns = () =>
+        page.evaluate(() => ({
+            total: document.querySelectorAll(".b-chat .b-turn").length,
+            shown: document.querySelectorAll(".b-chat .b-turn:not(.is-waiting)").length,
+            redacted: document.querySelectorAll(".b-chat .b-tool mark").length,
+        }));
+    const talk = await turns();
+    assert.equal(talk.total, 5, `the agent exchange has ${talk.total} turns rather than five`);
+    assert.equal(talk.redacted, 1, "the agent exchange lost the redacted reply");
+
+    const opened = await popup();
+    await page.waitForTimeout(2500);
+    const later = await popup();
+    assert.match(opened.code, /^\d{3} \d{3}$/, `the popup shows ${opened.code} rather than a six digit code`);
+    assert.ok(["high", "medium", "low"].includes(opened.urgency), `the popup meter has no urgency to colour by`);
+    assert.equal(opened.segments, 30, "the popup meter is one segment per second of the step");
+    assert.ok(
+        later.lit < opened.lit || later.code !== opened.code,
+        "the popup is frozen, its bar did not drain and its code did not roll",
+    );
+    // Waited on rather than sampled twice, since the talk holds the finished transcript for a few seconds
+    await page
+        .waitForFunction(
+            (was) => document.querySelectorAll(".b-chat .b-turn:not(.is-waiting)").length !== was,
+            talk.shown,
+            { timeout: 12000 },
+        )
+        .catch(() => {
+            throw new assert.AssertionError({ message: "the agent exchange is frozen on one turn" });
+        });
 
     // The code block is the one place hue is allowed, so a grayscale sample means the theme is gone
     const lit = await page.evaluate(() => {
