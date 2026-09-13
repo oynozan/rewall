@@ -324,11 +324,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                                         <a
                                             className="nav-item"
                                             style={step(8)}
-                                            href="#"
+                                            href="https://docs.rewall.me"
                                             target="_blank"
                                             rel="noreferrer"
-                                            onClick={(event) => event.preventDefault()}
-                                            aria-disabled="true"
                                         >
                                             <Icon name="documents" />
                                             Docs
