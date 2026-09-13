@@ -67,6 +67,9 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
     const [phrase, setPhrase] = useState("");
     const [vaultName, setVaultName] = useState("");
     const [saved, setSaved] = useState(false);
+    // The registrar makes a commitment wait 60 seconds, so the finish step counts that down out loud
+    const [readyAt, setReadyAt] = useState(0);
+    const [clock, setClock] = useState(0);
     // Which cell flashed, where the word count marks the whole phrase and -2 a clipboard the browser refused
     const [copied, setCopied] = useState(-1);
     const flash = useRef(0);
@@ -76,6 +79,14 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
     const slow = useSlow(waiting);
 
     useEffect(() => () => window.clearTimeout(flash.current), []);
+
+    useEffect(() => {
+        if (!readyAt) return;
+        const timer = window.setInterval(() => setClock(Math.floor(Date.now() / 1000)), 1000);
+        return () => window.clearInterval(timer);
+    }, [readyAt]);
+
+    const maturing = readyAt ? Math.max(0, readyAt - clock) : 0;
 
     // The timer starts only once the write settles, or a slow clipboard leaves a cell lit after its own reset ran
     const copy = (text: string, mark: number) => {
@@ -151,9 +162,12 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
     const finish = useCallback(async () => {
         setError("");
         setStep("finishing");
+        // Bounded, or a registry that keeps asking for more time spins here with nothing on screen
+        const giveUpAt = Date.now() + 5 * 60 * 1000;
         for (;;) {
             try {
                 const result = await post("/api/provision", { phase: "finish", address, label });
+                setReadyAt(0);
 
                 // Remembered now so a reload finds the vault, but adopted only on the way out, because
                 // adopting changes the vault the shell keys its subtree on and would remount this wizard
@@ -166,12 +180,21 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
                 return;
             } catch (failure) {
                 const wait = (failure as { retryAfter?: number }).retryAfter;
-                if (!wait) {
-                    setError(say(failure));
+                if (!wait || Date.now() > giveUpAt) {
+                    setReadyAt(0);
+                    setError(
+                        wait
+                            ? "Sepolia is still not ready to register the name. Press Finish setup again in a moment."
+                            : say(failure),
+                    );
                     setStep("recovery");
                     return;
                 }
-                await new Promise((resolve) => setTimeout(resolve, Math.min(wait, 10) * 1000));
+
+                const seconds = Math.floor(Date.now() / 1000);
+                setClock(seconds);
+                setReadyAt(seconds + wait);
+                await new Promise((resolve) => setTimeout(resolve, Math.min(wait, 5) * 1000));
             }
         }
     }, [address, label]);
@@ -296,7 +319,11 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
                             disabled={!saved || step === "finishing"}
                         >
                             {step === "finishing" && <Spinner />}
-                            {step === "finishing" ? "Setting up your vault…" : "Finish setup"}
+                            {step !== "finishing"
+                                ? "Finish setup"
+                                : maturing
+                                  ? `Waiting for the registry, ${maturing}s`
+                                  : "Registering your name…"}
                         </button>
                     </div>
                 )}
@@ -313,7 +340,14 @@ export function SetupWizard({ address, onDone }: { address: string; onDone: (nam
                     </div>
                 )}
 
-                {slow && !error && (
+                {step === "finishing" && maturing > 0 && (
+                    <p className={styles.slow} role="status">
+                        Ethereum makes a name reservation wait one minute before it can be claimed. Rewall is counting
+                        that down for you, so keep this tab open.
+                    </p>
+                )}
+
+                {slow && !error && !maturing && (
                     <p className={styles.slow} role="status">
                         This is taking longer than usual. Sepolia is busy, so give it another moment and keep this tab
                         open.

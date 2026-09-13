@@ -297,6 +297,20 @@ async function beginSetup(
 
 /* Phase two, after MIN_COMMITMENT_AGE has passed on the wall clock */
 
+// A registrar constant, so the maturity poll stops paying for an RPC round trip to learn it again
+let cachedAge: number | null = null;
+
+async function commitmentAge(): Promise<number> {
+    cachedAge ??= Number(
+        await publicClient.readContract({
+            address: ETH_REGISTRAR,
+            abi: registrarAbi,
+            functionName: "MIN_COMMITMENT_AGE",
+        }),
+    );
+    return cachedAge;
+}
+
 export async function finishProvision(input: {
     address: Address;
     label: string;
@@ -310,12 +324,7 @@ export async function finishProvision(input: {
         throw new Error("This setup was never started.");
     }
 
-    const minAge = await publicClient.readContract({
-        address: ETH_REGISTRAR,
-        abi: registrarAbi,
-        functionName: "MIN_COMMITMENT_AGE",
-    });
-    const ready = state.committedAt + Number(minAge);
+    const ready = state.committedAt + (await commitmentAge());
     const now = Math.floor(Date.now() / 1000);
     if (now < ready) throw Object.assign(new Error("The commitment is still maturing."), { retryAfter: ready - now });
 
@@ -377,6 +386,7 @@ export async function finishProvision(input: {
     if (!state.registeredAt) state.registeredAt = Math.floor(Date.now() / 1000);
 
     // The expiry is only readable once the name exists, so this one waits for the wave above
+    const second: WriteRequest[] = [];
     if (namespace === ZERO_ADDRESS) {
         const expiry = await publicClient.readContract({
             address: ETH_REGISTRY,
@@ -384,38 +394,35 @@ export async function finishProvision(input: {
             functionName: "getExpiry",
             args: [BigInt(keccak256(toBytes(label)))],
         });
-        await sendAll([
-            {
-                address: state.registry as Address,
-                abi: registryAbi,
-                functionName: "register",
-                args: [
-                    NAMESPACE_LABEL,
-                    address,
-                    state.namespaceRegistry as Address,
-                    state.resolver as Address,
-                    NAME_ROLES,
-                    expiry,
-                ],
-                account,
-                chain: sepolia,
-            } as WriteRequest,
-        ]);
+        second.push({
+            address: state.registry as Address,
+            abi: registryAbi,
+            functionName: "register",
+            args: [
+                NAMESPACE_LABEL,
+                address,
+                state.namespaceRegistry as Address,
+                state.resolver as Address,
+                NAME_ROLES,
+                expiry,
+            ],
+            account,
+            chain: sepolia,
+        } as WriteRequest);
     }
 
-    // Last of all, because registering the label above needs the root the project is giving up here
+    // Pushed last, because the register above needs the root this gives up, and nonce order is mining order
     if (projectHolds) {
-        await sendAll([
-            {
-                address: state.registry as Address,
-                abi: registryAbi,
-                functionName: "revokeRootRoles",
-                args: [ALL_ROLES, account.address],
-                account,
-                chain: sepolia,
-            } as WriteRequest,
-        ]);
+        second.push({
+            address: state.registry as Address,
+            abi: registryAbi,
+            functionName: "revokeRootRoles",
+            args: [ALL_ROLES, account.address],
+            account,
+            chain: sepolia,
+        } as WriteRequest);
     }
+    await sendAll(second);
 
     state.handedOverAt = Math.floor(Date.now() / 1000);
     return state;
