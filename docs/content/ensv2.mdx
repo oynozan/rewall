@@ -93,9 +93,9 @@ resolver under the namehash of the full secret name. `UniversalResolverV2` resol
 subname through the nearest registered name above it, so `openai.rewall.alice.eth` reads back
 exactly as if it had an entry of its own. Ownership anchors the same way. Before a
 rotation, the reader list check walks up to the nearest registered name, `rewall.alice.eth`, and
-compares the signer to its owner. Storing a secret is therefore one transaction. `ensureSecretName`
-in `sdk/src/client.ts` can still give a secret its own entry with `register`, which only a transfer
-of that one secret to a different owner would need.
+compares the signer to its owner. Storing a secret is therefore one transaction, and a create by any
+wallet other than that owner is refused before anything is written. The SDK never gives a secret a
+registry entry of its own.
 
 ## One resolver per account
 

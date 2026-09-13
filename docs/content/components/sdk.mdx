@@ -94,7 +94,6 @@ Every method is on the `Rewall` class.
 | `setSite(secretName, site?)`                | Fixes `rewall.site` on a 2FA secret without rotating.                                                         |
 | `list(namespaceName?)`                      | Reads `rewall.index` under `rewall.<name>` and returns the labels.                                            |
 | `unindex(secretName)`                       | Removes a label from that index.                                                                              |
-| `ensureSecretName(secretName)`              | Registers the subname if it does not exist yet. `create` calls it.                                            |
 | `publicKeyOf(name)`                         | Reads a name's `rewall.pubkey` and returns the key with its fingerprint.                                      |
 | `subtreeKeyOf(name)`                        | The same for `rewall.subtree.pubkey`.                                                                         |
 | `resolveRecovery(entry)`                    | Turns a recovery entry, a name or `guardians:<owner>`, into a key.                                            |
