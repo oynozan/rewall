@@ -20,6 +20,8 @@ WORKDIR /rewall/mcp
 
 # REWALL_NAME and REWALL_IDENTITY_SEED come from the host's secret store, never from the image
 ENV PORT=8787
+# Binding every interface inside a container is what the published port confines, not what it exposes
+ENV REWALL_MCP_HOST=0.0.0.0
 EXPOSE 8787
 
 CMD ["node", "--experimental-strip-types", "src/http.ts"]
