@@ -1,9 +1,16 @@
 ﻿"use client";
 
-export type VolumePoint = { label: string; sent: number; shared: number };
-export type TransferVolume = { asset: string; sentTotal: string; sharedTotal: string; points: VolumePoint[] };
+import type { TransferVolume } from "@/src/lib/volume";
 
-export function VolumeChart({ volume = null }: { volume?: TransferVolume | null }) {
+export function VolumeChart({
+    volume = null,
+    onShow,
+    busy = false,
+}: {
+    volume?: TransferVolume | null;
+    onShow?: () => void;
+    busy?: boolean;
+}) {
     const points = volume?.points || [];
     const highest = Math.max(1, ...points.flatMap((point) => [point.sent, point.shared]));
     const magnitude = 10 ** Math.floor(Math.log10(highest / 3));
@@ -74,7 +81,15 @@ export function VolumeChart({ volume = null }: { volume?: TransferVolume | null 
                         </>
                     )}
                 </svg>
-                {!volume && <span className="chart-empty">Volume unavailable</span>}
+                {/* An amount lives inside the receipt, so the plot is drawn from the ones that are open */}
+                {!volume &&
+                    (onShow ? (
+                        <button type="button" className="chart-empty chart-show" onClick={onShow} disabled={busy}>
+                            {busy ? "Opening receipts…" : "Open receipts to plot volume"}
+                        </button>
+                    ) : (
+                        <span className="chart-empty">No transfers yet</span>
+                    ))}
             </div>
             <div className="chart-axis mono">
                 <span>{points[0]?.label || "30 days ago"}</span>

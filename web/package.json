@@ -25,6 +25,7 @@
         "check:2fa": "node --env-file=../tools/.env scripts/check-2fa-create.mjs",
         "check:panels": "node --env-file=../tools/.env scripts/check-panels.mjs",
         "check:install": "node --env-file=../tools/.env scripts/check-install.mjs",
+        "check:volume": "node --experimental-strip-types --no-warnings scripts/check-volume.mjs",
         "check:landing": "node scripts/check-landing.mjs",
         "check:errors": "node --experimental-strip-types --no-warnings scripts/check-errors.mjs",
         "check:owned": "node --experimental-strip-types --no-warnings --env-file=.env.local scripts/check-owned-names.mjs"

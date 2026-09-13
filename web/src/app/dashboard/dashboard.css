@@ -1255,6 +1255,19 @@ input[type="checkbox"]:indeterminate::after {
     color: var(--muted);
     font-size: 11px;
 }
+.chart-show {
+    border: 0;
+    background: none;
+    font-family: inherit;
+    cursor: pointer;
+}
+.chart-show:hover:not(:disabled),
+.chart-show:focus-visible {
+    color: var(--foreground);
+}
+.chart-show:disabled {
+    cursor: default;
+}
 .chart-axis {
     display: flex;
     justify-content: space-between;
