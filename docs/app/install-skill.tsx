@@ -12,17 +12,20 @@ export function InstallSkill() {
         try {
             await navigator.clipboard.writeText(COMMAND);
             setCopied(true);
-            setTimeout(() => setCopied(false), 1600);
+            setTimeout(() => setCopied(false), 1200);
         } catch {}
     }
 
     return (
-        <div className="skill" data-pagefind-ignore="all">
-            <span className="skill-label">Teach your AI agent Rewall</span>
-            <button type="button" className="skill-cmd" onClick={copy} aria-label="Copy the install command">
-                <code>{COMMAND}</code>
-                <span>{copied ? "Copied" : "Copy"}</span>
-            </button>
-        </div>
+        <button
+            type="button"
+            className="skill-cmd"
+            data-copied={copied || undefined}
+            data-pagefind-ignore="all"
+            onClick={copy}
+            aria-label="Copy the command that installs the Rewall skill"
+        >
+            <code>{COMMAND}</code>
+        </button>
     );
 }

@@ -158,22 +158,10 @@ main li {
 
 /* The skill install command at the top of every page, one click copies it */
 
-.skill {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 16px;
-    margin: 6px 0 22px;
-}
-.skill-label {
-    font-size: 12.5px;
-    color: var(--muted);
-}
 .skill-cmd {
-    display: inline-flex;
-    align-items: center;
-    gap: 14px;
+    display: inline-block;
     max-width: 100%;
+    margin: 6px 0 22px;
     padding: 8px 12px;
     border: 1px solid #272727;
     border-radius: var(--radius);
@@ -188,14 +176,11 @@ main li {
     border-color: var(--border-hover);
     background: #171717;
 }
+.skill-cmd[data-copied] {
+    border-color: var(--foreground);
+}
 .skill-cmd code {
     overflow-wrap: anywhere;
-}
-.skill-cmd span {
-    font-family: var(--font-manrope), sans-serif;
-    font-size: 11.5px;
-    color: var(--muted);
-    white-space: nowrap;
 }
 
 /* Code */
