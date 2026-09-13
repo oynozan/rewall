@@ -1,0 +1,2 @@
+# Carries an agent identity seed, which opens every secret granted to that agent
+agent-*.mcp.json
