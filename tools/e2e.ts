@@ -12,7 +12,7 @@ import {
     RECORD,
 } from "@rewall/sdk";
 import { NAMESPACE_LABEL, SUBTREE_MEMBERS, SUBTREE_PARENT_ROLE, UNIVERSAL_RESOLVER } from "./participants.ts";
-import { publicClient, byRole, accountFor, ensureSecretName, readRecords, writeRecords } from "./chain.ts";
+import { publicClient, byRole, accountFor, readRecords, writeRecords } from "./chain.ts";
 
 const LABEL = process.env.REWALL_SECRET_LABEL ?? "stripe";
 const SECRET = "sk_live_not_a_real_stripe_key_7c1d";
@@ -56,7 +56,6 @@ console.log(`secret  ${secretName}\n`);
 
 /* Setup */
 
-if (await ensureSecretName(owner.index, owner.label!, LABEL)) console.log(`registered ${secretName}`);
 for (const client of [ownerClient, granteeClient, recoveryClient]) {
     if (await client.publishIdentity()) console.log(`published identity for ${client.name}`);
 }
@@ -80,12 +79,18 @@ const spent = (await publicClient.getTransactionCount({ address: ownerAddress })
 if (spent !== 1) fail(`create sent ${spent} transactions, expected 1`);
 pass("create wrote the secret and its index entry in a single transaction");
 
-// Records under an unregistered subname read back fine but leave ownerOf empty, so nothing can rotate
-const registered = await ownerClient.ownerAddressOf(secretName);
-if (registered.toLowerCase() !== ownerAddress.toLowerCase()) {
-    fail(`${secretName} is owned by ${registered}, expected ${ownerAddress}`);
+// A secret anchors to the nearest registered name above it, which is what its signed list verifies against
+const anchor = await ownerClient.ownerAddressOf(secretName);
+if (anchor.toLowerCase() !== ownerAddress.toLowerCase()) {
+    fail(`${secretName} anchors to ${anchor}, expected ${ownerAddress}`);
 }
-pass("the secret's subname is registered to the owner, so its signed list can verify");
+pass("the secret anchors to the owner, so its signed list can verify");
+
+// A label nobody ever registered anchors the same way, so a create needs no registry entry
+const unregistered = `never-${Date.now().toString(36)}.${NAMESPACE_LABEL}.${owner.label}.eth`;
+const climbed = await ownerClient.ownerAddressOf(unregistered);
+if (climbed.toLowerCase() !== ownerAddress.toLowerCase()) fail(`${unregistered} anchors to ${climbed}`);
+pass("an unregistered secret name anchors to the namespace owner");
 
 if (text(await ownerClient.get(secretName)) !== SECRET) fail("owner cannot read what it created");
 pass("owner reads its own secret");
@@ -181,7 +186,6 @@ await ownerClient
 /* A blob is bound to its name, so copying every record to another name does not move the secret */
 
 const otherName = `${LABEL}-copy.${NAMESPACE_LABEL}.${owner.label}.eth`;
-if (await ensureSecretName(owner.index, owner.label!, `${LABEL}-copy`)) console.log(`registered ${otherName}`);
 
 const lifted = await readRecords(secretName, [
     RECORD.blob,

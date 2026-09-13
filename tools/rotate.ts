@@ -1,32 +1,32 @@
-import { planRotate, openSecret, wrapFingerprints, RECORD, NoWrapError } from "@rewall/sdk";
-import { byRole, identityOf, publishedPublicKey, secretNameFor, readRecords, writeRecords } from "./chain.ts";
+import { Rewall, openSecret, wrapFingerprints, RECORD, ROTATE_KEYS, NoWrapError } from "@rewall/sdk";
+import { UNIVERSAL_RESOLVER } from "./participants.ts";
+import { publicClient, byRole, walletFor, identityOf, secretNameFor, readRecords } from "./chain.ts";
 
 const SECRET_LABEL = process.env.REWALL_SECRET_LABEL ?? "openai";
 const PLAINTEXT = "sk-proj-this-is-not-a-real-key-9f3a2b";
 
 const owner = byRole.owner!;
+const grantee = byRole.grantee!;
+const granteeName = `${grantee.label}.eth`;
 const name = secretNameFor(SECRET_LABEL, owner.label!);
 
 const ownerIdentity = await identityOf("owner");
 const granteeIdentity = await identityOf("grantee");
 const recoveryIdentity = await identityOf("recovery");
 
-const holders = {
-    owner: { fingerprint: ownerIdentity.fingerprint, publicKey: await publishedPublicKey("owner") },
-    grantee: { fingerprint: granteeIdentity.fingerprint, publicKey: await publishedPublicKey("grantee") },
-    recovery: { fingerprint: recoveryIdentity.fingerprint, publicKey: await publishedPublicKey("recovery") },
-};
+const wraps = [ownerIdentity, granteeIdentity, recoveryIdentity].map((i) => RECORD.wrap(i.fingerprint));
+const read = () => readRecords(name, [...new Set([...ROTATE_KEYS, ...wraps])]);
 
-const allKeys = [
-    RECORD.blob,
-    RECORD.version,
-    RECORD.type,
-    RECORD.created,
-    RECORD.allow,
-    ...Object.values(holders).map((h) => RECORD.wrap(h.fingerprint)),
-];
+const { account, client } = walletFor(owner.index);
+const rewall = new Rewall({
+    publicClient,
+    walletClient: client,
+    account,
+    name: `${owner.label}.eth`,
+    universalResolver: UNIVERSAL_RESOLVER,
+});
 
-const read = () => readRecords(name, allKeys);
+const gasOf = async (hash: `0x${string}`) => (await publicClient.waitForTransactionReceipt({ hash })).gasUsed;
 
 console.log(`secret   ${name}\n`);
 
@@ -45,20 +45,9 @@ console.log(
 
 /* Revoke, which is a rotate that drops one holder */
 
-const revoked = await planRotate({
-    secretName: name,
-    type: "apikey",
-    plaintext: new TextEncoder().encode(PLAINTEXT),
-    owner: holders.owner,
-    recovery: [holders.recovery],
-    previousFingerprints: wrapFingerprints(before),
-    createdAt: Math.floor(Date.now() / 1000),
-    allow: ["api.openai.com"],
-});
-
-const revokeReceipt = await writeRecords(owner.index, name, revoked.records);
-console.log(`revoked  cleared ${revoked.cleared.join(", ")}  gas ${revokeReceipt.gasUsed}`);
-console.log(`         https://sepolia.etherscan.io/tx/${revokeReceipt.transactionHash}\n`);
+const revokeHash = await rewall.revoke(name, granteeName);
+console.log(`revoked  ${granteeName}  gas ${await gasOf(revokeHash)}`);
+console.log(`         https://sepolia.etherscan.io/tx/${revokeHash}\n`);
 
 /* After the revoke */
 
@@ -91,21 +80,14 @@ try {
     console.log(`PASS  the revoked holder's cached wrap does not open the new ciphertext`);
 }
 
+// A rotation that dropped the name from the signed list is the only reason the wrap above stays dead
+const dropped = !after[RECORD.authKeys]?.includes(granteeIdentity.fingerprint);
+if (!dropped) throw new Error("FAIL the revoked holder is still an approved key");
+console.log(`PASS  the revoked holder left the approved keys at counter ${after[RECORD.authCounter]}`);
+
 /* Restore, so the script can run again */
 
-const restored = await planRotate({
-    secretName: name,
-    type: "apikey",
-    plaintext: new TextEncoder().encode(PLAINTEXT),
-    owner: holders.owner,
-    recovery: [holders.recovery],
-    grantees: [holders.grantee],
-    previousFingerprints: wrapFingerprints(after),
-    createdAt: Math.floor(Date.now() / 1000),
-    allow: ["api.openai.com"],
-});
-
-const restoreReceipt = await writeRecords(owner.index, name, restored.records);
+const grantHash = await rewall.grant(name, granteeName);
 const final = await read();
 await openSecret(final, granteeIdentity, name);
-console.log(`\nPASS  re-granted, the grantee reads again  gas ${restoreReceipt.gasUsed}`);
+console.log(`\nPASS  re-granted, the grantee reads again  gas ${await gasOf(grantHash)}`);

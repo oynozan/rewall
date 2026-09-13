@@ -52,6 +52,8 @@ One secret is one ENSv2 subname under the owner's namespace, for example `openai
 
 Every account has exactly one `PermissionedResolver`, deployed once through the `VerifiableFactory` and reused for every name that account owns. A secret subname points at its owner's resolver. There is no resolver per secret. Records inside a resolver are keyed by the namehash of the full name, so one resolver holds every secret without them colliding.
 
+A secret subname is not registered in any registry. `UniversalResolverV2` resolves an unregistered name through the nearest registered name above it, so the records of `openai.rewall.alice.eth` live on the namespace's resolver under the full namehash and read back exactly as if the label had its own entry. Ownership anchors the same way, to the nearest registered ancestor, which is what lets a create be one transaction. A create refuses when the caller is not that ancestor's holder, since a list it signed could never verify. The SDK never gives a secret a registry entry of its own.
+
 Clients always look up a name's configured resolver at write time. Never hardcode a resolver address and never cache one, because an owner can repoint a name at a different resolver at any time.
 
 Records on the secret subname:
@@ -69,6 +71,7 @@ rewall.subtrees   comma-separated ENS names whose subtree was granted
 rewall.recovery   comma-separated recovery entries, each a name or "guardians:<owner name>"
 rewall.holders    comma-separated fingerprints that currently have a wrap
 rewall.auth.n     authorization counter, incremented on every list change
+rewall.auth.keys  role, name and approved key fingerprint for every party on the lists
 rewall.auth.sig   owner's signature over the lists, checked before any rotation
 rewall.site       one exact lowercase hostname, totp type only, unauthenticated
 rewall.allow      comma-separated allowed hosts, enforced by the MCP tool process
@@ -108,7 +111,21 @@ rewall.shielded          shielded address for private transfers (optional)
 
 Read access cannot be taken directly, but without a signature it could be obtained by waiting. `rewall.grantees`, `rewall.subtrees` and `rewall.recovery` are ordinary text records, and a rotation rebuilds the wrap set from them. A write delegate could add a name they control and let the owner's next rotation seal the data key to it.
 
-So the lists are signed. The owner signs a canonical payload over the secret name, a counter, the owner name and all three lists, and stores it as `rewall.auth.sig` with the counter in `rewall.auth.n`. Before any rotation a client recovers the signer and compares it to the address that holds the name in its registry, found with `UniversalResolverV2.findParentRegistry`. That address is the one thing about a secret a write delegate cannot rewrite. A tampered list fails to verify and the rotation refuses.
+So the lists are signed. The owner signs a canonical payload over the secret name, a counter, the owner name, all three lists and the key approved for each entry, and stores it as `rewall.auth.sig` with the counter in `rewall.auth.n` and the keys in `rewall.auth.keys`. Before any rotation a client recovers the signer and compares it to the address that holds the nearest registered name above the secret, usually `rewall.<owner>.eth`, found by walking up with `UniversalResolverV2.findParentRegistry` and `ownerOf` until an entry is live. That address is the one thing about a secret a write delegate cannot rewrite. A tampered list fails to verify and the rotation refuses.
+
+### Why the approved key is signed too
+
+Signing names alone is not enough, because a rotation turns a name into a key by reading that name's `rewall.pubkey` at the moment it runs. Whoever can write that record chooses who receives the next data key. The signed list still verifies, since the name on it never changed. For a subname whose records are written by its parent, that party is the parent.
+
+So `rewall.auth.keys` binds each entry to the fingerprint it was approved with, and a rotation refuses when a name resolves to anything else. An entry is a role, a name and a fingerprint, because one name can hold a direct grant and a subtree grant on two different keys. The owner is bound the same way, or a rotation run by a delegate could be steered by repointing the owner's own key.
+
+The cost is that a grantee who legitimately rotates their identity key stops being rotatable until the owner approves the new one. That is the intended shape. A key change is an event the owner should see rather than one a rotation absorbs silently, and the refusal names every drifted entry at once so clearing one does not just surface the next.
+
+Re-approval has to be deliberate, or it becomes the attack. `reauthorize` refuses any name already bound to a different key unless that exact role, name and fingerprint is passed in `accept`. Re-reading whatever is published and signing it would hand a delegate the laundering step the binding exists to remove, and the error a rotation throws must never read as an instruction to run it blindly. `grant` is the one place a current key is taken on trust, because naming a grantee is itself the approval, which is also what lets a bumped subtree version be re-granted.
+
+The records the signature covers must be byte-for-byte canonical, since verification re-serializes what it parsed. Without that check a delegate could append text to `rewall.auth.keys` or reorder `rewall.grantees` and the owner's signature would still verify over the cleaned-up form, leaving attacker-authored bytes on a record every other reader treats as owner-signed.
+
+A list signed before key binding existed verifies only against the older payload. Clients check the current payload first and fall back to the old one solely to tell a genuine migration apart from a stripped record, so a delegate who deletes `rewall.auth.keys` gets a tamper refusal rather than a prompt to re-sign.
 
 One limit remains, worth stating plainly. A delegate can still roll the records back to an **older list the owner did sign**, because nothing on chain orders the counters. That can reinstate a grantee who was revoked. It cannot introduce a party the owner never authorized.
 
@@ -257,6 +274,9 @@ await rewall.revoke("openai.rewall.alice.eth", "old.eth", { recovery: true });
 
 await rewall.rotate("openai.rewall.alice.eth", newPlaintext?);
 await rewall.reauthorize("openai.rewall.alice.eth", { recovery: [...] });       // re-signs the lists
+await rewall.reauthorize("openai.rewall.alice.eth", undefined, {
+  accept: [{ role: "grantee", name: "bob.eth", fingerprint }],                 // required when a key changed
+});
 
 await rewall.subtree.init();                          // publishes subtree pubkey on rewall.name
 await rewall.subtree.distribute(["ci.alice.eth"]);    // seals the subtree key to each member
@@ -279,6 +299,8 @@ Reads go through `UniversalResolverV2.resolve` once per record key. ENSv2 also s
 
 `list` does not enumerate the chain. ENSv2 exposes no way to list a registry's children, its tokens are not enumerable, and no subgraph exists for it. Instead every create rewrites a `rewall.index` text record on the namespace name, holding a comma-separated list of secret labels. `list` reads that one record and `unindex` removes an entry. The index is a convenience, not the source of truth, and a secret stays readable whether or not it is listed.
 
+`forget` is what actually removes one. It writes an empty value over every record the secret owns, wraps and signed authorization included, and drops the label from the index in the same transaction, since one resolver serves every name an account holds. Afterwards the name resolves to nothing and `create` will take it again without `overwrite`, which is what turning 2FA off at a site and back on requires. What it cannot do is unpublish anything. The blob and every wrap stay in the transaction that wrote them, readable forever by anyone who held a key, so removal frees a name rather than destroying a secret and the caller has to say so.
+
 CLI mirrors the SDK. `rewall run -- <cmd>` passes secrets to a child process through its environment. That keeps them off disk, out of shell history, and gone when the child exits. It is not confidentiality against the local machine: on Linux any process with the same user id can read `/proc/<pid>/environ`, and on Windows the child inherits a descriptor derived from the creator's token. Anyone who can run code as this user can already read the secret.
 
 ---
@@ -292,6 +314,14 @@ Runs on the agent owner's machine or server. Holds the agent's identity key in i
 - `otp_code(secretName)`: returns the current TOTP code.
 
 The model never receives plaintext. The tool process enforces `rewall.allow` (host allowlist), scrubs the secret value and common encodings from responses, and rate-limits.
+
+Two deployments, and the difference is who holds the key rather than what the tools do.
+
+**Local.** The identity comes from the environment and stays in that process. This is the shape section 10 describes, and nothing decrypts anywhere but the machine the owner runs.
+
+**Hosted.** The server holds no identity. Each request carries one in `X-Rewall-Vault` and `X-Rewall-Seed`, the server builds a vault for that request, answers, wipes the scalar and drops it. One process serves many vaults and keeps none. Two rules make this safe enough to offer and are normative. The credential must be an **agent identity**, a generated scalar published under a name the owner holds, never the wallet-derived identity of section 1, because that one reads every secret ever shared with the wallet and no rotation takes it back. And a seed is refused unless the request arrived over TLS, judged by a trusted proxy or by a loopback peer, never by a header any caller can write.
+
+What the operator of a hosted instance can do is bounded and worth stating: for the length of a request they hold a scalar that opens the secrets granted to that one agent name. Revoking that name stops future reads and does not unsee what was already read. Signing is never offered to a caller who brought their own identity, because `policy.json` names secrets by label and belongs to the deployment.
 
 ---
 
@@ -320,7 +350,7 @@ Rail: Chainlink's private transfer service on Sepolia (deposit to vault, signed 
 
 ## 10. Non-goals and constraints
 
-- No Rewall-operated server or gateway. Anything that decrypts runs on the participant's own machine.
+- No Rewall-operated server holds a wallet identity, and none holds any key at rest. The dashboard, the SDK, the CLI and the extension decrypt only on the participant's own machine. The one exception is the hosted MCP server of section 7, which decrypts inside a request using an agent identity the caller sends and wipes when the request ends, never a wallet identity and never one it stored. Running it yourself removes even that.
 - Target ENSv2 on Sepolia. Read via the universal resolver. Use ENSv2 registry and permissioned resolver contracts, not ENSv1.
 - Secrets are never written to disk in plaintext by any client.
 - Ciphertext lives inline in `rewall.blob`. There is no offchain storage and no content addressing. ENS record reads are cached with a short TTL, resolver addresses are never cached.

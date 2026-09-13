@@ -103,7 +103,8 @@ const fromSource = otpSnapshot(parseOtp(bytes()), at);
 if (fromChain.code !== fromSource.code) fail("the stored seed produces a different code than the setup key");
 pass(`a code generated from chain matches the setup key, ${fromChain.remaining}s left in this step`);
 
-if (fromChain.code.length !== account.digits) fail(`the code is ${fromChain.code.length} digits, expected ${account.digits}`);
+if (fromChain.code.length !== account.digits)
+    fail(`the code is ${fromChain.code.length} digits, expected ${account.digits}`);
 pass(`the code is ${account.digits} digits, as the account declares`);
 
 console.log(`\n${passed} checks passed against real Sepolia`);
