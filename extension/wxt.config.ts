@@ -1,15 +1,15 @@
 import { defineConfig } from "wxt";
 
-const DASHBOARD = "https://rewall.me/*";
-const DASHBOARD_DEV = "http://localhost:3000/*";
-
 export default defineConfig({
     // WXT targets MV2 for Firefox unless told otherwise, which would ship a different extension than the one tested
     manifestVersion: 3,
-    manifest: ({ browser, mode }) => ({
+
+    // Named for what a person downloads, not for the package that produced it
+    zip: { name: "rewall-2fa" },
+    manifest: ({ browser }) => ({
         name: "Rewall 2FA",
         description: "Fill sign-in codes from secrets stored under your ENS name.",
-        permissions: ["storage", "scripting", "activeTab"],
+        permissions: ["storage", "activeTab"],
         host_permissions: ["<all_urls>"],
 
         // The default spanning mode would serve incognito tabs from the same worker and the same unlocked key
@@ -26,10 +26,8 @@ export default defineConfig({
             },
         },
 
-        // Firefox has no web page half of externally_connectable, so pairing there needs its own route
-        ...(browser === "chrome"
-            ? { externally_connectable: { matches: mode === "development" ? [DASHBOARD, DASHBOARD_DEV] : [DASHBOARD] } }
-            : {}),
+        // No externally_connectable, because Firefox has no web page half of it and Chrome's needs a published id
+        // Pairing relays through a content script on the same origins instead, which both browsers run identically
 
         ...(browser === "firefox"
             ? {

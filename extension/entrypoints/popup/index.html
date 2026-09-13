@@ -9,11 +9,54 @@
     <body>
         <main>
             <h1>Rewall</h1>
+
             <p id="field" class="status">Checking this page…</p>
-            <p class="note">
-                This browser is not paired with a vault yet, so there are no codes to fill. Pairing happens from the
-                Rewall dashboard.
-            </p>
+
+            <section id="pair" hidden>
+                <p class="note">
+                    This browser is not paired with a vault yet. Pairing happens on the dashboard, where your wallet is.
+                </p>
+                <button id="begin" class="action primary" type="button">Pair this browser</button>
+            </section>
+
+            <section id="protect" hidden>
+                <p class="note">
+                    Choose a passphrase. It encrypts the key on this device, and nothing can recover it for you.
+                </p>
+                <form id="protect-form">
+                    <label for="new-passphrase">Passphrase</label>
+                    <input id="new-passphrase" type="password" autocomplete="new-password" required />
+                    <button class="action primary" type="submit">Protect and finish</button>
+                </form>
+            </section>
+
+            <section id="locked" hidden>
+                <form id="unlock-form">
+                    <label for="passphrase">Passphrase</label>
+                    <input id="passphrase" type="password" autocomplete="current-password" required />
+                    <button class="action primary" type="submit">Unlock</button>
+                </form>
+            </section>
+
+            <section id="open" hidden>
+                <p id="summary" class="note"></p>
+
+                <div id="code-row" hidden>
+                    <button id="code" class="code" type="button" aria-label="Copy the code">
+                        <span id="digits" class="digits"></span>
+                        <span id="expires" class="expires"></span>
+                    </button>
+                </div>
+                <div id="moved" hidden>
+                    <p id="moved-note" class="problem"></p>
+                    <button id="accept-moved" class="action" type="button">Use the new site</button>
+                </div>
+                <button id="scan" class="action" type="button" hidden>Select a setup code on screen</button>
+                <button id="save" class="action" type="button" hidden>Save 2FA for this site</button>
+                <button id="lock" class="action" type="button">Lock</button>
+            </section>
+
+            <p id="problem" class="problem" role="alert" hidden></p>
         </main>
         <script type="module" src="./main.ts"></script>
     </body>

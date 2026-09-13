@@ -5,25 +5,38 @@
     "type": "module",
     "packageManager": "pnpm@9.12.2",
     "scripts": {
-        "dev": "wxt",
-        "dev:firefox": "wxt -b firefox",
+        "dev": "wxt --port 3100",
+        "dev:firefox": "wxt -b firefox --port 3100",
         "build": "wxt build",
+        "build:local": "wxt build --mode development",
+        "build:local:firefox": "wxt build -b firefox --mode development",
         "build:firefox": "wxt build -b firefox",
         "zip": "wxt zip",
+        "release": "wxt zip && wxt zip -b firefox && node scripts/publish-to-web.mjs",
+        "release:dev": "wxt zip --mode development && wxt zip -b firefox --mode development && node scripts/publish-to-web.mjs --dev",
         "zip:firefox": "wxt zip -b firefox",
         "lint:firefox": "web-ext lint --source-dir .output/firefox-mv3 --warnings-as-errors -o text",
         "postinstall": "wxt prepare",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
-        "check": "node scripts/check-otp-fields.mjs"
+        "check": "node scripts/check-otp-fields.mjs && node scripts/check-extension.mjs",
+        "check:extension": "node scripts/check-extension.mjs",
+        "test": "node --experimental-strip-types --test src/*.test.ts"
     },
     "devDependencies": {
         "@types/chrome": "^0.2.9",
         "esbuild": "^0.28.2",
         "playwright": "^1.63.0",
+        "prettier": "^3.9.6",
+        "qrcode": "^1.5.4",
         "react": "^19.3.0",
         "react-dom": "^19.3.0",
         "web-ext": "^10.6.0",
         "wxt": "^0.21.4"
+    },
+    "dependencies": {
+        "@rewall/sdk": "link:../sdk",
+        "jsqr": "^1.4.0",
+        "viem": "^2.56.3"
     }
 }
