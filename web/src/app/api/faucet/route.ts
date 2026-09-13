@@ -13,7 +13,7 @@ import {
     updateAccount,
 } from "@/src/lib/mongo";
 import { RAIL_TOKEN } from "@/src/lib/rail";
-import { publicClient, send, serialized, sponsor } from "@/src/lib/server-chain";
+import { awaitReceipt, publicClient, send, serialized, sponsor } from "@/src/lib/server-chain";
 
 const DRIP = parseEther(process.env.REWALL_DRIP_ETH || "0.005");
 const CAP = parseEther(process.env.REWALL_FAUCET_CAP_ETH || "0.05");
@@ -32,7 +32,22 @@ const erc20Abi = parseAbi([
 
 const refuse = (reason: string, status = 400) => Response.json({ error: reason }, { status });
 
+// A claim is only proof of a live request for as long as one could still be running, then it is debris
+const STALE_CLAIM = 120;
+const abandoned = (leg?: { at: number; pending?: boolean }) =>
+    Boolean(leg?.pending) && Math.floor(Date.now() / 1000) - (leg?.at ?? 0) > STALE_CLAIM;
+
 export async function POST(request: Request) {
+    try {
+        return await drip(request);
+    } catch (failure) {
+        // An unhandled throw answers with an HTML page the client cannot read, which tells nobody anything
+        console.error("[faucet]", failure);
+        return refuse(`The faucet failed: ${(failure as Error)?.message ?? String(failure)}`, 500);
+    }
+}
+
+async function drip(request: Request) {
     // A literal null body parses fine and would crash the destructure, so it falls back to an object
     const body = ((await request.json().catch(() => null)) ?? {}) as { address?: string };
     const { address } = body;
@@ -45,8 +60,8 @@ export async function POST(request: Request) {
         throw failure;
     }
 
-    const existing = await accountFor(address).catch(() => {
-        throw new Error("mongo");
+    const existing = await accountFor(address).catch((failure) => {
+        throw new Error(`the faucet ledger could not be read, ${(failure as Error).message}`);
     });
     // Idempotent per delivered leg, so a claim still in flight does not read as one already handed over
     if (existing?.dripped && !existing.dripped.pending && existing.funded && !existing.funded.pending) {
@@ -64,7 +79,20 @@ export async function POST(request: Request) {
     /* Gas */
 
     let dripped = existing?.dripped;
-    if (dripped?.pending) return refuse("A drip for this wallet is already in flight.", 409);
+    if (dripped?.pending && !abandoned(dripped)) return refuse("A drip for this wallet is already in flight.", 409);
+
+    // A claim from a request that died mid flight would wedge this wallet at 409 forever
+    if (dripped?.pending) {
+        // The chain is believed over the ledger, because re sending against a landed drip pays twice
+        if ((await publicClient.getBalance({ address })) >= DRIP) {
+            dripped = { hash: dripped.hash, wei: dripped.wei, at: dripped.at };
+            await updateAccount(address, { dripped });
+        } else {
+            await releaseDrip(address);
+            dripped = undefined;
+        }
+    }
+
     if (!dripped) {
         if ((await drippedTotal()) + DRIP > CAP) return refuse("The faucet is empty for now.", 503);
         if ((await publicClient.getBalance({ address: account.address })) < DRIP)
@@ -83,7 +111,7 @@ export async function POST(request: Request) {
 
         try {
             const hash = await serialized(() => client.sendTransaction({ to: address, value: DRIP, chain: sepolia }));
-            const receipt = await publicClient.waitForTransactionReceipt({ hash });
+            const receipt = await awaitReceipt(hash);
             if (receipt.status !== "success") {
                 await releaseDrip(address);
                 return refuse("The drip did not confirm, try again.", 502);
@@ -101,6 +129,11 @@ export async function POST(request: Request) {
 
     // Best effort, because the ether is already sent and a dry token faucet must not block onboarding
     let funded = existing?.funded;
+    // The same debris here skips the token leg silently rather than loudly, so it is dropped on sight
+    if (abandoned(funded)) {
+        await releaseFunding(address);
+        funded = undefined;
+    }
     if (!funded) {
         const held = await publicClient.readContract({
             address: TOKEN,
@@ -110,20 +143,23 @@ export async function POST(request: Request) {
         });
 
         // Checked rather than attempted, because nothing here can mint and a short balance only reverts
-        if ((await fundedTotal()) + TOKENS <= TOKEN_CAP && held >= TOKENS && (await claimFunding(address, TOKENS.toString()))) {
+        if (
+            (await fundedTotal()) + TOKENS <= TOKEN_CAP &&
+            held >= TOKENS &&
+            (await claimFunding(address, TOKENS.toString()))
+        ) {
             if ((await fundedTotal()) > TOKEN_CAP) {
                 await releaseFunding(address);
             } else {
-                const hash = await serialized(() =>
-                    send({
-                        address: TOKEN,
-                        abi: erc20Abi,
-                        functionName: "transfer",
-                        args: [address, TOKENS],
-                        chain: sepolia,
-                        account,
-                    }),
-                ).catch(() => null);
+                // send serialises its own nonce, and wrapping it again deadlocks the inner call on the outer
+                const hash = await send({
+                    address: TOKEN,
+                    abi: erc20Abi,
+                    functionName: "transfer",
+                    args: [address, TOKENS],
+                    chain: sepolia,
+                    account,
+                }).catch(() => null);
 
                 if (hash) {
                     funded = { hash, units: TOKENS.toString(), at: Math.floor(Date.now() / 1000) };

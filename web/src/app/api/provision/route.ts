@@ -17,6 +17,16 @@ const refuse = (reason: string, status = 400, extra: Record<string, unknown> = {
     Response.json({ error: reason, ...extra }, { status });
 
 export async function POST(request: Request) {
+    try {
+        return await provision(request);
+    } catch (failure) {
+        // An unhandled throw answers with an HTML page the client cannot read, which tells nobody anything
+        console.error("[provision]", failure);
+        return refuse(`Setup failed: ${(failure as Error)?.message ?? String(failure)}`, 500);
+    }
+}
+
+async function provision(request: Request) {
     // A literal null body parses fine and would crash the destructure, so it falls back to an object
     const body = ((await request.json().catch(() => null)) ?? {}) as Body;
     const { phase, address, label } = body;

@@ -1,4 +1,5 @@
 import "server-only";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createPublicClient, createWalletClient, http, type Address, type Hash, type TransactionReceipt } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
@@ -22,6 +23,16 @@ const rpc =
 // Polled faster than the four second default, because a setup waits on receipts a dozen times over
 export const publicClient = createPublicClient({ chain: sepolia, transport: http(rpc), pollingInterval: 1000 });
 
+// A Sepolia block is twelve seconds, so anything still missing after this is stuck rather than slow
+export const RECEIPT_TIMEOUT = 90_000;
+
+// Named so a stuck receipt reads as a stuck receipt instead of viem's three minute silence
+export function awaitReceipt(hash: Hash): Promise<TransactionReceipt> {
+    return publicClient.waitForTransactionReceipt({ hash, timeout: RECEIPT_TIMEOUT }).catch(() => {
+        throw new Error(`Sepolia did not confirm ${hash} within ${RECEIPT_TIMEOUT / 1000}s, it may still land later`);
+    });
+}
+
 export function sponsor() {
     const key = process.env.REWALL_SPONSOR_KEY;
     if (!key) throw new Error("REWALL_SPONSOR_KEY is not set, so the project cannot pay for anything");
@@ -35,9 +46,18 @@ export function sponsor() {
 // One wallet sends both the drip and the provisioning calls, so two requests would race for a nonce
 // ponytail: an in-process queue, swap for a nonce manager if this ever runs on more than one instance
 let tail: Promise<unknown> = Promise.resolve();
+const holding = new AsyncLocalStorage<true>();
+
+// One predecessor that never settles would otherwise brick every later send in this process
+function turn(): Promise<unknown> {
+    return Promise.race([tail, new Promise((resolve) => setTimeout(resolve, RECEIPT_TIMEOUT + 15_000).unref())]);
+}
 
 export function serialized<T>(work: () => Promise<T>): Promise<T> {
-    const next = tail.then(work, work);
+    // A nested call runs inline, or it would queue behind the outer call that is waiting on it
+    if (holding.getStore()) return work();
+    const run = () => holding.run(true, work);
+    const next = turn().then(run, run);
     tail = next.catch(() => {});
     return next;
 }
@@ -60,7 +80,7 @@ export async function sendAll(requests: WriteRequest[]): Promise<TransactionRece
         return sent;
     });
 
-    const receipts = await Promise.all(hashes.map((hash) => publicClient.waitForTransactionReceipt({ hash })));
+    const receipts = await Promise.all(hashes.map(awaitReceipt));
     const reverted = receipts.findIndex((receipt) => receipt.status !== "success");
     if (reverted >= 0) throw new Error(`transaction reverted ${hashes[reverted]}`);
     return receipts;

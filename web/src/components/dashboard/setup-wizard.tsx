@@ -41,8 +41,11 @@ async function post(path: string, body: unknown) {
         body: JSON.stringify(body),
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok)
-        throw Object.assign(new Error(payload.error || "That did not work."), payload, { fromServer: true });
+    if (!response.ok) {
+        // A server that answered with something other than JSON has still said which route and status
+        const reason = payload.error || `${path} answered ${response.status}, check the server log`;
+        throw Object.assign(new Error(reason), payload, { fromServer: true });
+    }
     return payload;
 }
 

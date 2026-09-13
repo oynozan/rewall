@@ -34,7 +34,13 @@ export async function assertOwns(request: Request, address: string): Promise<voi
             throw new NotYoursError("That session is not valid.");
         });
 
-    const user = await client.users()._get(user_id);
+    // Wrapped, or a Privy outage crashes the route and the caller is told nothing at all
+    const user = await client
+        .users()
+        ._get(user_id)
+        .catch((failure) => {
+            throw new Error(`Privy could not be reached to check your wallets, ${(failure as Error).message}`);
+        });
     // Only wallet accounts carry a signable address, so emails and OAuth links can never match
     const owned = user.linked_accounts.flatMap((account) =>
         account.type === "wallet" || account.type === "smart_wallet" ? [account.address.toLowerCase()] : [],
