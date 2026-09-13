@@ -4,7 +4,7 @@ import { Toaster } from "sonner";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { useModalStatus, usePrivy, useWallets } from "@privy-io/react-auth";
 import { createWalletClient, custom, type EIP1193Provider } from "viem";
 import { sepolia } from "viem/chains";
 import { PrivateDataProvider } from "./private-data";
@@ -13,11 +13,14 @@ import { RailProvider } from "./rail";
 import { FundBalance, ReceiptDetail, SendTransfer, WithdrawBalance } from "./transfer-forms";
 import { SecretValue } from "./secret-value";
 import { SecretAccess } from "./secret-access";
+import { SecretSite } from "./secret-site";
 import { CreateSecret } from "./create-secret";
 import { AddAuthenticator } from "./add-authenticator";
+import { InstallExtension } from "./install-extension";
+import { RemoveAccount } from "./remove-account";
 import { ConnectGate } from "./connect-gate";
 import { AddSecret } from "./add-secret";
-import { cachedName, ownsName, rememberName, resolveOwnName } from "@/src/lib/account";
+import { cachedName, ownedNames, ownsName, rememberName, resolveOwnName } from "@/src/lib/account";
 import { explain } from "@/src/lib/errors";
 import {
     ownerName,
@@ -34,7 +37,19 @@ import { Logo } from "./logo";
 import { CopyButton, Glyph, Icon, Skeleton, type IconName } from "./ui";
 
 type Panel =
-    "vault" | "wallet" | "help" | "find" | "create" | "authenticator" | "send" | "fund" | "withdraw" | Secret | null;
+    | "vault"
+    | "wallet"
+    | "help"
+    | "find"
+    | "create"
+    | "authenticator"
+    | "extension"
+    | { removing: Secret }
+    | "send"
+    | "fund"
+    | "withdraw"
+    | Secret
+    | null;
 type Workspace = {
     vault: Vault | null;
     busy: boolean;
@@ -236,9 +251,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         loadVault,
         refresh: () => void loadVault(vault?.owner || ownName),
         // The drawer is a modal dialog, so it sits in the top layer and would swallow clicks on Privy's own modal
+        // Disconnecting a wallet leaves the session behind it open, and Privy throws on a login it already holds,
+        // so the stale session is dropped first and the same login modal opens for every visitor
         connect: () => {
             setPanel(null);
-            void login();
+            if (!privyReady) return;
+            if (authenticated) void logout().then(() => login());
+            else login();
         },
         disconnect: () => void logout(),
     };
@@ -416,6 +435,7 @@ const TITLES: Record<string, string> = {
     find: "Find a secret",
     create: "Store a secret",
     authenticator: "Add an authenticator",
+    extension: "Add the 2FA extension",
     send: "Send confidential transfer",
     fund: "Deposit",
     withdraw: "Take funds out",
@@ -437,11 +457,29 @@ function WorkspacePanel() {
         disconnect,
     } = useWorkspace();
     const identity = useIdentity();
+    const { isOpen: privyOpen } = useModalStatus();
     const dialog = useRef<HTMLDialogElement>(null);
     const drawerMotion = useRef<Animation | null>(null);
+    const topLayer = useRef(false);
     const [localError, setLocalError] = useState("");
     const [working, setWorking] = useState(false);
     const [claiming, setClaiming] = useState(false);
+    const [owned, setOwned] = useState<string[]>([]);
+
+    // Scanned when the panel opens, since finding a wallet's names costs a run of log queries
+    useEffect(() => {
+        if (panel !== "vault" || !account) return;
+        let live = true;
+        void ownedNames(account).then((names) => {
+            if (live) setOwned(names);
+        });
+        return () => {
+            live = false;
+        };
+    }, [panel, account]);
+
+    // A modal dialog sits in the top layer, which no z-index can be lifted above, so the drawer gives that
+    // up while Privy has a window open and takes it back when the signature is done
     useEffect(() => {
         const node = dialog.current;
         if (!node) return;
@@ -449,16 +487,21 @@ function WorkspacePanel() {
             node.close();
             return;
         }
-        if (node.open) return;
+        const wantsTopLayer = !privyOpen;
+        if (node.open && topLayer.current === wantsTopLayer) return;
+
+        const reopening = node.open;
+        if (reopening) node.close();
         delete node.dataset.closing;
-        node.showModal();
-        if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
-            drawerMotion.current = node.animate([{ clipPath: "inset(0 0 0 100%)" }, { clipPath: "inset(0 0 0 0%)" }], {
-                duration: 320,
-                easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-            });
-        }
-    }, [panel]);
+        topLayer.current = wantsTopLayer;
+        if (wantsTopLayer) node.showModal();
+        else node.show();
+        if (reopening || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        drawerMotion.current = node.animate([{ clipPath: "inset(0 0 0 100%)" }, { clipPath: "inset(0 0 0 0%)" }], {
+            duration: 320,
+            easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+        });
+    }, [panel, privyOpen]);
     useEffect(() => () => drawerMotion.current?.cancel(), []);
     const close = () => {
         const node = dialog.current;
@@ -486,9 +529,25 @@ function WorkspacePanel() {
         };
     };
     // Resolved from the vault rather than the snapshot the click captured, so a grant updates the panel
-    const opened = typeof panel === "object" ? panel : null;
+    // Removing carries its own secret, so it is told apart from the panel that opens one for reading
+    const removing = panel && typeof panel === "object" && "removing" in panel ? panel.removing : null;
+    const opened = !removing && panel && typeof panel === "object" ? (panel as Secret) : null;
     const secret = opened ? (vault?.secrets.find((entry) => entry.name === opened.name) ?? opened) : null;
-    const title = secret ? secret.label : (TITLES[String(panel)] ?? "How Rewall works");
+    const title = removing
+        ? "Remove this account"
+        : secret
+          ? secret.label
+          : (TITLES[String(panel)] ?? "How Rewall works");
+
+    async function pick(name: string) {
+        setLocalError("");
+        setClaiming(true);
+        try {
+            if (await claimName(name)) close();
+        } finally {
+            setClaiming(false);
+        }
+    }
 
     async function claim(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -534,6 +593,8 @@ function WorkspacePanel() {
                 close();
             }}
             onClose={() => {
+                // Swapping the top layer closes and reopens in one tick, and the queued event must not act on it
+                if (dialog.current?.open) return;
                 setPanel(null);
                 setLocalError("");
             }}
@@ -608,6 +669,24 @@ function WorkspacePanel() {
                                         </Link>
                                     </>
                                 )}
+                                {/* Offered only when the scan found something, so a quiet endpoint changes nothing here */}
+                                {owned.length > 0 && (
+                                    <ul className="owned-names">
+                                        {owned.map((name) => (
+                                            <li key={name}>
+                                                <button
+                                                    type="button"
+                                                    className="owned-name"
+                                                    disabled={claiming || name === ownName}
+                                                    onClick={() => void pick(name)}
+                                                >
+                                                    <span className="mono">{name}</span>
+                                                    {name === ownName && <em>in use</em>}
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
                                 {/* A wallet can hold more than one name, so the vault it reads from is switchable */}
                                 <form onSubmit={claim} className="panel-form claim-form">
                                     <label htmlFor="own-name">
@@ -633,6 +712,8 @@ function WorkspacePanel() {
                         )}
                         {panel === "create" && <CreateSecret onDone={close} />}
                         {panel === "authenticator" && <AddAuthenticator onDone={close} />}
+                        {panel === "extension" && <InstallExtension />}
+                        {removing && <RemoveAccount secret={removing} onDone={close} />}
                         {panel === "send" && <SendTransfer onDone={close} />}
                         {panel === "fund" && <FundBalance onDone={close} />}
                         {panel === "withdraw" && <WithdrawBalance onDone={close} />}
@@ -784,6 +865,14 @@ function WorkspacePanel() {
                                         <dt>Allowed hosts</dt>
                                         <dd>{secret.allow.length ? secret.allow.join(", ") : "None"}</dd>
                                     </div>
+                                    {secret.type === "totp" && (
+                                        <div>
+                                            <dt>Fills on</dt>
+                                            <dd>
+                                                <SecretSite secret={secret} />
+                                            </dd>
+                                        </div>
+                                    )}
                                 </dl>
                             </>
                         )}

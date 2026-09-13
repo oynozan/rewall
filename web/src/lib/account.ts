@@ -1,10 +1,51 @@
-import { parseAbi } from "viem";
-import { ownerAddressOf, RECORD, readTexts, resolverFor } from "@rewall/sdk";
+import { createPublicClient, http, parseAbi, parseAbiItem } from "viem";
+import { sepolia } from "viem/chains";
+import { RECORD, readTexts, registeredOwnerOf, resolverFor } from "@rewall/sdk";
 import { ownerName, UNIVERSAL_RESOLVER, vaultClient } from "./vault";
 
 const ETH_REGISTRY = "0xbdc85dd5b15d7ecb354cd7cb6f2c50b4f2c4f0e2";
 const ZERO = "0x0000000000000000000000000000000000000000";
 const ETH_COIN_TYPE = BigInt(60);
+
+/* Listing the names a wallet holds, which ENSv2 only answers through logs */
+
+// The read endpoint serves about a day of log history, so the scan needs one that keeps all of it
+// Comma separated, tried in order, so a second endpoint only has to be named to stand behind the first
+const LOGS_RPC_URLS = (process.env.NEXT_PUBLIC_SEPOLIA_LOGS_RPC_URL || "")
+    .split(",")
+    .map((url) => url.trim())
+    .filter(Boolean);
+
+// Where ETHRegistry first has bytecode, found by bisecting eth_getCode, so a scan starts there and not at genesis
+const REGISTRY_DEPLOYED = BigInt(11383897);
+// The widest window the endpoint accepts, which puts the whole scan at about thirty queries
+const LOG_SPAN = BigInt(10000);
+// Log queries are the expensive kind, so they go out in paced rounds rather than all at once
+const LOG_ROUND = 5;
+const LOG_PAUSE = 350;
+
+// One scan per wallet per session, since the answer only changes when a name is bought or moved
+const listed = new Map<string, string[]>();
+
+// The registry is an ERC-1155 and this is the only event carrying an owner as an indexed topic
+const transferSingle = parseAbiItem(
+    "event TransferSingle(address indexed operator, address indexed from, address indexed to, uint256 id, uint256 value)",
+);
+const tokenAbi = parseAbi([
+    "function ownerOf(uint256 id) view returns (address)",
+    "function LABEL_STORE() view returns (address)",
+]);
+// ENSv2 keeps the label behind every labelhash, which is what makes a token id readable as a name
+const labelStoreAbi = parseAbi(["function getLabel(uint256 id) view returns (string)"]);
+
+// Thirty windows sent as thirty requests earns a 429, so they travel as a handful of batched calls instead
+// A refused window would lose a name rather than report it, so what does get refused is retried
+const logsClients = LOGS_RPC_URLS.map((url) =>
+    createPublicClient({
+        chain: sepolia,
+        transport: http(url, { batch: { wait: 16, batchSize: 10 }, timeout: 30000, retryCount: 4, retryDelay: 400 }),
+    }),
+);
 
 const reverseAbi = parseAbi([
     "function reverse(bytes lookupAddress, uint256 coinType) view returns (string name, address resolver, address reverseResolver)",
@@ -34,11 +75,97 @@ export type VaultSetup = {
 // Reverse records are self asserted, so a claimed name only counts once the registry agrees
 export async function ownsName(name: string, address: string): Promise<boolean> {
     try {
-        const owner = await ownerAddressOf(vaultClient, UNIVERSAL_RESOLVER, name);
+        const owner = await registeredOwnerOf(vaultClient, UNIVERSAL_RESOLVER, name);
         return owner.toLowerCase() === address.toLowerCase();
     } catch {
         return false;
     }
+}
+
+// Endpoints that refuse a wide window say so in the message, which is the signal to walk it in pieces
+function capped(failure: unknown) {
+    const message = failure instanceof Error ? failure.message : "";
+    return /block range|range .*exceed|exceed.*range|query returned more than/i.test(message);
+}
+
+// Throws rather than returning nothing, because a half scan and an empty wallet must not look the same
+async function scanFor(client: (typeof logsClients)[number], address: string) {
+    const head = await client.getBlockNumber();
+    const received = (fromBlock: bigint, toBlock: bigint) =>
+        client.getLogs({
+            address: ETH_REGISTRY,
+            event: transferSingle,
+            args: { to: address as `0x${string}` },
+            fromBlock,
+            toBlock,
+        });
+
+    const ids = new Set<bigint>();
+    const collect = (logs: Awaited<ReturnType<typeof received>>) => {
+        for (const log of logs) if (log.args.id !== undefined) ids.add(log.args.id);
+    };
+
+    // An endpoint that serves the whole history answers in one query, and one that caps the range says so
+    try {
+        collect(await received(REGISTRY_DEPLOYED, head));
+    } catch (failure) {
+        if (!capped(failure)) throw failure;
+        const windows: [bigint, bigint][] = [];
+        for (let from = REGISTRY_DEPLOYED; from <= head; from += LOG_SPAN) {
+            const to = from + LOG_SPAN - BigInt(1);
+            windows.push([from, to > head ? head : to]);
+        }
+        for (let start = 0; start < windows.length; start += LOG_ROUND) {
+            if (start) await new Promise((wake) => setTimeout(wake, LOG_PAUSE));
+            const found = await Promise.all(
+                windows.slice(start, start + LOG_ROUND).map(([from, to]) => received(from, to)),
+            );
+            for (const logs of found) collect(logs);
+        }
+    }
+    if (!ids.size) return [];
+
+    const store = await vaultClient.readContract({ address: ETH_REGISTRY, abi: tokenAbi, functionName: "LABEL_STORE" });
+    const held = await Promise.all(
+        [...ids].map(async (id) => {
+            // Zero comes back for a name that expired or whose token was regenerated, which drops both here
+            const owner = await vaultClient.readContract({
+                address: ETH_REGISTRY,
+                abi: tokenAbi,
+                functionName: "ownerOf",
+                args: [id],
+            });
+            if (owner.toLowerCase() !== address.toLowerCase()) return "";
+            const label = await vaultClient.readContract({
+                address: store,
+                abi: labelStoreAbi,
+                functionName: "getLabel",
+                args: [id],
+            });
+            return label ? `${label}.eth` : "";
+        }),
+    );
+    return [...new Set(held.filter(Boolean))].sort();
+}
+
+// A wallet's names are only discoverable through logs, so each endpoint is asked until one answers
+// When none of them does the list stays empty and nothing is said, since an empty list is not an error
+export async function ownedNames(address: string): Promise<string[]> {
+    if (!address) return [];
+    const key = address.toLowerCase();
+    const known = listed.get(key);
+    if (known) return known;
+
+    for (const client of logsClients) {
+        try {
+            const names = await scanFor(client, address);
+            listed.set(key, names);
+            return names;
+        } catch {
+            // Nothing is remembered from a failed scan, so the next endpoint and the next open both get a turn
+        }
+    }
+    return [];
 }
 
 export async function reverseName(address: string): Promise<string> {
@@ -106,7 +233,7 @@ export async function resolveOwnName(address: string): Promise<string> {
     const stored = cachedName(address);
     if (stored) {
         // A read that failed is not an answer, so the name is only dropped when the registry names somebody else
-        const owner = await ownerAddressOf(vaultClient, UNIVERSAL_RESOLVER, stored).catch(() => null);
+        const owner = await registeredOwnerOf(vaultClient, UNIVERSAL_RESOLVER, stored).catch(() => null);
         if (!owner || owner.toLowerCase() === address.toLowerCase()) return stored;
         forgetName(address);
     }
